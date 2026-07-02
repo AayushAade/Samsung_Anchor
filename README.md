@@ -1,128 +1,336 @@
-# 🧠 The "External Hippocampus" System
+<div align="center">
 
-A zero-friction, continuous context-restoration wearable system designed to protect the dignity and independence of Alzheimer’s patients.
+# 🧠 Memora
 
-🚨 The Problem
+### *An Autonomous External Hippocampus for Everyday Life*
 
-Alzheimer’s disease systematically strips away a person's immediate context, leading to a continuous loop of disorientation. Patients suffer from three primary deficits:
+AI-powered wearable memory that remembers **people, conversations, objects, and places**—so you don't have to.
 
-The Intent Deficit: Forgetting why they entered a room (the private panic of losing your goal).
+<br>
 
-The Object Deficit: Losing track of vital daily items (glasses, keys, phone), leading to anxiety loops.
+<p>
+  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"/>
+  <img src="https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?style=for-the-badge&logo=opencv"/>
+  <img src="https://img.shields.io/badge/Google-Gemini-4285F4?style=for-the-badge&logo=google"/>
+  <img src="https://img.shields.io/badge/Status-Active%20Development-success?style=for-the-badge"/>
+  <img src="https://img.shields.io/github/license/YOUR_USERNAME/Memora?style=for-the-badge"/>
+</p>
 
-The Identity Deficit: Failing to recognize loved ones, resulting in social withdrawal and shame.
+---
 
-Current solutions (like 24/7 nursing) are financially ruinous for underserved communities, highly intrusive, and prone to caregiver burnout.
+### Remember Everything. Naturally.
 
-💡 The Solution
+*A persistent AI memory layer for future AR glasses.*
 
-The External Hippocampus is a context-restoration system. It acts as an external memory bank, proactively supplying missing context via a discreet audio-first interface. It requires absolutely zero technical interaction from the patient.
+</div>
 
-For this prototype phase, we are using a Smartphone Proxy Architecture (a phone worn on a lanyard) to simulate the eventual AR Smart Glasses form factor.
+---
 
-✨ Core Features
+# Overview
 
-📍 Context Restoration (Spatial Audio Cues): Logs user intent via voice ("I'm getting water") and uses BLE beacon hysteresis to detect room transitions, whispering a gentle reminder ("Getting water") upon entry.
+Humans naturally forget names, conversations, object locations, and countless small details throughout the day.
 
-🔍 Passive Object Tracking (Visual Ledger): Uses Edge AI (YOLOv8-nano) to continuously track high-value items. It logs coordinates in a Spatial Hash Map, allowing users to ask, "Where is my phone?" and get an instant, historically accurate answer.
+**Memora** is an AI memory system that continuously builds a persistent understanding of the world around you.
 
-👤 Identity Anchoring: Uses local OpenCV facial recognition to match approaching faces against a pre-recorded, multi-angle vector database. It whispers the person's name and a "core memory" context (e.g., "This is Arjun, your grandson.") before social panic sets in.
+Instead of acting like a chatbot, it behaves like a second memory.
 
-⏰ Proactive Time/Context Anchoring: Helps mitigate "sundowning" by providing gentle ambient grounding statements about the time of day and schedule (e.g., doctor appointments).
+It observes.
 
-🔋 The "Cold Start" Smart Dock: Detects the sleep-wake transition using motion tracking from the charging dock, playing a familiar greeting to ensure the user puts the device on first thing in the morning.
+It remembers.
 
-🏗️ Technical Architecture (MVP)
+It retrieves information exactly when you need it.
 
-Sensors (The Eyes & Ears): A Smartphone Proxy running a Mobile Web App (HTML5/JS), capturing audio and streaming camera frames.
+---
 
-Brain (The Edge Server): A local Python/Flask backend running on a laptop.
+# Why Memora?
 
-Spatial Tracking: ESP32/Wi-Fi hotspots acting as BLE Beacons tracking RSSI signal strength.
+Imagine wearing lightweight smart glasses.
 
-AI/ML Stack:
+Someone waves at you.
 
-Intent Parsing: Gemini API (LLM) forcing strict JSON outputs.
+Instead of pretending to remember them...
 
-Object Detection: YOLOv8-nano (Supervised fine-tuning).
+```
+👤 Sarah
 
-Face Recognition: OpenCV + MobileFaceNet (128-D vector embeddings via Euclidean distance).
+Friend
 
-Database: SQLite (local context ledger).
+Met 3 weeks ago
 
-🚀 Getting Started
+Works at Google
 
-Follow these instructions to run the Smartphone Proxy MVP locally on your network.
+Last conversation:
+Planning a Goa trip.
+```
 
-Prerequisites
+Or you simply ask:
 
-Python 3.9+
+> "Where did I leave my headphones?"
 
-A smartphone and laptop connected to the same local Wi-Fi network.
+and receive
 
-Gemini API Key
+> "Your headphones were last seen in the study room near the monitor approximately 18 minutes ago."
 
-Installation
+No searching.
 
-Clone the repository:
+No guessing.
 
-git clone https://github.com/YOUR_USERNAME/external-hippocampus.git
-cd external-hippocampus
+Just memory.
 
+---
 
-Set up a virtual environment:
+# Features
+
+## 👤 Identity Binding
+
+Learns people's identities naturally from conversations.
+
+No manual registration.
+
+No enrollment process.
+
+No typing names.
+
+---
+
+## 📍 Visual Memory Ledger
+
+Maintains a continuously updated memory of important objects.
+
+Examples:
+
+- Keys
+- Wallet
+- Phone
+- Glasses
+- Laptop
+- Backpack
+
+---
+
+## 🏠 Spatial Memory
+
+Understands rooms and maintains location history.
+
+```
+Living Room
+
+Phone
+↳ Coffee Table
+
+Last Seen
+↳ 3 Minutes Ago
+```
+
+---
+
+## 🎙 Voice Queries
+
+Natural language search.
+
+```
+Where are my keys?
+
+↓
+
+Living Room
+
+Near the sofa
+
+Seen 14 minutes ago
+```
+
+---
+
+## 🧠 Context Understanding
+
+Uses Google's Gemini models for
+
+- Name extraction
+- Relationship inference
+- Context reasoning
+- Object search
+- Conversation understanding
+
+---
+
+## 💾 Persistent Memory
+
+Memories survive across sessions.
+
+The longer you use Memora,
+
+the smarter its memory becomes.
+
+---
+
+# System Architecture
+
+```
+                      Camera
+                         │
+                         ▼
+             Computer Vision Layer
+         (Faces • Objects • Tracking)
+                         │
+                         ▼
+                Spatial Understanding
+            (Rooms • Coordinates • Time)
+                         │
+                         ▼
+                Persistent Memory Graph
+                         │
+                         ▼
+              Gemini Context Reasoning
+                         │
+                         ▼
+              Human-like Memory Recall
+```
+
+---
+
+# Demo Roadmap
+
+| Stage | Capability | Status |
+|---------|-----------|--------|
+| Week 1 | Identity Binding | ✅ |
+| Week 2 | Visual Ledger | ✅ |
+| Week 3 | Relationship Graph | 🚧 |
+| Week 4 | Episodic Memory | 🚧 |
+| Week 5 | Predictive Assistance | 🚧 |
+| Future | AR Glasses | 🚧 |
+
+---
+
+# Tech Stack
+
+### AI
+
+- Google Gemini
+
+### Computer Vision
+
+- OpenCV
+
+### Speech
+
+- SpeechRecognition
+- PyAudio
+
+### Memory
+
+- JSON Database
+
+### Language
+
+- Python
+
+---
+
+# Repository Structure
+
+```
+Memora
+│
+├── config/
+│
+├── core/
+│   ├── audio_listener.py
+│   ├── context_binder.py
+│   ├── database.py
+│   ├── face_recognizer.py
+│   ├── object_ledger.py
+│   └── spatial_slam.py
+│
+├── demo_week1.py
+├── demo_week2.py
+│
+├── requirements.txt
+└── README.md
+```
+
+---
+
+# Installation
+
+```bash
+git clone https://github.com/YOUR_USERNAME/Memora.git
+
+cd Memora
 
 python -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
 
-
-Install dependencies:
+source venv/bin/activate
 
 pip install -r requirements.txt
+```
 
+---
 
-Environment Variables:
-Create a .env file in the root directory and add your Gemini API key:
+# Running
 
-GEMINI_API_KEY=your_api_key_here
+### Week 1
 
+```bash
+python demo_week1.py
+```
 
-Running the System
+Mock mode
 
-Start the Flask Edge Server:
+```bash
+python demo_week1.py --mock
+```
 
-python app.py
+---
 
+### Week 2
 
-Note: The server will bind to 0.0.0.0:5000. Note the local IPv4 address of your laptop (e.g., 192.168.1.15).
+```bash
+python demo_week2.py
+```
 
-Connect the Smartphone Proxy:
+Mock mode
 
-Open the browser on your smartphone.
+```bash
+python demo_week2.py --mock
+```
 
-Navigate to https://<YOUR_LAPTOP_IP>:5000 (e.g., https://192.168.1.15:5000).
+---
 
-Grant Camera and Microphone permissions when prompted.
+# Vision
 
-Simulate:
+Today's assistants answer questions.
 
-Speak your intent into the phone interface.
+Tomorrow's assistants will remember your life.
 
-Walk near your designated BLE/Hotspot zones.
+Memora is a step toward wearable AI capable of building a persistent understanding of people, places, conversations, and experiences—bringing long-term contextual memory to everyday computing.
 
-Point the camera at registered objects/faces to test the local visual ledger.
+---
 
-🗺️ Roadmap to Production
+# Future Goals
 
-[x] Phase 1: Software MVP (Flask + LLM Intent Parsing)
+- AR Smart Glass Integration
+- Multi-modal Memory Graph
+- Long-term Episodic Memory
+- Multi-user Recognition
+- Real-time Scene Understanding
+- Predictive Memory Assistance
+- On-device AI Inference
+- Cloud Synchronization
+- Privacy-first Architecture
 
-[x] Phase 2: Computer Vision Pipeline (YOLO + OpenCV local database)
+---
 
-[ ] Phase 3: Hardware Migration (Porting to Raspberry Pi backpack rig)
+# License
 
-[ ] Phase 4: AR Glasses Integration (Samsung XR/Vuzix)
+This project is released under the MIT License.
 
-🤝 Acknowledgments
+---
 
-Built for the Samsung Solve for Tomorrow Hackathon.
-Theme: Health and Education - Enable affordable, tech-driven healthcare and learning → Improve access for underserved communities.
+<div align="center">
+
+### Building the future of wearable AI memory.
+
+⭐ Star the repository if you find the project interesting.
+
+</div>
