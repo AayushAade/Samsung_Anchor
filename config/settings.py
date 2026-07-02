@@ -31,3 +31,6 @@ TRACKED_OBJECTS = [
 ]
 SPATIAL_CELL_SIZE = int(os.getenv("SPATIAL_CELL_SIZE", "100"))
 
+# Global debug flag for frame-level CV/embedding diagnostics
+DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
+

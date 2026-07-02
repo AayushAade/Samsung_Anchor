@@ -12,6 +12,7 @@ from core.face_recognizer import MemoraFaceRecognizer
 from core.audio_listener import MemoraAudioListener
 from core.context_binder import MemoraContextBinder
 from core.speaker import MemoraSpeaker
+from core.event_logger import log_event
 
 # Global background listening states
 is_listening = False
@@ -41,11 +42,11 @@ def handle_async_listening(face_id, db, listener, binder, speaker):
     def run_bg_listen():
         global is_listening, active_listening_face, last_listen_time
         try:
-            print(f"\n[System] Activating ambient audio context listener for {face_id}...")
             transcript = listener.listen_and_transcribe()
             
             if transcript:
-                print(f"[System] LLM Parsing transcript...")
+                if settings.DEBUG:
+                    print(f"[System] LLM Parsing transcript...")
                 binding_info = binder.parse_transcript(transcript)
                 extracted_name = binding_info.get("extracted_name")
                 relationship = binding_info.get("relationship")
@@ -53,17 +54,22 @@ def handle_async_listening(face_id, db, listener, binder, speaker):
                 if extracted_name:
                     ev_res = db.add_evidence(face_id, extracted_name, relationship, raw_transcript=transcript)
                     conf = int(ev_res["confidence"] * 100)
-                    print(f"[System] Evidence added. Candidate: {ev_res['name']} (Conf: {conf}%)")
+                    log_event("evidence", f"Evidence added for [{face_id}]: candidate '{ev_res['name']}' (relationship: '{ev_res['relationship']}') with confidence {conf}%")
+                    
                     if ev_res["is_confirmed"]:
                         rel_str = f" ({ev_res['relationship']})" if ev_res['relationship'] else ""
-                        print(f"\n>>> Identity Confirmed: {ev_res['name']}{rel_str} [Confidence: {conf}%] <<<")
+                        log_event("confirmed", f"[{ev_res['name']}] identity confirmed (Confidence: {conf}%)")
+                        log_event("speaker", f"Speaker announcement: \"Identity confirmed. This is {ev_res['name']}.\"")
                         speaker.speak(f"Identity confirmed. This is {ev_res['name']}.")
                     else:
-                        print(f"[System] Confidence ({conf}%) is below confirmation threshold (80%). Logged for caregiver confirmation.")
+                        if settings.DEBUG:
+                            print(f"[System] Confidence ({conf}%) is below confirmation threshold (80%). Logged for caregiver confirmation.")
                 else:
-                    print(f"[System] No name identified in conversation context for {face_id}.")
+                    if settings.DEBUG:
+                        print(f"[System] No name identified in conversation context for {face_id}.")
             else:
-                print(f"[System] No audio context captured.")
+                if settings.DEBUG:
+                    print(f"[System] No audio context captured.")
         finally:
             # Update last listen timestamp and release lock
             last_listen_time[face_id] = time.time()
@@ -119,7 +125,6 @@ def main():
 
     try:
         if mock_mode:
-            # Simulated Webcam/Loop
             print("\nStarting Simulated loop. Press Ctrl+C to exit.")
             
             while True:
@@ -143,19 +148,15 @@ def main():
                     face_id = res["face_id"]
                     name = res["name"]
                     relationship = res["relationship"]
-                    is_new = res["is_new"]
 
-                    if is_new:
-                        print(f"\n[Camera] {face_id} detected.")
-                    
                     if name:
                         # Greeting announcement if not yet done in this session
                         if face_id not in announced_identities:
                             announced_identities.add(face_id)
                             rel_phrase = f". She/He is your {relationship}" if relationship else ""
-                            print(f"\n>>> [Speaker Output] \"{name} is here{rel_phrase}.\" <<<")
+                            log_event("speaker", f"Speaker announcement: \"{name} is here{rel_phrase}.\"")
                             speaker.speak(f"{name} is here{rel_phrase}.")
-                    else:
+                    elif face_id is not None:
                         # Check if we should trigger background listening
                         with listening_lock:
                             can_listen = not is_listening
@@ -164,7 +165,7 @@ def main():
                         
                         if can_listen and cooldown_expired:
                             candidates = db.get_candidates(face_id)
-                            if candidates:
+                            if candidates and settings.DEBUG:
                                 top_cand = candidates[0]
                                 cand_name = top_cand["name"]
                                 cand_conf = int(top_cand["confidence"] * 100)
@@ -184,7 +185,6 @@ def main():
                 time.sleep(0.1)
 
         else:
-            # Real Webcam Loop
             print("\nWebcam started. Stand in front of the camera.")
             while True:
                 ret, frame = cap.read()
@@ -203,19 +203,15 @@ def main():
                     face_id = res["face_id"]
                     name = res["name"]
                     relationship = res["relationship"]
-                    is_new = res["is_new"]
-
-                    if is_new:
-                        print(f"\n[Camera] {face_id} detected.")
 
                     if name:
                         # Greeting announcement if not yet done in this session
                         if face_id not in announced_identities:
                             announced_identities.add(face_id)
                             rel_phrase = f". She/He is your {relationship}" if relationship else ""
-                            print(f"\n>>> [Speaker Output] \"{name} is here{rel_phrase}.\" <<<")
+                            log_event("speaker", f"Speaker announcement: \"{name} is here{rel_phrase}.\"")
                             speaker.speak(f"{name} is here{rel_phrase}.")
-                    else:
+                    elif face_id is not None:
                         # Check if we should trigger background listening
                         with listening_lock:
                             can_listen = not is_listening
@@ -224,7 +220,7 @@ def main():
                         
                         if can_listen and cooldown_expired:
                             candidates = db.get_candidates(face_id)
-                            if candidates:
+                            if candidates and settings.DEBUG:
                                 top_cand = candidates[0]
                                 cand_name = top_cand["name"]
                                 cand_conf = int(top_cand["confidence"] * 100)

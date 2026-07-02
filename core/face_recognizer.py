@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import time
 from config import settings
+from core.event_logger import log_event
 
 # Try dlib-based face_recognition
 try:
@@ -24,7 +25,8 @@ try:
     MEDIAPIPE_AVAILABLE = True
 except ImportError:
     MEDIAPIPE_AVAILABLE = False
-    print("[Face Recognizer Warning] 'mediapipe' library not available.")
+    if settings.DEBUG:
+        print("[Face Recognizer Warning] 'mediapipe' library not available.")
 
 class MemoraFaceRecognizer:
     """
@@ -49,17 +51,25 @@ class MemoraFaceRecognizer:
         # Temporal candidate tracker
         self.unknown_candidates = {}
         self.next_candidate_index = 1
+        
+        # Active tracks dictionary for debounced event logging
+        # Keys: identity_id / face_id
+        # Values: {"last_seen_time": float, "recognized_logged": bool, "confirmed_logged": bool}
+        self.active_tracks = {}
 
         if self.mock_mode:
             self.backend = "mock"
-            print("[Face Recognizer] Initialized mock simulator backend.")
+            if settings.DEBUG:
+                print("[Face Recognizer] Initialized mock simulator backend.")
         elif FACE_RECOGNITION_AVAILABLE:
             self.backend = "face_recognition"
             self.face_recognition_active = True
-            print("[Face Recognizer] Initialized dlib-based 'face_recognition' backend.")
+            if settings.DEBUG:
+                print("[Face Recognizer] Initialized dlib-based 'face_recognition' backend.")
         elif INSIGHTFACE_AVAILABLE:
             self.backend = "insightface"
-            print("[Face Recognizer] Initialized InsightFace backend.")
+            if settings.DEBUG:
+                print("[Face Recognizer] Initialized InsightFace backend.")
         elif MEDIAPIPE_AVAILABLE:
             self.backend = "mediapipe"
             try:
@@ -70,13 +80,16 @@ class MemoraFaceRecognizer:
                     min_detection_confidence=0.5,
                     min_tracking_confidence=0.5
                 )
-                print("[Face Recognizer] Initialized MediaPipe FaceMesh fallback backend.")
+                if settings.DEBUG:
+                    print("[Face Recognizer] Initialized MediaPipe FaceMesh fallback backend.")
             except Exception as e:
-                print(f"[Face Recognizer Warning] Failed to initialize MediaPipe: {e}. Enabling mock fallback.")
+                if settings.DEBUG:
+                    print(f"[Face Recognizer Warning] Failed to initialize MediaPipe: {e}. Enabling mock fallback.")
                 self.mock_mode = True
                 self.backend = "mock"
         else:
-            print("[Face Recognizer Warning] No computer vision backends available. Forcing mock fallback mode.")
+            if settings.DEBUG:
+                print("[Face Recognizer Warning] No computer vision backends available. Forcing mock fallback mode.")
             self.mock_mode = True
             self.backend = "mock"
 
@@ -121,7 +134,8 @@ class MemoraFaceRecognizer:
             extra_distances.append(dist)
         
         embedding = np.concatenate([distances, np.array(extra_distances)])
-        print(f"[Debug Embedding] First 5 values: {embedding[:5]}")
+        if settings.DEBUG:
+            print(f"[Debug Embedding] First 5 values: {embedding[:5]}")
         return embedding
 
     def process_frame(self, frame, database):
@@ -176,13 +190,45 @@ class MemoraFaceRecognizer:
                 confidence_pct = int(info["confidence"] * 100)
                 database.increment_times_seen(face_id)
 
-            print("\n---------------------------------")
-            print("Face Detected")
-            print(f"Best Match: {best_match_name}")
-            print(f"Distance: {dist:.4f}" if dist is not None else "Distance: N/A")
-            print(f"Decision: {decision}")
-            print(f"Confidence: {confidence_pct}%")
-            print("---------------------------------\n")
+            # Event-based tracking logic for Mock Mode
+            is_confirmed = info["status"] == "confirmed"
+            disp = info["display_name"] if is_confirmed else face_id
+            
+            if face_id not in self.active_tracks:
+                log_event("face_enter", f"Face enters scene: [{disp}]")
+                self.active_tracks[face_id] = {
+                    "last_seen_time": now_time,
+                    "recognized_logged": False,
+                    "confirmed_logged": False
+                }
+            self.active_tracks[face_id]["last_seen_time"] = now_time
+
+            # Debounced recognition
+            if not self.active_tracks[face_id]["recognized_logged"]:
+                if is_new:
+                    self.active_tracks[face_id]["recognized_logged"] = True
+                else:
+                    if is_confirmed:
+                        log_event("recognized", f"[{disp}] recognized (Recognition Confidence: {confidence_pct}%)")
+                    else:
+                        log_event("recognized", f"[{face_id}] recognized (Distance: {dist:.3f})")
+                    self.active_tracks[face_id]["recognized_logged"] = True
+
+            # Debounced confirmation
+            if is_confirmed and not self.active_tracks[face_id]["confirmed_logged"]:
+                log_event("confirmed", f"[{disp}] identity confirmed (Confidence: {confidence_pct}%)")
+                self.active_tracks[face_id]["confirmed_logged"] = True
+
+            if settings.DEBUG:
+                print("\n---------------------------------")
+                print("Face Detected")
+                print(f"Best Match: {best_match_name}")
+                if is_confirmed:
+                    print(f"Recognition Confidence: {confidence_pct}%")
+                else:
+                    print(f"Distance: {dist:.4f}" if dist is not None else "Distance: N/A")
+                print(f"Decision: {decision}")
+                print("---------------------------------\n")
 
             results.append({
                 "box": (top, right, bottom, left),
@@ -192,19 +238,26 @@ class MemoraFaceRecognizer:
                 "is_new": is_new,
                 "embedding": mock_embedding
             })
+
+            # Handle mock leaves
+            stale_mock_tracks = [t for t, v in self.active_tracks.items() if now_time - v["last_seen_time"] > 2.0]
+            for t in stale_mock_tracks:
+                info_t = database.get_identity(t)
+                disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else t
+                log_event("face_leave", f"Face leaves scene: [{disp_t}]")
+                del self.active_tracks[t]
+
             return results
 
         # --- REAL DETECTION PIPELINE ---
-        detected_faces = []  # list of dicts: {"box": (top, right, bottom, left), "center": (cx, cy), "landmarks_or_crop": ...}
+        detected_faces = []
 
-        # 1. Detect faces using active backend
         if self.backend == "face_recognition":
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             face_locations = face_recognition.face_locations(rgb_frame)
             for box in face_locations:
                 top, right, bottom, left = box
                 cx, cy = (left + right) // 2, (top + bottom) // 2
-                # Get the 128D encoding directly
                 encs = face_recognition.face_encodings(rgb_frame, [box])
                 if encs:
                     detected_faces.append({
@@ -236,30 +289,40 @@ class MemoraFaceRecognizer:
         # Steady Face Gating Filter
         if not detected_faces:
             self.face_first_seen_time = None
+            
+            # Scan for leaving tracks
+            stale_tracks = [t for t, v in self.active_tracks.items() if now_time - v["last_seen_time"] > 2.0]
+            for t in stale_tracks:
+                info_t = database.get_identity(t)
+                disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else t
+                log_event("face_leave", f"Face leaves scene: [{disp_t}]")
+                del self.active_tracks[t]
+                
             return results
 
         if self.face_first_seen_time is None:
             self.face_first_seen_time = now_time
-            print("[Face Recognizer] Face detected. Calibrating gating filter (500ms)...")
+            if settings.DEBUG:
+                print("[Face Recognizer] Face detected. Calibrating gating filter (500ms)...")
             return results
 
         elapsed = now_time - self.face_first_seen_time
         if elapsed < self.gating_threshold:
-            # Gated: wait for 500ms steady presence
             return results
 
-        # Process each detected face
+        # Process detected faces
         for face in detected_faces:
             box = face["box"]
             cx, cy = face["center"]
             embedding = face["embedding"]
 
+            # Step 1: Database Lookup
             face_id, info, dist = database.find_match(embedding, self.tolerance)
             
             if face_id is not None:
                 emb_id = info.get("embedding_row_id") if info else None
-                # Successfully recognized in database!
-                # Clear any nearby temporal unknown candidates
+                
+                # Clear any nearby temporal unknown candidates (they are recognized)
                 matched_cand_key = None
                 for k, v in self.unknown_candidates.items():
                     dcx, dcy = v["center"]
@@ -270,23 +333,48 @@ class MemoraFaceRecognizer:
                 if matched_cand_key:
                     del self.unknown_candidates[matched_cand_key]
 
-                # Update database embedding using EMA (alpha=0.1)
+                # Update database embedding using EMA
                 database.update_embedding_ema(emb_id, embedding, alpha=0.1)
-                # Increment seen counter
                 database.increment_times_seen(face_id)
                 
-                # Fetch fresh profile details
                 info = database.get_identity(face_id)
+                is_confirmed = info["status"] == "confirmed"
                 best_match_name = info["display_name"] if info["display_name"] else face_id
                 confidence_pct = int(info["confidence"] * 100)
 
-                print("\n---------------------------------")
-                print("Face Detected")
-                print(f"Best Match: {best_match_name}")
-                print(f"Distance: {dist:.4f}")
-                print(f"Decision: RECOGNIZED")
-                print(f"Confidence: {confidence_pct}%")
-                print("---------------------------------\n")
+                # Event logging triggers
+                if face_id not in self.active_tracks:
+                    log_event("face_enter", f"Face enters scene: [{best_match_name}]")
+                    self.active_tracks[face_id] = {
+                        "last_seen_time": now_time,
+                        "recognized_logged": False,
+                        "confirmed_logged": False
+                    }
+                self.active_tracks[face_id]["last_seen_time"] = now_time
+
+                # Debounced recognition log
+                if not self.active_tracks[face_id]["recognized_logged"]:
+                    if is_confirmed:
+                        log_event("recognized", f"[{best_match_name}] recognized (Recognition Confidence: {confidence_pct}%)")
+                    else:
+                        log_event("recognized", f"[{face_id}] recognized (Distance: {dist:.3f})")
+                    self.active_tracks[face_id]["recognized_logged"] = True
+
+                # Debounced confirmation log
+                if is_confirmed and not self.active_tracks[face_id]["confirmed_logged"]:
+                    log_event("confirmed", f"[{best_match_name}] identity confirmed (Confidence: {confidence_pct}%)")
+                    self.active_tracks[face_id]["confirmed_logged"] = True
+
+                if settings.DEBUG:
+                    print("\n---------------------------------")
+                    print("Face Detected")
+                    print(f"Best Match: {best_match_name}")
+                    if is_confirmed:
+                        print(f"Recognition Confidence: {confidence_pct}%")
+                    else:
+                        print(f"Distance: {dist:.4f}")
+                    print("Decision: RECOGNIZED")
+                    print("---------------------------------\n")
 
                 results.append({
                     "box": box,
@@ -315,18 +403,27 @@ class MemoraFaceRecognizer:
 
                     frames_seen = candidate["frames_seen"]
                     if frames_seen >= 15:
-                        # Stability met: average embeddings and register in database
+                        # Stability met: average embeddings and register
                         avg_embedding = np.mean(candidate["embeddings"], axis=0)
                         new_id = database.register_anonymous(avg_embedding)
                         info = database.get_identity(new_id)
                         
-                        print("\n---------------------------------")
-                        print("Face Detected")
-                        print("Best Match: None")
-                        print("Distance: N/A")
-                        print("Decision: NEW PERSON")
-                        print("Confidence: 0%")
-                        print("---------------------------------\n")
+                        log_event("cand_promote", f"Unknown candidate [{matched_cand_key}] promoted to [{new_id}] after 15 stable frames")
+                        log_event("face_enter", f"Face enters scene: [{new_id}]")
+                        
+                        self.active_tracks[new_id] = {
+                            "last_seen_time": now_time,
+                            "recognized_logged": True,
+                            "confirmed_logged": False
+                        }
+                        
+                        if settings.DEBUG:
+                            print("\n---------------------------------")
+                            print("Face Detected")
+                            print("Best Match: None")
+                            print("Distance: N/A")
+                            print("Decision: NEW PERSON")
+                            print("---------------------------------\n")
                         
                         results.append({
                             "box": box,
@@ -338,7 +435,6 @@ class MemoraFaceRecognizer:
                         })
                         del self.unknown_candidates[matched_cand_key]
                     else:
-                        # Accumulating frames: do not log in database yet
                         results.append({
                             "box": box,
                             "face_id": None,
@@ -349,7 +445,7 @@ class MemoraFaceRecognizer:
                             "label": f"Detecting... ({frames_seen}/15)"
                         })
                 else:
-                    # Brand new candidate: create tracker
+                    # New candidate
                     cand_id = f"Temp_Cand_{self.next_candidate_index}"
                     self.next_candidate_index += 1
                     self.unknown_candidates[cand_id] = {
@@ -358,6 +454,8 @@ class MemoraFaceRecognizer:
                         "center": (cx, cy),
                         "last_seen_time": now_time
                     }
+                    log_event("cand_create", f"Unknown candidate [{cand_id}] created (1/15 stable frames)")
+                    
                     results.append({
                         "box": box,
                         "face_id": None,
@@ -367,6 +465,14 @@ class MemoraFaceRecognizer:
                         "embedding": embedding,
                         "label": "Detecting... (1/15)"
                     })
+
+        # Scan for leaving tracks
+        stale_tracks = [t for t, v in self.active_tracks.items() if now_time - v["last_seen_time"] > 2.0]
+        for t in stale_tracks:
+            info_t = database.get_identity(t)
+            disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else t
+            log_event("face_leave", f"Face leaves scene: [{disp_t}]")
+            del self.active_tracks[t]
 
         return results
 
@@ -391,10 +497,10 @@ class MemoraFaceRecognizer:
                 else:
                     label = name
             elif label_override:
-                color = (0, 165, 255) # Orange (detecting)
+                color = (0, 165, 255)
                 label = label_override
             else:
-                color = (0, 0, 255) # Red (new unconfirmed)
+                color = (0, 0, 255)
                 label = f"New Face: {face_id}"
 
             # Draw bounding box
