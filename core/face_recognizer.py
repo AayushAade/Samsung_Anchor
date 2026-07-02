@@ -28,6 +28,23 @@ except ImportError:
     if settings.DEBUG:
         print("[Face Recognizer Warning] 'mediapipe' library not available.")
 
+def compute_iou(boxA, boxB):
+    """Computes Intersection-over-Union (IoU) of two bounding boxes (top, right, bottom, left)."""
+    tA, rA, bA, lA = boxA
+    tB, rB, bB, lB = boxB
+    
+    xA = max(lA, lB)
+    yA = max(tA, tB)
+    xB = min(rA, rB)
+    yB = min(bA, bB)
+    
+    interArea = max(0, xB - xA) * max(0, yB - yA)
+    boxAArea = (rA - lA) * (bA - tA)
+    boxBArea = (rB - lB) * (bB - tB)
+    unionArea = boxAArea + boxBArea - interArea
+    
+    return interArea / float(unionArea) if unionArea > 0 else 0
+
 class MemoraFaceRecognizer:
     """
     Identity Anchoring Module (Pillar I).
@@ -35,7 +52,7 @@ class MemoraFaceRecognizer:
     1. dlib-based face_recognition (128D)
     2. InsightFace ArcFace
     3. Custom MediaPipe FaceMesh geometric proportions embedding (128D fallback)
-    Implements 500ms face gating, a temporal unknown tracker (15-frame buffer),
+    Implements 500ms face gating, a persistent spatial face tracker,
     and embedding stability averaging.
     """
     def __init__(self, tolerance=settings.FACE_TOLERANCE, mock_mode=False):
@@ -52,9 +69,19 @@ class MemoraFaceRecognizer:
         self.unknown_candidates = {}
         self.next_candidate_index = 1
         
-        # Active tracks dictionary for debounced event logging
-        # Keys: identity_id / face_id
-        # Values: {"last_seen_time": float, "recognized_logged": bool, "confirmed_logged": bool}
+        # Active tracks dictionary for persistent spatial tracking and debouncing
+        # Keys: track_id / identity_id / face_id
+        # Values: {
+        #   "state": "UNKNOWN" / "STABILIZING" / "RECOGNIZED",
+        #   "box": (top, right, bottom, left),
+        #   "center": (cx, cy),
+        #   "embeddings": list,
+        #   "frames_seen": int,
+        #   "missed_frames": int,
+        #   "last_seen_time": float,
+        #   "recognized_logged": bool,
+        #   "confirmed_logged": bool
+        # }
         self.active_tracks = {}
 
         if self.mock_mode:
@@ -138,14 +165,33 @@ class MemoraFaceRecognizer:
             print(f"[Debug Embedding] First 5 values: {embedding[:5]}")
         return embedding
 
+    def _update_missed_tracks(self, now_time, database, associated_tracks=set()):
+        """Updates and decays tracks that were not detected in the current frame."""
+        stale_keys = []
+        for track_id, track in list(self.active_tracks.items()):
+            if track_id not in associated_tracks:
+                track["missed_frames"] += 1
+                mf = track["missed_frames"]
+                if mf <= 30:
+                    print(f"Keeping [{track_id}] alive: missed_frames = {mf}/30")
+                else:
+                    info_t = database.get_identity(track_id)
+                    disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else track_id
+                    print(f"Removing [{track_id}] because: missed_frames = {mf} - timeout exceeded")
+                    log_event("face_leave", f"Face leaves scene: [{disp_t}]")
+                    stale_keys.append(track_id)
+        for k in stale_keys:
+            if k in self.active_tracks:
+                del self.active_tracks[k]
+
     def process_frame(self, frame, database):
         """
         Processes a BGR camera frame:
-        1. Steady gating (face must remain stable for >= 500ms).
-        2. Extract face embeddings (dlib, insightface, or MediaPipe custom).
+        1. Extract face embeddings (dlib, insightface, or MediaPipe custom).
+        2. Bounding box association (IoU & Center distance).
         3. Match with database or assign to temporal unknown tracker.
         4. Average 15 stable frames before creating a new database Anonymous_ID.
-        5. Update matched profiles using EMA.
+        5. Missed frames decay with 30-frame (1 second) hysteresis.
         """
         results = []
         if frame is None:
@@ -154,12 +200,9 @@ class MemoraFaceRecognizer:
         h, w, _ = frame.shape
         now_time = time.time()
 
-        # Decay stale temporal candidates (not seen for > 2 seconds)
-        stale_keys = [k for k, v in self.unknown_candidates.items() if now_time - v["last_seen_time"] > 2.0]
-        for k in stale_keys:
-            del self.unknown_candidates[k]
+        # 1. Detect faces using active backend
+        detected_faces = []
 
-        # --- MOCK MODE BACKEND ---
         if self.backend == "mock":
             top, right, bottom, left = h // 4, 3 * w // 4, 3 * h // 4, w // 4
             mock_embedding = np.zeros(128)
@@ -172,87 +215,14 @@ class MemoraFaceRecognizer:
             norm = np.linalg.norm(mock_embedding)
             if norm > 0:
                 mock_embedding = mock_embedding / norm
-
-            face_id, info, dist = database.find_match(mock_embedding, self.tolerance)
-            is_new = False
-            decision = "RECOGNIZED"
-            best_match_name = "None"
-            confidence_pct = 0
-            
-            if face_id is None:
-                face_id = database.register_anonymous(mock_embedding)
-                info = database.get_identity(face_id)
-                is_new = True
-                decision = "NEW PERSON"
-                best_match_name = "None"
-            else:
-                best_match_name = info["display_name"] if info["display_name"] else face_id
-                confidence_pct = int(info["confidence"] * 100)
-                database.increment_times_seen(face_id)
-
-            # Event-based tracking logic for Mock Mode
-            is_confirmed = info["status"] == "confirmed"
-            disp = info["display_name"] if is_confirmed else face_id
-            
-            if face_id not in self.active_tracks:
-                log_event("face_enter", f"Face enters scene: [{disp}]")
-                self.active_tracks[face_id] = {
-                    "last_seen_time": now_time,
-                    "recognized_logged": False,
-                    "confirmed_logged": False
-                }
-            self.active_tracks[face_id]["last_seen_time"] = now_time
-
-            # Debounced recognition
-            if not self.active_tracks[face_id]["recognized_logged"]:
-                if is_new:
-                    self.active_tracks[face_id]["recognized_logged"] = True
-                else:
-                    if is_confirmed:
-                        log_event("recognized", f"[{disp}] recognized (Recognition Confidence: {confidence_pct}%)")
-                    else:
-                        log_event("recognized", f"[{face_id}] recognized (Distance: {dist:.3f})")
-                    self.active_tracks[face_id]["recognized_logged"] = True
-
-            # Debounced confirmation
-            if is_confirmed and not self.active_tracks[face_id]["confirmed_logged"]:
-                log_event("confirmed", f"[{disp}] identity confirmed (Confidence: {confidence_pct}%)")
-                self.active_tracks[face_id]["confirmed_logged"] = True
-
-            if settings.DEBUG:
-                print("\n---------------------------------")
-                print("Face Detected")
-                print(f"Best Match: {best_match_name}")
-                if is_confirmed:
-                    print(f"Recognition Confidence: {confidence_pct}%")
-                else:
-                    print(f"Distance: {dist:.4f}" if dist is not None else "Distance: N/A")
-                print(f"Decision: {decision}")
-                print("---------------------------------\n")
-
-            results.append({
+                
+            detected_faces.append({
                 "box": (top, right, bottom, left),
-                "face_id": face_id,
-                "name": info["display_name"],
-                "relationship": info["relationship"],
-                "is_new": is_new,
+                "center": ((left + right) // 2, (top + bottom) // 2),
                 "embedding": mock_embedding
             })
 
-            # Handle mock leaves
-            stale_mock_tracks = [t for t, v in self.active_tracks.items() if now_time - v["last_seen_time"] > 2.0]
-            for t in stale_mock_tracks:
-                info_t = database.get_identity(t)
-                disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else t
-                log_event("face_leave", f"Face leaves scene: [{disp_t}]")
-                del self.active_tracks[t]
-
-            return results
-
-        # --- REAL DETECTION PIPELINE ---
-        detected_faces = []
-
-        if self.backend == "face_recognition":
+        elif self.backend == "face_recognition":
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             face_locations = face_recognition.face_locations(rgb_frame)
             for box in face_locations:
@@ -265,6 +235,7 @@ class MemoraFaceRecognizer:
                         "center": (cx, cy),
                         "embedding": encs[0]
                     })
+
         elif self.backend == "mediapipe":
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mesh_results = self.face_mesh.process(rgb_frame)
@@ -286,193 +257,254 @@ class MemoraFaceRecognizer:
                         "embedding": embedding
                     })
 
-        # Steady Face Gating Filter
-        if not detected_faces:
-            self.face_first_seen_time = None
-            
-            # Scan for leaving tracks
-            stale_tracks = [t for t, v in self.active_tracks.items() if now_time - v["last_seen_time"] > 2.0]
-            for t in stale_tracks:
-                info_t = database.get_identity(t)
-                disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else t
-                log_event("face_leave", f"Face leaves scene: [{disp_t}]")
-                del self.active_tracks[t]
-                
-            return results
+        # Bypassed gating in mock mode, otherwise apply 500ms gating filter
+        if self.backend != "mock":
+            if not detected_faces:
+                self.face_first_seen_time = None
+                self._update_missed_tracks(now_time, database)
+                return results
 
-        if self.face_first_seen_time is None:
-            self.face_first_seen_time = now_time
-            if settings.DEBUG:
-                print("[Face Recognizer] Face detected. Calibrating gating filter (500ms)...")
-            return results
-
-        elapsed = now_time - self.face_first_seen_time
-        if elapsed < self.gating_threshold:
-            return results
-
-        # Process detected faces
-        for face in detected_faces:
-            box = face["box"]
-            cx, cy = face["center"]
-            embedding = face["embedding"]
-
-            # Step 1: Database Lookup
-            face_id, info, dist = database.find_match(embedding, self.tolerance)
-            
-            if face_id is not None:
-                emb_id = info.get("embedding_row_id") if info else None
-                
-                # Clear any nearby temporal unknown candidates (they are recognized)
-                matched_cand_key = None
-                for k, v in self.unknown_candidates.items():
-                    dcx, dcy = v["center"]
-                    distance = np.hypot(cx - dcx, cy - dcy)
-                    if distance < 80:
-                        matched_cand_key = k
-                        break
-                if matched_cand_key:
-                    del self.unknown_candidates[matched_cand_key]
-
-                # Update database embedding using EMA
-                database.update_embedding_ema(emb_id, embedding, alpha=0.1)
-                database.increment_times_seen(face_id)
-                
-                info = database.get_identity(face_id)
-                is_confirmed = info["status"] == "confirmed"
-                best_match_name = info["display_name"] if info["display_name"] else face_id
-                confidence_pct = int(info["confidence"] * 100)
-
-                # Event logging triggers
-                if face_id not in self.active_tracks:
-                    log_event("face_enter", f"Face enters scene: [{best_match_name}]")
-                    self.active_tracks[face_id] = {
-                        "last_seen_time": now_time,
-                        "recognized_logged": False,
-                        "confirmed_logged": False
-                    }
-                self.active_tracks[face_id]["last_seen_time"] = now_time
-
-                # Debounced recognition log
-                if not self.active_tracks[face_id]["recognized_logged"]:
-                    if is_confirmed:
-                        log_event("recognized", f"[{best_match_name}] recognized (Recognition Confidence: {confidence_pct}%)")
-                    else:
-                        log_event("recognized", f"[{face_id}] recognized (Distance: {dist:.3f})")
-                    self.active_tracks[face_id]["recognized_logged"] = True
-
-                # Debounced confirmation log
-                if is_confirmed and not self.active_tracks[face_id]["confirmed_logged"]:
-                    log_event("confirmed", f"[{best_match_name}] identity confirmed (Confidence: {confidence_pct}%)")
-                    self.active_tracks[face_id]["confirmed_logged"] = True
-
+            if self.face_first_seen_time is None:
+                self.face_first_seen_time = now_time
                 if settings.DEBUG:
-                    print("\n---------------------------------")
-                    print("Face Detected")
-                    print(f"Best Match: {best_match_name}")
-                    if is_confirmed:
-                        print(f"Recognition Confidence: {confidence_pct}%")
-                    else:
-                        print(f"Distance: {dist:.4f}")
-                    print("Decision: RECOGNIZED")
-                    print("---------------------------------\n")
+                    print("[Face Recognizer] Face detected. Calibrating gating filter (500ms)...")
+                self._update_missed_tracks(now_time, database)
+                return results
 
-                results.append({
-                    "box": box,
-                    "face_id": face_id,
-                    "name": info["display_name"],
-                    "relationship": info["relationship"],
-                    "is_new": False,
-                    "embedding": embedding
-                })
-            else:
-                # Step 2: Temporal Consistency Unknown Tracker
-                matched_cand_key = None
-                for k, v in self.unknown_candidates.items():
-                    dcx, dcy = v["center"]
-                    distance = np.hypot(cx - dcx, cy - dcy)
-                    if distance < 80:
-                        matched_cand_key = k
-                        break
+            elapsed = now_time - self.face_first_seen_time
+            if elapsed < self.gating_threshold:
+                self._update_missed_tracks(now_time, database)
+                return results
+        else:
+            if not detected_faces:
+                self._update_missed_tracks(now_time, database)
+                return results
 
-                if matched_cand_key:
-                    candidate = self.unknown_candidates[matched_cand_key]
-                    candidate["frames_seen"] += 1
-                    candidate["embeddings"].append(embedding)
-                    candidate["center"] = (cx, cy)
-                    candidate["last_seen_time"] = now_time
+        # --- TRACK ASSOCIATION PIPELINE ---
+        unassociated_detections = list(detected_faces)
+        associated_tracks = set()
 
-                    frames_seen = candidate["frames_seen"]
-                    if frames_seen >= 15:
-                        # Stability met: average embeddings and register
-                        avg_embedding = np.mean(candidate["embeddings"], axis=0)
+        # Step 1: Match detections to existing active tracks (IoU / Distance)
+        for track_id, track in list(self.active_tracks.items()):
+            track_box = track["box"]
+            track_center = track["center"]
+            
+            best_det_idx = -1
+            best_det_score = -1.0
+            
+            for idx, det in enumerate(unassociated_detections):
+                iou = compute_iou(det["box"], track_box)
+                dist = np.hypot(det["center"][0] - track_center[0], det["center"][1] - track_center[1])
+                
+                is_match = False
+                score = 0.0
+                if iou > 0.2:
+                    is_match = True
+                    score = iou
+                elif dist < 100:
+                    is_match = True
+                    score = 1.0 / (dist + 1)
+                    
+                if is_match and score > best_det_score:
+                    best_det_score = score
+                    best_det_idx = idx
+            
+            if best_det_idx != -1:
+                det = unassociated_detections.pop(best_det_idx)
+                associated_tracks.add(track_id)
+                
+                # Update persistent track details
+                track["box"] = det["box"]
+                track["center"] = det["center"]
+                track["missed_frames"] = 0
+                track["last_seen_time"] = now_time
+                track["embeddings"].append(det["embedding"])
+                track["frames_seen"] += 1
+                
+                # State transitions
+                if track["state"] == "STABILIZING" or track["state"] == "UNKNOWN":
+                    track["state"] = "STABILIZING"
+                    if track["frames_seen"] >= 15:
+                        avg_embedding = np.mean(track["embeddings"], axis=0)
                         new_id = database.register_anonymous(avg_embedding)
                         info = database.get_identity(new_id)
                         
-                        log_event("cand_promote", f"Unknown candidate [{matched_cand_key}] promoted to [{new_id}] after 15 stable frames")
+                        log_event("cand_promote", f"Unknown candidate [{track_id}] promoted to [{new_id}] after 15 stable frames")
                         log_event("face_enter", f"Face enters scene: [{new_id}]")
                         
+                        # Promote track to RECOGNIZED state and re-key
                         self.active_tracks[new_id] = {
+                            "state": "RECOGNIZED",
+                            "box": track["box"],
+                            "center": track["center"],
+                            "embeddings": track["embeddings"],
+                            "frames_seen": track["frames_seen"],
+                            "missed_frames": 0,
                             "last_seen_time": now_time,
                             "recognized_logged": True,
                             "confirmed_logged": False
                         }
-                        
-                        if settings.DEBUG:
-                            print("\n---------------------------------")
-                            print("Face Detected")
-                            print("Best Match: None")
-                            print("Distance: N/A")
-                            print("Decision: NEW PERSON")
-                            print("---------------------------------\n")
+                        associated_tracks.add(new_id)
+                        del self.active_tracks[track_id]
                         
                         results.append({
-                            "box": box,
+                            "box": track["box"],
                             "face_id": new_id,
                             "name": None,
                             "relationship": None,
                             "is_new": True,
                             "embedding": avg_embedding
                         })
-                        del self.unknown_candidates[matched_cand_key]
                     else:
                         results.append({
-                            "box": box,
+                            "box": track["box"],
                             "face_id": None,
                             "name": None,
                             "relationship": None,
                             "is_new": False,
-                            "embedding": embedding,
-                            "label": f"Detecting... ({frames_seen}/15)"
+                            "embedding": det["embedding"],
+                            "label": f"Detecting... ({track['frames_seen']}/15)"
                         })
+                        
+                elif track["state"] == "RECOGNIZED":
+                    # Known tracked identity: check database match to apply reinforcement/EMA
+                    face_id, info, d = database.find_match(det["embedding"], self.tolerance)
+                    
+                    if face_id is not None:
+                        emb_id = info.get("embedding_row_id") if info else None
+                        database.update_embedding_ema(emb_id, det["embedding"], alpha=0.1)
+                        database.increment_times_seen(face_id)
+                        
+                        info = database.get_identity(face_id)
+                        is_confirmed = info["status"] == "confirmed"
+                        best_match_name = info["display_name"] if info["display_name"] else face_id
+                        confidence_pct = int(info["confidence"] * 100)
+                        
+                        if not track["recognized_logged"]:
+                            if is_confirmed:
+                                log_event("recognized", f"[{best_match_name}] recognized (Recognition Confidence: {confidence_pct}%)")
+                            else:
+                                log_event("recognized", f"[{face_id}] recognized (Distance: {d:.3f})")
+                            track["recognized_logged"] = True
+                            
+                        if is_confirmed and not track["confirmed_logged"]:
+                            log_event("confirmed", f"[{best_match_name}] identity confirmed (Confidence: {confidence_pct}%)")
+                            track["confirmed_logged"] = True
+                            
+                        results.append({
+                            "box": track["box"],
+                            "face_id": face_id,
+                            "name": info["display_name"],
+                            "relationship": info["relationship"],
+                            "is_new": False,
+                            "embedding": det["embedding"]
+                        })
+                    else:
+                        # Database lookup failed/exceeded threshold temporarily, but WE KEEP the recognized identity!
+                        info = database.get_identity(track_id)
+                        disp_name = info["display_name"] if (info and info["display_name"]) else track_id
+                        
+                        results.append({
+                            "box": track["box"],
+                            "face_id": track_id,
+                            "name": info["display_name"] if info else None,
+                            "relationship": info["relationship"] if info else None,
+                            "is_new": False,
+                            "embedding": det["embedding"]
+                        })
+
+        # Step 2: Create new tracks for unassociated detections
+        for det in unassociated_detections:
+            face_id, info, dist = database.find_match(det["embedding"], self.tolerance)
+            
+            if face_id is not None:
+                is_confirmed = info["status"] == "confirmed"
+                best_match_name = info["display_name"] if info["display_name"] else face_id
+                confidence_pct = int(info["confidence"] * 100)
+                
+                log_event("face_enter", f"Face enters scene: [{best_match_name}]")
+                if is_confirmed:
+                    log_event("recognized", f"[{best_match_name}] recognized (Recognition Confidence: {confidence_pct}%)")
                 else:
-                    # New candidate
+                    log_event("recognized", f"[{face_id}] recognized (Distance: {dist:.3f})")
+                
+                self.active_tracks[face_id] = {
+                    "state": "RECOGNIZED",
+                    "box": det["box"],
+                    "center": det["center"],
+                    "embeddings": [det["embedding"]],
+                    "frames_seen": 1,
+                    "missed_frames": 0,
+                    "last_seen_time": now_time,
+                    "recognized_logged": True,
+                    "confirmed_logged": is_confirmed
+                }
+                associated_tracks.add(face_id)
+                
+                results.append({
+                    "box": det["box"],
+                    "face_id": face_id,
+                    "name": info["display_name"],
+                    "relationship": info["relationship"],
+                    "is_new": False,
+                    "embedding": det["embedding"]
+                })
+            else:
+                if self.backend == "mock":
+                    new_id = database.register_anonymous(det["embedding"])
+                    info = database.get_identity(new_id)
+                    log_event("face_enter", f"Face enters scene: [{new_id}]")
+                    self.active_tracks[new_id] = {
+                        "state": "RECOGNIZED",
+                        "box": det["box"],
+                        "center": det["center"],
+                        "embeddings": [det["embedding"]],
+                        "frames_seen": 1,
+                        "missed_frames": 0,
+                        "last_seen_time": now_time,
+                        "recognized_logged": True,
+                        "confirmed_logged": False
+                    }
+                    associated_tracks.add(new_id)
+                    results.append({
+                        "box": det["box"],
+                        "face_id": new_id,
+                        "name": None,
+                        "relationship": None,
+                        "is_new": True,
+                        "embedding": det["embedding"]
+                    })
+                else:
+                    # Brand new unknown candidate: initialize tracker
                     cand_id = f"Temp_Cand_{self.next_candidate_index}"
                     self.next_candidate_index += 1
-                    self.unknown_candidates[cand_id] = {
+                    
+                    self.active_tracks[cand_id] = {
+                        "state": "UNKNOWN",
+                        "box": det["box"],
+                        "center": det["center"],
+                        "embeddings": [det["embedding"]],
                         "frames_seen": 1,
-                        "embeddings": [embedding],
-                        "center": (cx, cy),
-                        "last_seen_time": now_time
+                        "missed_frames": 0,
+                        "last_seen_time": now_time,
+                        "recognized_logged": False,
+                        "confirmed_logged": False
                     }
+                    associated_tracks.add(cand_id)
                     log_event("cand_create", f"Unknown candidate [{cand_id}] created (1/15 stable frames)")
                     
                     results.append({
-                        "box": box,
+                        "box": det["box"],
                         "face_id": None,
                         "name": None,
                         "relationship": None,
                         "is_new": False,
-                        "embedding": embedding,
+                        "embedding": det["embedding"],
                         "label": "Detecting... (1/15)"
                     })
 
-        # Scan for leaving tracks
-        stale_tracks = [t for t, v in self.active_tracks.items() if now_time - v["last_seen_time"] > 2.0]
-        for t in stale_tracks:
-            info_t = database.get_identity(t)
-            disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else t
-            log_event("face_leave", f"Face leaves scene: [{disp_t}]")
-            del self.active_tracks[t]
+        # Step 3: Missed frames update
+        self._update_missed_tracks(now_time, database, associated_tracks)
 
         return results
 
@@ -488,14 +520,14 @@ class MemoraFaceRecognizer:
             relationship = res["relationship"]
             label_override = res.get("label")
 
-            # Set colors (green for recognized, orange for detecting, red for new)
-            is_recognized = name is not None
+            is_recognized = name is not None or (face_id is not None and not label_override)
             if is_recognized:
                 color = (0, 255, 0)
+                disp_name = name if name else face_id
                 if relationship:
-                    label = f"{name} ({relationship})"
+                    label = f"{disp_name} ({relationship})"
                 else:
-                    label = name
+                    label = disp_name
             elif label_override:
                 color = (0, 165, 255)
                 label = label_override
