@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument("--mock", action="store_true", help="Run in mock mode without physical camera/mic")
     parser.add_argument("--tolerance", type=float, default=settings.FACE_TOLERANCE, help="Face comparison tolerance (lower is stricter)")
     parser.add_argument("--db", type=str, default=settings.DB_PATH, help="Path to database SQLite file")
+    parser.add_argument("--mic-index", type=int, default=None, help="Explicit microphone device index to use")
     return parser.parse_args()
 
 def handle_async_listening(face_id, db, listener, binder, speaker):
@@ -85,8 +86,8 @@ def main():
     db = MemoraDatabase(args.db)
     recognizer = MemoraFaceRecognizer(tolerance=args.tolerance, mock_mode=args.mock)
     
-    # Initialize audio listener
-    listener = MemoraAudioListener(duration_sec=settings.AUDIO_DURATION_SEC, mock_mode=args.mock)
+    # Initialize audio listener with potential mic index override
+    listener = MemoraAudioListener(duration_sec=settings.AUDIO_DURATION_SEC, mock_mode=args.mock, device_index=args.mic_index)
     
     # Initialize LLM context binder
     binder = MemoraContextBinder()
@@ -100,6 +101,8 @@ def main():
         print("[System Info] Running in SIMULATED (mock) mode.")
     else:
         print("[System Info] Running in REAL mode using camera and microphone.")
+        print("[Instructions] Press 't' in the camera window to force manual typing input.")
+        print("[Instructions] Press 'q' in the camera window to quit.")
 
     # Try to open the webcam
     cap = None
@@ -154,7 +157,6 @@ def main():
                             speaker.speak(f"{name} is here{rel_phrase}.")
                     else:
                         # Check if we should trigger background listening
-                        # Conditions: not currently listening, and cooldown (5s) has expired
                         with listening_lock:
                             can_listen = not is_listening
                         
@@ -169,19 +171,21 @@ def main():
                                 cand_rel = f" ({top_cand['relationship']})" if top_cand["relationship"] else ""
                                 print(f"[Caregiver Log] Candidate: {cand_name}{cand_rel} | Confidence: {cand_conf}%")
                             
-                            # Trigger listening in background thread
                             handle_async_listening(face_id, db, listener, binder, speaker)
 
-                # Check for exit key
-                if cv2.waitKey(30) & 0xFF == ord('q'):
+                # Check keys
+                key = cv2.waitKey(30) & 0xFF
+                if key == ord('q'):
                     break
+                elif key == ord('t'):
+                    print("\n[System] Manual override triggered. Switching to typing input fallback.")
+                    listener.mock_mode = True
                 
-                # Slow down the simulation loop
                 time.sleep(0.1)
 
         else:
             # Real Webcam Loop
-            print("\nWebcam started. Stand in front of the camera. Press 'q' in the window to quit.")
+            print("\nWebcam started. Stand in front of the camera.")
             while True:
                 ret, frame = cap.read()
                 if not ret:
@@ -227,12 +231,15 @@ def main():
                                 cand_rel = f" ({top_cand['relationship']})" if top_cand["relationship"] else ""
                                 print(f"[Caregiver Log] Candidate: {cand_name}{cand_rel} | Confidence: {cand_conf}%")
 
-                            # Trigger listening in background thread
                             handle_async_listening(face_id, db, listener, binder, speaker)
 
-                # Check for exit
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                # Check keys
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
                     break
+                elif key == ord('t'):
+                    print("\n[System] Manual override triggered. Switching to typing input fallback.")
+                    listener.mock_mode = True
 
     except KeyboardInterrupt:
         print("\n[System Info] Program interrupted by user.")
