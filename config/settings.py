@@ -16,7 +16,7 @@ DB_PATH = os.getenv("MEMORA_DB_PATH", str(BASE_DIR / "memora_db.json"))
 
 # Face Recognition Settings
 # A tolerance of 0.6 is standard for dlib. Lower values are stricter.
-FACE_TOLERANCE = float(os.getenv("FACE_TOLERANCE", "0.6"))
+FACE_TOLERANCE = float(os.getenv("FACE_TOLERANCE", "0.65"))
 
 # Audio Recording Settings
 AUDIO_DURATION_SEC = int(os.getenv("AUDIO_DURATION_SEC", "5"))

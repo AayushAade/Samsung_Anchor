@@ -84,12 +84,17 @@ class MemoraContextBinder:
         """Rule-based parsing fallback for offline usage or missing API key."""
         transcript_lower = transcript.lower()
         
-        # Simple patterns
-        # 1. "Hi Dad, it's Sarah" -> Daughter, Sarah
-        # 2. "Hey Grandpa, it's your grandson Mark"
-        # 3. "My name is Sarah"
-        # 4. "I'm Mark"
-        
+        # 0. Check for specific direct address relation pattern first (e.g., "Mark, your daughter is calling")
+        direct_address_match = re.search(
+            r"\b([a-z]+),\s+your\s+(son|daughter|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\b",
+            transcript_lower
+        )
+        if direct_address_match:
+            return {
+                "extracted_name": direct_address_match.group(1).capitalize(),
+                "relationship": direct_address_match.group(2).capitalize()
+            }
+
         extracted_name = None
         relationship = None
         
@@ -129,34 +134,63 @@ class MemoraContextBinder:
                     relationship = rel
                     break
         
-        # Heuristics for name extraction
-        # 1. Check for "it's [your] [relationship] [name]" pattern first
-        relationship_match = re.search(
-            r"\b(?:it's|its|i am|i'm)\s+(?:your\s+)?(?:son|daughter|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\s+([a-z]+)", 
-            transcript_lower
-        )
-        if relationship_match:
-            extracted_name = relationship_match.group(1).capitalize()
-        else:
-            # 2. Try general patterns: "it's <name>", "my name is <name>", "i am <name>"
-            match = re.search(r"\b(?:it's|its|i am|i'm|my name is)\s+([a-z]+)", transcript_lower)
-            if match:
-                name_candidate = match.group(1).capitalize()
-                # Skip filler articles and pronouns
-                if name_candidate.lower() in ["your", "my", "the", "a", "an"]:
-                    match_next = re.search(r"\b(?:it's|its|i am|i'm|my name is)\s+(?:your|my|the|a|an)\s+([a-z]+)", transcript_lower)
-                    if match_next:
-                        name_candidate = match_next.group(1).capitalize()
-                extracted_name = name_candidate
-            # 3. Try "hi <name>" or "hello <name>"
-            else:
-                match = re.search(r"\b(?:hi|hello|hey|greetings)\s+([a-z]+)", transcript_lower)
-                if match:
-                    name_candidate = match.group(1).capitalize()
-                    # Ensure it's not a common relationship term or greetings word
-                    if name_candidate.lower() not in ["dad", "mom", "grandpa", "grandma", "grandson", "daughter", "son", "there", "friend"]:
+        # Smart Name Extraction (Identify ANY name through grammatical structure/direct address)
+        # Normalize transcript: remove punctuation but keep capitalization
+        clean_text = re.sub(r"[^\w\s']", " ", transcript)
+        words = clean_text.split()
+        
+        if words:
+            # Functional English stop words and common particles
+            functional_words = {
+                "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your", "yours", 
+                "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", 
+                "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", 
+                "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", 
+                "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an", "the", "and", 
+                "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", 
+                "about", "against", "between", "into", "through", "during", "before", "after", "above", 
+                "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", 
+                "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", 
+                "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", 
+                "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just", "don", 
+                "should", "now", "hey", "hi", "hello", "greetings", "good", "morning", "afternoon", 
+                "evening", "day", "yesterday", "today", "tomorrow", "monday", "tuesday", "wednesday", 
+                "thursday", "friday", "saturday", "sunday", "january", "february", "march", "april", 
+                "may", "june", "july", "august", "september", "october", "november", "december",
+                "grandpa", "grandma", "grandfather", "grandmother", "dad", "mom", "father", "mother",
+                "son", "daughter", "brother", "sister", "caregiver", "doctor", "friend", "nurse"
+            }
+
+            for w in words:
+                # We check for any capitalized alphabetic word that is not a functional word
+                if w.istitle() and w.lower() not in functional_words and w.isalpha():
+                    extracted_name = w
+                    break
+
+            # Absolute Fallback using original regex patterns if no name was resolved grammatically
+            if not extracted_name:
+                relationship_match = re.search(
+                    r"\b(?:it's|its|i am|i'm)\s+(?:your\s+)?(?:son|daughter|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\s+([a-z]+)", 
+                    transcript_lower
+                )
+                if relationship_match:
+                    extracted_name = relationship_match.group(1).capitalize()
+                else:
+                    match = re.search(r"\b(?:it's|its|i am|i'm|my name is)\s+([a-z]+)", transcript_lower)
+                    if match:
+                        name_candidate = match.group(1).capitalize()
+                        if name_candidate.lower() not in ["your", "my", "the", "a", "an"]:
+                            match_next = re.search(r"\b(?:it's|its|i am|i'm|my name is)\s+(?:your|my|the|a|an)\s+([a-z]+)", transcript_lower)
+                            if match_next:
+                                name_candidate = match_next.group(1).capitalize()
                         extracted_name = name_candidate
-                    
+                    else:
+                        match = re.search(r"\b(?:hi|hello|hey|greetings)\s+([a-z]+)", transcript_lower)
+                        if match:
+                            name_candidate = match.group(1).capitalize()
+                            if name_candidate.lower() not in ["dad", "mom", "grandpa", "grandma", "grandson", "daughter", "son", "there", "friend"]:
+                                extracted_name = name_candidate
+                                
         return {
             "extracted_name": extracted_name,
             "relationship": relationship
