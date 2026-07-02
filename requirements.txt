@@ -1,7 +1,7 @@
 opencv-python
 mediapipe
 ultralytics
-google-generativeai
+google-genai
 SpeechRecognition
 PyAudio
 python-dotenv

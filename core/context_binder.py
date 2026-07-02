@@ -1,6 +1,7 @@
 import json
 import re
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 # Import settings
 from config import settings
@@ -15,9 +16,7 @@ class MemoraContextBinder:
             self.use_api = False
         else:
             try:
-                genai.configure(api_key=self.api_key)
-                # Use gemini-1.5-flash as the standard fast LLM model
-                self.model = genai.GenerativeModel("gemini-1.5-flash")
+                self.client = genai.Client(api_key=self.api_key)
             except Exception as e:
                 print(f"[Context Binder Warning] Failed to configure Gemini API client: {e}. Enabling local fallback.")
                 self.use_api = False
@@ -52,10 +51,13 @@ class MemoraContextBinder:
                 }}
                 """
                 
-                # Request JSON format from the Gemini model
-                response = self.model.generate_content(
-                    prompt,
-                    generation_config={"response_mime_type": "application/json"}
+                # Request JSON format using the modern Client.models.generate_content API
+                response = self.client.models.generate_content(
+                    model="gemini-1.5-flash",
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
                 )
                 
                 if response and response.text:

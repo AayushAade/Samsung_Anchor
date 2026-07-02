@@ -51,7 +51,7 @@ def handle_async_listening(face_id, db, listener, binder, speaker):
                 relationship = binding_info.get("relationship")
                 
                 if extracted_name:
-                    ev_res = db.add_evidence(face_id, extracted_name, relationship)
+                    ev_res = db.add_evidence(face_id, extracted_name, relationship, raw_transcript=transcript)
                     conf = int(ev_res["confidence"] * 100)
                     print(f"[System] Evidence added. Candidate: {ev_res['name']} (Conf: {conf}%)")
                     if ev_res["is_confirmed"]:

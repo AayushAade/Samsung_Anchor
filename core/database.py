@@ -28,13 +28,7 @@ class MemoraDatabase:
                 conn.execute("SELECT 1")
                 conn.close()
             except sqlite3.DatabaseError:
-                # The file is not a valid database (likely the old JSON file).
-                # We should remove or rename it to avoid crashing!
-                print(f"[Database Warning] Invalid database file detected at {self.db_path} (likely old JSON database). Replacing with new SQLite database.")
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+                print(f"[Database Warning] Invalid database file detected at {self.db_path}. Replacing with new SQLite database.")
                 backup_path = self.db_path + ".old_json"
                 try:
                     if os.path.exists(backup_path):
@@ -51,6 +45,22 @@ class MemoraDatabase:
             conn = self._get_connection()
             cursor = conn.cursor()
             
+            # Check table columns of identities. If name column exists instead of display_name, it's the old schema.
+            # We should drop all old tables to start fresh!
+            try:
+                cursor.execute("PRAGMA table_info(identities)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if columns and "name" in columns and "display_name" not in columns:
+                    print("[Database Migration] Old identities table schema detected. Dropping tables to migrate to clean schema.")
+                    cursor.execute("DROP TABLE IF EXISTS system_state")
+                    cursor.execute("DROP TABLE IF EXISTS identities")
+                    cursor.execute("DROP TABLE IF EXISTS face_embeddings")
+                    cursor.execute("DROP TABLE IF EXISTS identity_evidence")
+                    cursor.execute("DROP TABLE IF EXISTS objects")
+                    cursor.execute("DROP TABLE IF EXISTS object_history")
+            except Exception:
+                pass
+            
             # system_state table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS system_state (
@@ -59,15 +69,20 @@ class MemoraDatabase:
                 )
             """)
             
-            # identities table
+            # New identities table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS identities (
-                    face_id TEXT PRIMARY KEY,
-                    name TEXT,
+                    identity_id TEXT PRIMARY KEY,
+                    display_name TEXT,
                     relationship TEXT,
+                    status TEXT,
+                    candidate_name TEXT,
+                    candidate_relationship TEXT,
                     confidence REAL DEFAULT 0.0,
-                    created_at TEXT,
-                    updated_at TEXT
+                    times_seen INTEGER DEFAULT 1,
+                    first_seen TEXT,
+                    last_seen TEXT,
+                    evidence_history TEXT
                 )
             """)
             
@@ -75,24 +90,24 @@ class MemoraDatabase:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS face_embeddings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    face_id TEXT,
+                    identity_id TEXT,
                     embedding TEXT,
-                    FOREIGN KEY(face_id) REFERENCES identities(face_id) ON DELETE CASCADE
+                    FOREIGN KEY(identity_id) REFERENCES identities(identity_id) ON DELETE CASCADE
                 )
             """)
             
             # identity_evidence table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS identity_evidence (
-                    face_id TEXT,
+                    identity_id TEXT,
                     heard_name TEXT,
                     heard_relationship TEXT,
                     count INTEGER DEFAULT 1,
                     confidence REAL DEFAULT 0.0,
                     created_at TEXT,
                     updated_at TEXT,
-                    PRIMARY KEY(face_id, heard_name),
-                    FOREIGN KEY(face_id) REFERENCES identities(face_id) ON DELETE CASCADE
+                    PRIMARY KEY(identity_id, heard_name),
+                    FOREIGN KEY(identity_id) REFERENCES identities(identity_id) ON DELETE CASCADE
                 )
             """)
             
@@ -188,17 +203,15 @@ class MemoraDatabase:
         }
 
     def load(self):
-        """No-op for SQLite (schema initialized at startup)."""
         pass
 
     def save(self):
-        """No-op for SQLite (writes commit instantly)."""
         pass
 
     def find_match(self, query_embedding, tolerance=None):
         """
         Compares query_embedding (128D list/array) against all stored identities.
-        Returns (face_id, identity_dict, distance) if a match is found under the tolerance,
+        Returns (identity_id, identity_dict, distance) if a match is found under tolerance,
         otherwise returns (None, None, None).
         """
         if tolerance is None:
@@ -207,44 +220,41 @@ class MemoraDatabase:
         query_vector = np.array(query_embedding)
         best_match_id = None
         best_distance = float("inf")
+        best_emb_id = None
 
         with self.lock:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            cursor.execute("SELECT face_id, embedding FROM face_embeddings")
+            cursor.execute("SELECT id, identity_id, embedding FROM face_embeddings")
             rows = cursor.fetchall()
             
             for r in rows:
-                face_id = r["face_id"]
+                identity_id = r["identity_id"]
+                emb_id = r["id"]
                 stored_embedding = json.loads(r["embedding"])
                 stored_vector = np.array(stored_embedding)
                 distance = np.linalg.norm(query_vector - stored_vector)
                 
-                # Fetch name for logging comparison
-                cursor2 = conn.cursor()
-                cursor2.execute("SELECT name FROM identities WHERE face_id = ?", (face_id,))
-                name_row = cursor2.fetchone()
-                name_str = name_row[0] if (name_row and name_row[0]) else face_id
-                
-                print(f"Comparing with {name_str}")
-                print(f"Distance = {distance:.4f}")
-                
                 if distance < tolerance and distance < best_distance:
                     best_distance = distance
-                    best_match_id = face_id
+                    best_match_id = identity_id
+                    best_emb_id = emb_id
             
             conn.close()
             
             if best_match_id is not None:
-                return best_match_id, self.get_identity(best_match_id), best_distance
+                identity_info = self.get_identity(best_match_id)
+                if identity_info:
+                    identity_info["embedding_row_id"] = best_emb_id
+                return best_match_id, identity_info, best_distance
 
         return None, None, None
 
     def register_anonymous(self, embedding):
         """
         Registers a new anonymous identity with the given embedding vector.
-        Returns the generated face_id.
+        Returns the generated identity_id.
         """
         with self.lock:
             conn = self._get_connection()
@@ -258,13 +268,15 @@ class MemoraDatabase:
             
             now_str = datetime.now().isoformat()
             cursor.execute(
-                "INSERT INTO identities (face_id, name, relationship, confidence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (anon_id, None, None, 0.0, now_str, now_str)
+                """INSERT INTO identities 
+                   (identity_id, display_name, relationship, status, candidate_name, candidate_relationship, confidence, times_seen, first_seen, last_seen, evidence_history) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (anon_id, None, None, "unconfirmed", None, None, 0.0, 1, now_str, now_str, json.dumps([]))
             )
             
             embedding_json = json.dumps(list(embedding))
             cursor.execute(
-                "INSERT INTO face_embeddings (face_id, embedding) VALUES (?, ?)",
+                "INSERT INTO face_embeddings (identity_id, embedding) VALUES (?, ?)",
                 (anon_id, embedding_json)
             )
             
@@ -272,78 +284,132 @@ class MemoraDatabase:
             conn.close()
             return anon_id
 
-    def add_embedding_to_identity(self, face_id, embedding):
+    def add_embedding_to_identity(self, identity_id, embedding):
         """Adds a new embedding vector to an existing identity's database profile (for model reinforcement)."""
         with self.lock:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            cursor.execute("SELECT 1 FROM identities WHERE face_id = ?", (face_id,))
+            cursor.execute("SELECT 1 FROM identities WHERE identity_id = ?", (identity_id,))
             if not cursor.fetchone():
                 conn.close()
                 return False
                 
             now_str = datetime.now().isoformat()
-            cursor.execute("UPDATE identities SET updated_at = ? WHERE face_id = ?", (now_str, face_id))
+            cursor.execute("UPDATE identities SET last_seen = ? WHERE identity_id = ?", (now_str, identity_id))
             
             embedding_json = json.dumps(list(embedding))
             cursor.execute(
-                "INSERT INTO face_embeddings (face_id, embedding) VALUES (?, ?)",
-                (face_id, embedding_json)
+                "INSERT INTO face_embeddings (identity_id, embedding) VALUES (?, ?)",
+                (identity_id, embedding_json)
             )
             
             conn.commit()
             conn.close()
             return True
 
-    def bind_name(self, face_id, name, relationship=None):
+    def update_embedding_ema(self, embedding_id, new_embedding, alpha=0.1):
+        """Updates a specific stored embedding using an Exponential Moving Average (EMA)."""
+        with self.lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT embedding FROM face_embeddings WHERE id = ?", (embedding_id,))
+            row = cursor.fetchone()
+            if row:
+                stored = json.loads(row[0])
+                stored_vector = np.array(stored)
+                new_vector = np.array(new_embedding)
+                updated_vector = alpha * new_vector + (1 - alpha) * stored_vector
+                cursor.execute(
+                    "UPDATE face_embeddings SET embedding = ? WHERE id = ?",
+                    (json.dumps(list(updated_vector)), embedding_id)
+                )
+                conn.commit()
+            conn.close()
+
+    def increment_times_seen(self, identity_id):
+        """Increments the times_seen counter for an identity and updates its last_seen timestamp."""
+        with self.lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now_str = datetime.now().isoformat()
+            cursor.execute(
+                "UPDATE identities SET times_seen = times_seen + 1, last_seen = ? WHERE identity_id = ?",
+                (now_str, identity_id)
+            )
+            conn.commit()
+            conn.close()
+
+    def bind_name(self, identity_id, name, relationship=None):
         """
-        Binds a name and optional relationship to an existing anonymous or known face_id.
-        Sets confidence to 1.0 (confirmed).
+        Binds a name and optional relationship to an existing anonymous or known identity_id.
+        Sets status to 'confirmed' and confidence to 1.0.
         """
         with self.lock:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            cursor.execute("SELECT 1 FROM identities WHERE face_id = ?", (face_id,))
+            cursor.execute("SELECT 1 FROM identities WHERE identity_id = ?", (identity_id,))
             if not cursor.fetchone():
                 conn.close()
                 return False
                 
             now_str = datetime.now().isoformat()
             cursor.execute(
-                "UPDATE identities SET name = ?, relationship = ?, confidence = 1.0, updated_at = ? WHERE face_id = ?",
-                (name, relationship, now_str, face_id)
+                "UPDATE identities SET display_name = ?, relationship = ?, status = 'confirmed', confidence = 1.0, last_seen = ? WHERE identity_id = ?",
+                (name, relationship, now_str, identity_id)
             )
                 
             conn.commit()
             conn.close()
             return True
 
-    def get_identity(self, face_id):
-        """Retrieves identity information for a given face_id."""
+    def get_identity(self, identity_id):
+        """Retrieves identity information for a given identity_id."""
         conn = self._get_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT name, relationship, confidence, created_at, updated_at FROM identities WHERE face_id = ?", (face_id,))
+        cursor.execute(
+            """SELECT display_name, relationship, status, candidate_name, candidate_relationship, 
+                      confidence, times_seen, first_seen, last_seen, evidence_history 
+               FROM identities WHERE identity_id = ?""",
+            (identity_id,)
+        )
         row = cursor.fetchone()
         if not row:
             conn.close()
             return None
             
-        cursor.execute("SELECT embedding FROM face_embeddings WHERE face_id = ?", (face_id,))
+        cursor.execute("SELECT embedding FROM face_embeddings WHERE identity_id = ?", (identity_id,))
         emb_rows = cursor.fetchall()
         embeddings = [json.loads(r["embedding"]) for r in emb_rows]
         
         conn.close()
         
+        ev_history = []
+        if row["evidence_history"]:
+            try:
+                ev_history = json.loads(row["evidence_history"])
+            except Exception:
+                pass
+
         return {
-            "name": row["name"],
+            "identity_id": identity_id,
+            "display_name": row["display_name"],
             "relationship": row["relationship"],
+            "status": row["status"],
+            "candidate_name": row["candidate_name"],
+            "candidate_relationship": row["candidate_relationship"],
             "confidence": row["confidence"],
+            "times_seen": row["times_seen"],
+            "first_seen": row["first_seen"],
+            "last_seen": row["last_seen"],
+            "evidence_history": ev_history,
             "embeddings": embeddings,
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"]
+            # Old keys for backward compatibility:
+            "name": row["display_name"],
+            "created_at": row["first_seen"],
+            "updated_at": row["last_seen"]
         }
 
     def get_all_identities(self):
@@ -351,13 +417,13 @@ class MemoraDatabase:
         conn = self._get_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT face_id FROM identities")
+        cursor.execute("SELECT identity_id FROM identities")
         rows = cursor.fetchall()
         
         identities_dict = {}
         for r in rows:
-            face_id = r["face_id"]
-            identities_dict[face_id] = self.get_identity(face_id)
+            identity_id = r["identity_id"]
+            identities_dict[identity_id] = self.get_identity(identity_id)
             
         conn.close()
         return identities_dict
@@ -490,7 +556,7 @@ class MemoraDatabase:
 
     # --- Evidence Accumulation logic ---
 
-    def add_evidence(self, face_id, name, relationship=None):
+    def add_evidence(self, identity_id, name, relationship=None, raw_transcript=None):
         """
         Adds audio context evidence for an identity.
         Recalculates confidence score based on cumulative evidence.
@@ -498,7 +564,7 @@ class MemoraDatabase:
         Returns:
             dict: The updated candidate info: { "name": str, "relationship": str/None, "confidence": float, "is_confirmed": bool }
         """
-        if not face_id or not name:
+        if not identity_id or not name:
             return None
 
         name = name.strip().capitalize()
@@ -509,14 +575,25 @@ class MemoraDatabase:
             conn = self._get_connection()
             cursor = conn.cursor()
             
-            cursor.execute("SELECT 1 FROM identities WHERE face_id = ?", (face_id,))
-            if not cursor.fetchone():
+            # Check if identity is already confirmed. Never overwrite a confirmed profile!
+            cursor.execute("SELECT status, display_name, relationship FROM identities WHERE identity_id = ?", (identity_id,))
+            id_row = cursor.fetchone()
+            if not id_row:
                 conn.close()
                 return None
             
+            if id_row["status"] == "confirmed":
+                conn.close()
+                return {
+                    "name": id_row["display_name"],
+                    "relationship": id_row["relationship"],
+                    "confidence": 1.0,
+                    "is_confirmed": True
+                }
+            
             cursor.execute(
-                "SELECT count, heard_relationship FROM identity_evidence WHERE face_id = ? AND heard_name = ?",
-                (face_id, name)
+                "SELECT count, confidence FROM identity_evidence WHERE identity_id = ? AND heard_name = ?",
+                (identity_id, name)
             )
             row = cursor.fetchone()
             
@@ -525,53 +602,80 @@ class MemoraDatabase:
             
             if row:
                 new_count = row["count"] + 1
-                final_rel = relationship or row["heard_relationship"]
+                cursor.execute(
+                    "SELECT heard_relationship FROM identity_evidence WHERE identity_id = ? AND heard_name = ?",
+                    (identity_id, name)
+                )
+                prev_rel_row = cursor.fetchone()
+                final_rel = relationship or (prev_rel_row[0] if prev_rel_row else None)
                 
                 cursor.execute(
-                    "UPDATE identity_evidence SET count = ?, heard_relationship = ?, updated_at = ? WHERE face_id = ? AND heard_name = ?",
-                    (new_count, final_rel, datetime.now().isoformat(), face_id, name)
+                    "UPDATE identity_evidence SET count = ?, heard_relationship = ?, updated_at = ? WHERE identity_id = ? AND heard_name = ?",
+                    (new_count, final_rel, datetime.now().isoformat(), identity_id, name)
                 )
             else:
                 now_str = datetime.now().isoformat()
                 cursor.execute(
-                    "INSERT INTO identity_evidence (face_id, heard_name, heard_relationship, count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (face_id, name, final_rel, 1, now_str, now_str)
+                    "INSERT INTO identity_evidence (identity_id, heard_name, heard_relationship, count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (identity_id, name, final_rel, 1, now_str, now_str)
                 )
 
-            # Confidence logic:
-            # - count = 1, no relationship: 40% (0.40)
-            # - count = 2, no relationship: 70% (0.70)
-            # - count >= 3, no relationship: 80% (0.80)
-            # - count = 1, relationship: 90% (0.90)
-            # - count >= 2, relationship: 85% (0.85) (to match demo requirement of 85%)
             if final_rel:
                 if new_count == 1:
                     confidence = 0.90
                 else:
                     confidence = 0.85
             else:
-                if new_count == 1:
-                    confidence = 0.40
-                elif new_count == 2:
-                    confidence = 0.70
-                else:
-                    confidence = 0.80
+                confidence = 0.40
+                if raw_transcript and raw_transcript.strip().lower() == name.lower():
+                    confidence = 0.60
+                
+                if new_count == 2:
+                    confidence = max(confidence, 0.70)
+                elif new_count >= 3:
+                    confidence = max(confidence, 0.80)
 
             cursor.execute(
-                "UPDATE identity_evidence SET confidence = ? WHERE face_id = ? AND heard_name = ?",
-                (confidence, face_id, name)
+                "UPDATE identity_evidence SET confidence = ? WHERE identity_id = ? AND heard_name = ?",
+                (confidence, identity_id, name)
             )
             
-            is_confirmed = False
-            # Check if this candidate's confidence is >= 0.80.
-            # If so, bind the identity
-            if confidence >= 0.80:
-                now_str = datetime.now().isoformat()
-                cursor.execute(
-                    "UPDATE identities SET name = ?, relationship = ?, confidence = ?, updated_at = ? WHERE face_id = ?",
-                    (name, final_rel, confidence, now_str, face_id)
-                )
-                is_confirmed = True
+            # Fetch and update identities table attributes
+            cursor.execute("SELECT evidence_history FROM identities WHERE identity_id = ?", (identity_id,))
+            hist_row = cursor.fetchone()
+            ev_history = []
+            if hist_row and hist_row[0]:
+                try:
+                    ev_history = json.loads(hist_row[0])
+                except Exception:
+                    pass
+            
+            ev_history.append({
+                "timestamp": datetime.now().isoformat(),
+                "heard_name": name,
+                "heard_relationship": final_rel,
+                "raw_transcript": raw_transcript,
+                "confidence": confidence,
+                "count": new_count
+            })
+            
+            is_confirmed = (confidence >= 0.80)
+            status = "confirmed" if is_confirmed else "unconfirmed"
+            now_str = datetime.now().isoformat()
+            
+            cursor.execute(
+                """UPDATE identities SET 
+                   display_name = CASE WHEN ? = 'confirmed' THEN ? ELSE display_name END,
+                   relationship = CASE WHEN ? = 'confirmed' THEN ? ELSE relationship END,
+                   status = ?,
+                   candidate_name = ?,
+                   candidate_relationship = ?,
+                   confidence = ?,
+                   last_seen = ?,
+                   evidence_history = ?
+                   WHERE identity_id = ?""",
+                (status, name, status, final_rel, status, name, final_rel, confidence, now_str, json.dumps(ev_history), identity_id)
+            )
                 
             conn.commit()
             conn.close()
@@ -583,9 +687,9 @@ class MemoraDatabase:
                 "is_confirmed": is_confirmed
             }
 
-    def get_candidates(self, face_id):
+    def get_candidates(self, identity_id):
         """
-        Retrieves all candidate identities recorded for a face_id, sorted by confidence descending.
+        Retrieves all candidate identities recorded for an identity_id, sorted by confidence descending.
         Returns:
             list: List of dicts: [ { "name": str, "relationship": str/None, "count": int, "confidence": float } ]
         """
@@ -593,8 +697,8 @@ class MemoraDatabase:
         cursor = conn.cursor()
         
         cursor.execute(
-            "SELECT heard_name, heard_relationship, count, confidence FROM identity_evidence WHERE face_id = ? ORDER BY confidence DESC",
-            (face_id,)
+            "SELECT heard_name, heard_relationship, count, confidence FROM identity_evidence WHERE identity_id = ? ORDER BY confidence DESC",
+            (identity_id,)
         )
         rows = cursor.fetchall()
         
