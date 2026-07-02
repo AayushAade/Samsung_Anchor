@@ -1,0 +1,8 @@
+# Project requirements
+opencv-python
+face-recognition
+google-generativeai
+SpeechRecognition
+PyAudio
+python-dotenv
+setuptools
