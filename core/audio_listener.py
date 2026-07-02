@@ -46,25 +46,21 @@ class MemoraAudioListener:
 
     def listen_and_transcribe(self):
         """
-        Listens to ambient audio from the microphone for the configured duration (default 5s)
-        and transcribes it to text.
-        If mock_mode is active or a device error occurs, prompts the user to type the phrase.
+        Listens to ambient audio for self.duration_sec seconds and transcribes it.
+        If mock_mode is True, prompts the user to type in the terminal instead.
         Returns:
-            str: The transcribed text, or None if transcription fails.
+            str: The transcribed text, or None if transcription failed.
         """
         if self.mock_mode:
-            print("\n>>> [Microphone Sim] Speak now (type your greeting/phrase and press Enter): ", end="")
-            sys.stdout.flush()
+            # Fallback mock mode: type in the terminal
+            print("\n[Mock Audio Listener] Enter speech simulation text:")
             try:
-                text = sys.stdin.readline().strip()
-                if not text:
+                text = input("> ")
+                if not text.strip():
                     return None
-                print(f"[Microphone Sim] Transcribed: \"{text}\"")
+                print(f"[Mock Audio Listener] Simulated speech: \"{text}\"")
                 return text
-            except KeyboardInterrupt:
-                return None
-            except Exception as e:
-                print(f"[Microphone Sim Error] Failed to read input: {e}")
+            except (KeyboardInterrupt, EOFError):
                 return None
 
         # Real microphone capture
@@ -89,8 +85,9 @@ class MemoraAudioListener:
                         max_amplitude = max(abs(s) for s in shorts)
                         if max_amplitude < 100:  # Practically silent
                             print(f"\n[Microphone Warning] The captured audio was completely silent (Max Amplitude: {max_amplitude}).")
-                            print("This usually means your physical microphone is MUTED at the OS level or BLOCKED by Windows Privacy Settings.")
-                            print("Please check your Windows Privacy Settings: Settings -> Privacy -> Microphone (Allow apps to access microphone).")
+                            print("This usually means your physical microphone is MUTED at the OS level or BLOCKED by system Privacy Settings.")
+                            print("On macOS, please check: System Settings -> Privacy & Security -> Microphone (Allow Terminal/Python to access microphone).")
+                            print("On Windows, check: Settings -> Privacy -> Microphone (Allow apps to access microphone).")
                 except Exception as diagnostic_err:
                     pass  # Don't block transcription if diagnostic fails
                 
@@ -98,9 +95,8 @@ class MemoraAudioListener:
                 transcription = self.recognizer.recognize_google(audio)
                 print(f"[Microphone] Transcribed: \"{transcription}\"")
                 return transcription
-
         except sr.WaitTimeoutError:
-            print("[Microphone Warning] No speech detected (timeout).")
+            print("[Microphone Warning] No speech was detected (timeout).")
             return None
         except sr.UnknownValueError:
             print("[Microphone Warning] Speech was detected but could not be understood.")
@@ -113,7 +109,7 @@ class MemoraAudioListener:
             self.mock_mode = True
             return self.listen_and_transcribe()
         except Exception as e:
-            print(f"[Microphone Error] General failure: {e}")
+            print(f"[Microphone Error] An unexpected error occurred: {e}")
             print("Switching to manual typing fallback for this turn.")
             self.mock_mode = True
             return self.listen_and_transcribe()

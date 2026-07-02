@@ -61,23 +61,19 @@ class MemoraContextBinder:
                 if response and response.text:
                     try:
                         result = json.loads(response.text.strip())
-                        # Standardize keys
                         return {
                             "extracted_name": result.get("extracted_name"),
                             "relationship": result.get("relationship")
                         }
                     except json.JSONDecodeError:
-                        # Fallback parsing in case model doesn't return clean json despite config
+                        # Fallback for minor formatting edge cases
                         text = response.text.strip()
-                        # Strip markdown if any
                         text = re.sub(r"```json|```", "", text).strip()
                         return json.loads(text)
-                        
             except Exception as e:
                 print(f"[Context Binder Warning] Gemini API call failed: {e}. Falling back to local heuristics.")
-                # fall through to local heuristics
 
-        # Local heuristics fallback parser
+        # Local rule-based fallback
         return self._local_heuristics_parse(transcript)
 
     def _local_heuristics_parse(self, transcript):
@@ -98,34 +94,25 @@ class MemoraContextBinder:
         extracted_name = None
         relationship = None
         
-        # Check for explicit relationship terms first
-        if "granddaughter" in transcript_lower:
-            relationship = "Granddaughter"
-        elif "daughter" in transcript_lower:
-            relationship = "Daughter"
-        elif "grandson" in transcript_lower:
-            relationship = "Grandson"
-        elif "son" in transcript_lower:
-            relationship = "Son"
-        elif "wife" in transcript_lower or "husband" in transcript_lower:
-            relationship = "Spouse"
-        elif "doctor" in transcript_lower:
-            relationship = "Doctor"
-        elif "caregiver" in transcript_lower:
-            relationship = "Caregiver"
-        elif "friend" in transcript_lower:
-            relationship = "Friend"
+        # Match relationship tags
+        # E.g. "it's your son, Mark" -> relationship is Son
+        rel_match = re.search(
+            r"\b(son|daughter|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\b", 
+            transcript_lower
+        )
+        if rel_match:
+            relationship = rel_match.group(1).capitalize()
         else:
-            # Fallback: Infer relationship from terms of address used to greet the patient
+            # Map indirect terms to standard caregiver-friendly relationship types
             relationship_map = {
                 "dad": "Child",
                 "father": "Child",
                 "mom": "Child",
                 "mother": "Child",
                 "grandpa": "Grandchild",
-                "grandfather": "Grandchild",
                 "grandma": "Grandchild",
                 "grandmother": "Grandchild",
+                "grandfather": "Grandchild",
                 "uncle": "Niece/Nephew",
                 "aunt": "Niece/Nephew"
             }
@@ -273,4 +260,3 @@ class MemoraContextBinder:
                 return {"target_object": obj}
 
         return {"target_object": None}
-

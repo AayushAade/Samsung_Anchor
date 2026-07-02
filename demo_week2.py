@@ -12,6 +12,7 @@ from core.spatial_slam import MemoraSpatialSLAM
 from core.object_ledger import MemoraObjectTracker
 from core.audio_listener import MemoraAudioListener
 from core.context_binder import MemoraContextBinder
+from core.speaker import MemoraSpeaker
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Memora Week 2 MVP: The Visual Ledger")
@@ -33,7 +34,7 @@ def get_time_elapsed_string(iso_timestamp):
         minutes = int(elapsed_sec // 60)
         if minutes < 60:
             return f"1 minute ago" if minutes == 1 else f"{minutes} minutes ago"
-            
+        
         hours = int(minutes // 60)
         return f"1 hour ago" if hours == 1 else f"{hours} hours ago"
     except Exception:
@@ -53,6 +54,7 @@ def main():
     slam = MemoraSpatialSLAM(mock_mode=args.mock)
     listener = MemoraAudioListener(duration_sec=4, mock_mode=args.mock)
     binder = MemoraContextBinder()
+    speaker = MemoraSpeaker()
 
     # Determine if running in mock mode
     mock_mode = args.mock or tracker.mock_mode
@@ -196,12 +198,15 @@ def main():
                             
                             active_whisper = f"Your {matched_db_key} was last seen in the {info['room']} ({quadrant}) {time_str}."
                             print(f"\n💬 MEMORA WHISPER: \"{active_whisper}\"\n")
+                            speaker.speak(active_whisper)
                         else:
                             active_whisper = f"I haven't seen your {target} yet. Try scanning your surroundings."
                             print(f"\n💬 MEMORA WHISPER: \"{active_whisper}\"\n")
+                            speaker.speak(active_whisper)
                     else:
                         active_whisper = "I couldn't identify the object you are searching for. Please ask clearly."
                         print(f"\n💬 MEMORA WHISPER: \"{active_whisper}\"\n")
+                        speaker.speak(active_whisper)
                     
                     whisper_display_until = time.time() + 8.0 # Display overlay for 8 seconds
                 else:
