@@ -40,10 +40,10 @@ class MemoraFaceRecognizer:
                 print(f"[Face Recognizer Warning] Failed to initialize MediaPipe FaceMesh: {e}. Enabling mock fallback.")
                 self.mock_mode = True
 
-    def _compute_geometric_embedding(self, landmarks):
+    def _compute_geometric_embedding(self, landmarks, w, h):
         """
         Computes a deterministic, scale-, rotation-, and translation-invariant 128D facial embedding
-        from normalized 3D landmarks coordinates.
+        from normalized 3D landmarks coordinates by scaling them to pixel dimensions first.
         """
         # 16 stable landmark indices across different areas of the face mesh
         key_indices = [4, 152, 33, 263, 61, 291, 70, 300, 10, 0, 17, 6, 234, 454, 133, 362]
@@ -51,7 +51,7 @@ class MemoraFaceRecognizer:
         points = []
         for idx in key_indices:
             lm = landmarks.landmark[idx]
-            points.append([lm.x, lm.y, lm.z])
+            points.append([lm.x * w, lm.y * h, lm.z * w])
         points = np.array(points) # shape: (16, 3)
 
         # Calculate all pairwise distances (16 * 15 / 2 = 120 distances)
@@ -77,7 +77,7 @@ class MemoraFaceRecognizer:
         
         for idx in extra_indices:
             lm = landmarks.landmark[idx]
-            ep = np.array([lm.x, lm.y, lm.z])
+            ep = np.array([lm.x * w, lm.y * h, lm.z * w])
             dist = np.linalg.norm(ep - nose_tip)
             if inter_pupil_dist > 0:
                 dist = dist / inter_pupil_dist
@@ -86,10 +86,8 @@ class MemoraFaceRecognizer:
         # Combine to form the 128D embedding
         embedding = np.concatenate([distances, np.array(extra_distances)])
 
-        # Unit normalize the vector so that Euclidean distance queries are clean and bounded in [0, 2]
-        norm = np.linalg.norm(embedding)
-        if norm > 0:
-            embedding = embedding / norm
+        # Print the first few values of the embedding for debugging
+        print(f"[Debug Embedding] First 5 values: {embedding[:5]}")
 
         return embedding
 
@@ -125,10 +123,26 @@ class MemoraFaceRecognizer:
 
             face_id, info, dist = database.find_match(mock_embedding, self.tolerance)
             is_new = False
+            decision = "RECOGNIZED"
+            best_match_name = "None"
+            
             if face_id is None:
                 face_id = database.register_anonymous(mock_embedding)
                 info = database.get_identity(face_id)
                 is_new = True
+                decision = "NEW PERSON"
+                best_match_name = "None"
+            else:
+                best_match_name = info["name"] if info["name"] else face_id
+
+            print("\n---------------------------------")
+            print("Face detected")
+            print("Embedding generated")
+            print(f"Best Match: {best_match_name}")
+            print(f"Distance: {dist:.4f}" if dist is not None else "Distance: N/A")
+            print(f"Threshold: {self.tolerance}")
+            print(f"Decision: {decision}")
+            print("---------------------------------\n")
 
             results.append({
                 "box": (top, right, bottom, left),
@@ -173,21 +187,35 @@ class MemoraFaceRecognizer:
                 box = (top_px, right_px, bottom_px, left_px)
 
                 # 2. Extract 128D embedding
-                encoding = self._compute_geometric_embedding(landmarks)
+                encoding = self._compute_geometric_embedding(landmarks, w, h)
 
                 # 3. Search in database
                 face_id, info, dist = database.find_match(encoding, self.tolerance)
                 is_new = False
+                decision = "RECOGNIZED"
+                best_match_name = "None"
                 
                 if face_id is None:
                     # Register new anonymous person
                     face_id = database.register_anonymous(encoding)
                     info = database.get_identity(face_id)
                     is_new = True
+                    decision = "NEW PERSON"
+                    best_match_name = "None"
                 else:
+                    best_match_name = info["name"] if info["name"] else face_id
                     # Reinforce identity
                     if dist > 0.15 and len(info["embeddings"]) < 10:
                         database.add_embedding_to_identity(face_id, encoding)
+
+                print("\n---------------------------------")
+                print("Face detected")
+                print("Embedding generated")
+                print(f"Best Match: {best_match_name}")
+                print(f"Distance: {dist:.4f}" if dist is not None else "Distance: N/A")
+                print(f"Threshold: {self.tolerance}")
+                print(f"Decision: {decision}")
+                print("---------------------------------\n")
 
                 results.append({
                     "box": box,

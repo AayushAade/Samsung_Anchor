@@ -220,6 +220,16 @@ class MemoraDatabase:
                 stored_embedding = json.loads(r["embedding"])
                 stored_vector = np.array(stored_embedding)
                 distance = np.linalg.norm(query_vector - stored_vector)
+                
+                # Fetch name for logging comparison
+                cursor2 = conn.cursor()
+                cursor2.execute("SELECT name FROM identities WHERE face_id = ?", (face_id,))
+                name_row = cursor2.fetchone()
+                name_str = name_row[0] if (name_row and name_row[0]) else face_id
+                
+                print(f"Comparing with {name_str}")
+                print(f"Distance = {distance:.4f}")
+                
                 if distance < tolerance and distance < best_distance:
                     best_distance = distance
                     best_match_id = face_id
