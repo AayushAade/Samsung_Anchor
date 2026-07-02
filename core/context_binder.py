@@ -161,3 +161,82 @@ class MemoraContextBinder:
             "extracted_name": extracted_name,
             "relationship": relationship
         }
+
+    def parse_location_query(self, query_text):
+        """
+        Parses a user voice/text query to determine what object they are looking for.
+        Returns:
+            dict: { "target_object": str or None }
+        """
+        if not query_text:
+            return {"target_object": None}
+
+        if self.use_api:
+            try:
+                prompt = f"""
+                You are the query-parsing engine of Memora, an autonomous assistive AR wearable for Alzheimer's patients.
+                Your task is to analyze the user's question and extract the target object they are asking to find.
+                
+                Guidelines:
+                - Extract the object name in its singular, lowercase form (e.g., "phone" for "where is my phone?", "keys" for "where did I leave my keys?").
+                - If the user is not asking to locate a specific object, return null.
+                - Return a strict JSON response. Do not include markdown code block syntax.
+                
+                Query: "{query_text}"
+                
+                JSON Format:
+                {{
+                  "target_object": "extracted object name or null"
+                }}
+                """
+                response = self.model.generate_content(
+                    prompt,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                
+                if response and response.text:
+                    try:
+                        result = json.loads(response.text.strip())
+                        return {
+                            "target_object": result.get("target_object")
+                        }
+                    except json.JSONDecodeError:
+                        text = response.text.strip()
+                        text = re.sub(r"```json|```", "", text).strip()
+                        return json.loads(text)
+            except Exception as e:
+                print(f"[Context Binder Warning] Gemini API query call failed: {e}. Falling back to local heuristics.")
+
+        # Local rule-based fallback
+        return self._local_location_query_parse(query_text)
+
+    def _local_location_query_parse(self, query_text):
+        """Rule-based parsing fallback for extracting queried object name."""
+        query_lower = query_text.lower()
+        
+        # List of candidate items (similar to settings.TRACKED_OBJECTS)
+        candidates = ["phone", "keys", "glasses", "backpack", "wallet", "remote", "book", "cup", "bottle", "handbag", "umbrella"]
+        
+        for candidate in candidates:
+            # Match "phone", "cell phone", "keys", etc.
+            if candidate in query_lower:
+                return {"target_object": candidate}
+            
+            # Plural mappings
+            if candidate.endswith("s") and candidate[:-1] in query_lower:
+                return {"target_object": candidate}
+            if candidate == "keys" and "key" in query_lower:
+                return {"target_object": "keys"}
+            if candidate == "glasses" and "glass" in query_lower:
+                return {"target_object": "glasses"}
+
+        # Try regex for "where is my [word]" or "where did I leave my [word]"
+        match = re.search(r"\b(?:where is|where's|where did i (?:leave|put)|find my)\s+(?:my\s+)?([a-z]+)", query_lower)
+        if match:
+            obj = match.group(1)
+            # Filter out common junk words
+            if obj not in ["it", "that", "this", "my", "the", "a", "an", "some"]:
+                return {"target_object": obj}
+
+        return {"target_object": None}
+

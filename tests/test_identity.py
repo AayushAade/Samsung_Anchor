@@ -35,6 +35,15 @@ class TestIdentityBinding(unittest.TestCase):
         self.assertEqual(results2[0]["face_id"], "Anonymous_ID_1")
         self.assertFalse(results2[0]["is_new"])
 
+    def test_face_recognizer_real_mode_mediapipe(self):
+        recognizer = MemoraFaceRecognizer(tolerance=0.6, mock_mode=False)
+        if recognizer.mock_mode:
+            self.skipTest("MediaPipe not available or mock mode forced.")
+            
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        results = recognizer.process_frame(frame, self.db)
+        self.assertEqual(len(results), 0)
+
     def test_context_binder_local_parsing(self):
         binder = MemoraContextBinder(api_key=None) # force local fallback
         

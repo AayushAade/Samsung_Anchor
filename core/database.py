@@ -13,7 +13,9 @@ class MemoraDatabase:
         self.lock = threading.Lock()
         self.data = {
             "identities": {},      # Map of face_id -> { "name": str/None, "relationship": str/None, "embeddings": [[float]*128], "created_at": str, "updated_at": str }
-            "next_anon_index": 1   # Counter for generating Anonymous_ID_1, Anonymous_ID_2, etc.
+            "next_anon_index": 1,  # Counter for generating Anonymous_ID_1, Anonymous_ID_2, etc.
+            "objects": {},         # Map of object_name -> { "last_seen": str, "x": float, "y": float, "room": str, "bounding_box": list, "history": list }
+            "current_room": "Living Room"
         }
         self.load()
 
@@ -29,6 +31,14 @@ class MemoraDatabase:
                             self.data["identities"] = loaded_data["identities"]
                         if "next_anon_index" in loaded_data:
                             self.data["next_anon_index"] = loaded_data["next_anon_index"]
+                        if "objects" in loaded_data:
+                            self.data["objects"] = loaded_data["objects"]
+                        else:
+                            self.data["objects"] = {}
+                        if "current_room" in loaded_data:
+                            self.data["current_room"] = loaded_data["current_room"]
+                        else:
+                            self.data["current_room"] = "Living Room"
                 except Exception as e:
                     print(f"[Database Error] Failed to load database: {e}. Starting with empty database.")
             else:
@@ -134,11 +144,78 @@ class MemoraDatabase:
         with self.lock:
             return dict(self.data["identities"])
 
+    def log_object(self, object_name, x, y, room, bounding_box=None):
+        """
+        Logs the detection of an object with its coordinates, room, and optional bounding box.
+        Updates the last known location and adds to the historical log.
+        """
+        with self.lock:
+            now_str = datetime.now().isoformat()
+            
+            bbox_list = list(bounding_box) if bounding_box is not None else None
+            entry = {
+                "timestamp": now_str,
+                "x": float(x),
+                "y": float(y),
+                "room": room,
+                "bounding_box": bbox_list  # [x1, y1, x2, y2]
+            }
+            
+            if object_name not in self.data["objects"]:
+                self.data["objects"][object_name] = {
+                    "last_seen": now_str,
+                    "x": float(x),
+                    "y": float(y),
+                    "room": room,
+                    "bounding_box": bbox_list,
+                    "history": []
+                }
+            else:
+                self.data["objects"][object_name]["last_seen"] = now_str
+                self.data["objects"][object_name]["x"] = float(x)
+                self.data["objects"][object_name]["y"] = float(y)
+                self.data["objects"][object_name]["room"] = room
+                self.data["objects"][object_name]["bounding_box"] = bbox_list
+                
+            # Limit history to last 50 sightings to save space
+            self.data["objects"][object_name]["history"].append(entry)
+            if len(self.data["objects"][object_name]["history"]) > 50:
+                self.data["objects"][object_name]["history"].pop(0)
+                
+            self.save_unlocked()
+            return True
+
+    def get_last_known_location(self, object_name):
+        """Retrieves the last known location of an object."""
+        with self.lock:
+            return self.data["objects"].get(object_name)
+
+    def get_object_history(self, object_name):
+        """Retrieves the history of detection events for an object."""
+        with self.lock:
+            if object_name in self.data["objects"]:
+                return list(self.data["objects"][object_name]["history"])
+            return []
+
+    def set_current_room(self, room_name):
+        """Sets the active room location of the device."""
+        with self.lock:
+            self.data["current_room"] = room_name
+            self.save_unlocked()
+            return True
+
+    def get_current_room(self):
+        """Gets the active room location of the device."""
+        with self.lock:
+            return self.data.get("current_room", "Living Room")
+
     def clear(self):
         """Clears all database contents (useful for testing)."""
         with self.lock:
             self.data = {
                 "identities": {},
-                "next_anon_index": 1
+                "next_anon_index": 1,
+                "objects": {},
+                "current_room": "Living Room"
             }
             self.save_unlocked()

@@ -15,3 +15,6 @@ venv/
 env/
 ENV/
 
+# ML Models
+*.pt
+

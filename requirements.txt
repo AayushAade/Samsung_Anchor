@@ -1,6 +1,6 @@
-# Project requirements
 opencv-python
-face-recognition
+mediapipe
+ultralytics
 google-generativeai
 SpeechRecognition
 PyAudio
