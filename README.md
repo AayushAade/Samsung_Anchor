@@ -1,336 +1,204 @@
-<div align="center">
+<p align="center">
+  <img src="assets/banner.png" alt="Anchor Banner" width="100%">
+</p>
 
-# 🧠 Memora
+<h1 align="center">⚓ Anchor</h1>
 
-### *An Autonomous External Hippocampus for Everyday Life*
+<p align="center">
+  <b>An Autonomous External Hippocampus for Alzheimer's & Context Restoration Wearables</b>
+</p>
 
-AI-powered wearable memory that remembers **people, conversations, objects, and places**—so you don't have to.
-
-<br>
-
-<p>
-  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"/>
-  <img src="https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?style=for-the-badge&logo=opencv"/>
-  <img src="https://img.shields.io/badge/Google-Gemini-4285F4?style=for-the-badge&logo=google"/>
-  <img src="https://img.shields.io/badge/Status-Active%20Development-success?style=for-the-badge"/>
-  <img src="https://img.shields.io/github/license/YOUR_USERNAME/Memora?style=for-the-badge"/>
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11">
+  <img src="https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?style=for-the-badge&logo=opencv" alt="OpenCV">
+  <img src="https://img.shields.io/badge/MediaPipe-FaceMesh-00C7B7?style=for-the-badge&logo=google" alt="MediaPipe">
+  <img src="https://img.shields.io/badge/YOLOv8-Object%20Ledger-FF6F00?style=for-the-badge" alt="YOLOv8">
+  <img src="https://img.shields.io/badge/Google-Gemini-4285F4?style=for-the-badge&logo=google" alt="Gemini">
+  <img src="https://img.shields.io/badge/License-MIT-success?style=for-the-badge" alt="License">
 </p>
 
 ---
 
-### Remember Everything. Naturally.
+## 🚨 The Challenge: Cognitive & Context Deficits
 
-*A persistent AI memory layer for future AR glasses.*
+Alzheimer’s disease and other forms of dementia systematically strip away a patient's immediate context, locking them into repetitive loops of disorientation. Caregivers face high burnout rates, and 24/7 specialized care is financially out of reach for underserved communities. 
 
-</div>
-
----
-
-# Overview
-
-Humans naturally forget names, conversations, object locations, and countless small details throughout the day.
-
-**Memora** is an AI memory system that continuously builds a persistent understanding of the world around you.
-
-Instead of acting like a chatbot, it behaves like a second memory.
-
-It observes.
-
-It remembers.
-
-It retrieves information exactly when you need it.
+Anchor targets the three primary deficits:
+- **The Intent Deficit**: Forgetting why they walked into a room (leading to immediate disorientation and distress).
+- **The Object Deficit**: Continuously misplacing vital daily items (keys, phone, glasses), which creates cyclic anxiety loops.
+- **The Identity Deficit**: Failing to recognize family members and close contacts, leading to social withdrawal and shame.
 
 ---
 
-# Why Memora?
+## 💡 The Solution: An Autonomous External Hippocampus
 
-Imagine wearing lightweight smart glasses.
+**Anchor** acts as a zero-friction, always-on external memory bank. Designed for future AR Smart Glasses (simulated currently via a lanyard-worn smartphone proxy), the system passively captures audio-visual inputs, monitors rooms, indexes high-value everyday items, and binds faces to relationships. When the user faces context lapses, Anchor proactively whispers context clues via discrete spatial audio, requiring **zero** technical interaction from the patient.
 
-Someone waves at you.
+---
 
-Instead of pretending to remember them...
+## ✨ Core Pillars & How It Works
 
-```
-👤 Sarah
+```mermaid
+graph TD
+    classDef hardware fill:#2c3e50,stroke:#34495e,stroke-width:2px,color:#fff;
+    classDef core fill:#2980b9,stroke:#2980b9,stroke-width:2px,color:#fff;
+    classDef ai fill:#8e44ad,stroke:#8e44ad,stroke-width:2px,color:#fff;
+    classDef db fill:#27ae60,stroke:#27ae60,stroke-width:2px,color:#fff;
 
-Friend
+    A[Camera & Mic Inputs] --> B[Visual SLAM Room Classifier]:::core
+    A --> C[YOLOv8 Object Tracker]:::core
+    A --> D[MediaPipe Face Tracker]:::core
+    
+    B -->|Active Zone| E[(Local Database Ledger)]:::db
+    C -->|Pairwise Coordinates| F[2D Spatial Hash Map]:::core
+    F -->|Logged Object Location| E
+    D -->|128D Biometric Vector| E
+    
+    G[Microphone Audio Queries] --> H[Context Binder / Query Parser]:::ai
+    E -->|Lookup Last Seen Context| H
+    H -->|Gemini API / Offline Fallback| I[Natural Voice / HUD Restorations]:::core
 
-Met 3 weeks ago
-
-Works at Google
-
-Last conversation:
-Planning a Goa trip.
+    class A,G hardware;
+    class I hardware;
 ```
 
-Or you simply ask:
+### 👤 1. Identity Anchoring & Face Mesh Mapping
+- **Local Face Geometry**: Uses **MediaPipe FaceMesh** to extract landmarks from camera frames. Unlike traditional libraries that compile heavy C++ frameworks (like `dlib`), MediaPipe runs natively on lightweight platforms.
+- **128D Geometric Embeddings**: Computes a deterministic, translation-, scale-, and rotation-invariant 128-dimensional biometric signature by measuring scale-normalized pairwise Euclidean distances between 16 key facial landmarks (eyes, mouth, nose, chin, cheeks). 
+- **Unsupervised Face Binding**: When an unknown face approaches, the system activates the ambient microphone to record greetings. It uses **Google Gemini** (or offline local regex heuristics) to extract names and relationships (e.g., *"Hi Grandpa, it's Sarah"*) and binds that identity metadata to the face vector in the local database.
 
-> "Where did I leave my headphones?"
+### 🔍 2. Passive Object Tracking (The Visual Ledger)
+- **Edge Object Detection**: Runs **YOLOv8-nano** to detect daily high-value targets (cell phone, keys, glasses, wallet, backpack, laptop).
+- **2D Spatial Hashing**: Employs a custom `SpatialHashMap` to divide the visual frame into grid cells. These coordinates are mapped to descriptive local zones (e.g., `"top-right area"`, `"center area"`) and logged in the database along with the active room.
 
-and receive
+### 🏠 3. Room Classification & Hysteresis Transitions
+- **Visual SLAM**: The `MemoraSpatialSLAM` module classifies room locations based on visual HSV signature matching. 
+- **Hysteresis Filtering**: Employs a signal transition threshold to prevent room flickering. Supports manual transitions to simulate BLE (Bluetooth Low Energy) beacon zone updates.
 
-> "Your headphones were last seen in the study room near the monitor approximately 18 minutes ago."
-
-No searching.
-
-No guessing.
-
-Just memory.
-
----
-
-# Features
-
-## 👤 Identity Binding
-
-Learns people's identities naturally from conversations.
-
-No manual registration.
-
-No enrollment process.
-
-No typing names.
+### 🎙️ 4. Conversational Context Queries
+- **Natural Voice Search**: When a user presses the query key, the `MemoraAudioListener` records the voice question (e.g., *"Where did I leave my phone?"*).
+- **Intelligent Query Mapping**: The context engine parses the query, maps it to tracked database items, calculates the time elapsed, and whispers a natural retrieval response:
+  > 🔊 *"Your cell phone was last seen in the Bathroom (top-right area) 3 minutes ago."*
 
 ---
 
-## 📍 Visual Memory Ledger
+## 🛠️ Technology Stack
 
-Maintains a continuously updated memory of important objects.
-
-Examples:
-
-- Keys
-- Wallet
-- Phone
-- Glasses
-- Laptop
-- Backpack
+- **Platform Support**: Native Apple Silicon macOS (ARM64) and Linux/Raspberry Pi.
+- **Language**: Python 3.11
+- **Computer Vision**: OpenCV-Python & MediaPipe 0.10.14
+- **Edge Machine Learning**: Ultralytics YOLOv8-nano
+- **Speech Processing**: SpeechRecognition & PyAudio (PortAudio)
+- **Generative AI**: Google Gemini API (`google-generativeai`)
+- **Database & State**: Thread-safe Local JSON Storage (`MemoraDatabase`)
+- **Environment**: python-dotenv
 
 ---
 
-## 🏠 Spatial Memory
+## 📂 Repository Structure
 
-Understands rooms and maintains location history.
-
-```
-Living Room
-
-Phone
-↳ Coffee Table
-
-Last Seen
-↳ 3 Minutes Ago
-```
-
----
-
-## 🎙 Voice Queries
-
-Natural language search.
-
-```
-Where are my keys?
-
-↓
-
-Living Room
-
-Near the sofa
-
-Seen 14 minutes ago
-```
-
----
-
-## 🧠 Context Understanding
-
-Uses Google's Gemini models for
-
-- Name extraction
-- Relationship inference
-- Context reasoning
-- Object search
-- Conversation understanding
-
----
-
-## 💾 Persistent Memory
-
-Memories survive across sessions.
-
-The longer you use Memora,
-
-the smarter its memory becomes.
-
----
-
-# System Architecture
-
-```
-                      Camera
-                         │
-                         ▼
-             Computer Vision Layer
-         (Faces • Objects • Tracking)
-                         │
-                         ▼
-                Spatial Understanding
-            (Rooms • Coordinates • Time)
-                         │
-                         ▼
-                Persistent Memory Graph
-                         │
-                         ▼
-              Gemini Context Reasoning
-                         │
-                         ▼
-              Human-like Memory Recall
-```
-
----
-
-# Demo Roadmap
-
-| Stage | Capability | Status |
-|---------|-----------|--------|
-| Week 1 | Identity Binding | ✅ |
-| Week 2 | Visual Ledger | ✅ |
-| Week 3 | Relationship Graph | 🚧 |
-| Week 4 | Episodic Memory | 🚧 |
-| Week 5 | Predictive Assistance | 🚧 |
-| Future | AR Glasses | 🚧 |
-
----
-
-# Tech Stack
-
-### AI
-
-- Google Gemini
-
-### Computer Vision
-
-- OpenCV
-
-### Speech
-
-- SpeechRecognition
-- PyAudio
-
-### Memory
-
-- JSON Database
-
-### Language
-
-- Python
-
----
-
-# Repository Structure
-
-```
-Memora
-│
+```text
+Anchor
 ├── config/
-│
+│   └── settings.py          # Unified system configuration and thresholds
 ├── core/
-│   ├── audio_listener.py
-│   ├── context_binder.py
-│   ├── database.py
-│   ├── face_recognizer.py
-│   ├── object_ledger.py
-│   └── spatial_slam.py
-│
-├── demo_week1.py
-├── demo_week2.py
-│
-├── requirements.txt
-└── README.md
+│   ├── audio_listener.py    # PyAudio/SpeechRecognition interface
+│   ├── context_binder.py    # Gemini API context binding and query parsing
+│   ├── database.py          # Thread-safe persistent JSON database
+│   ├── face_recognizer.py   # MediaPipe FaceMesh biometric mapping
+│   ├── object_ledger.py     # YOLOv8 passive object tracking & Spatial Hash Map
+│   └── spatial_slam.py      # Room classification and hysteresis SLAM transitions
+├── assets/
+│   └── banner.png           # Visual branding assets
+├── demo_week1.py            # Phase 1: Identity binding and microphone matching
+├── demo_week2.py            # Phase 2: Object ledger and voice search queries
+├── requirements.txt         # Package configuration
+└── README.md                # Documentation
 ```
 
 ---
 
-# Installation
+## 🚀 Installation & Setup
 
+### Prerequisites (macOS Homebrew)
+If compiling PortAudio on Apple Silicon, ensure PortAudio is installed via Homebrew and exported to your compiler flags:
 ```bash
-git clone https://github.com/YOUR_USERNAME/Memora.git
+# Install audio compiler dependencies
+brew install portaudio
 
-cd Memora
+# Export compile paths for PyAudio (ARM64 Mac)
+export LDFLAGS="-L/opt/homebrew/lib"
+export CPPFLAGS="-I/opt/homebrew/include"
+```
 
-python -m venv venv
+### Install Dependencies
+```bash
+# Clone the repository
+git clone https://github.com/AayushAade/Samsung_Anchor.git
+cd Samsung_Anchor
 
+# Create a virtual environment using Python 3.11
+python3.11 -m venv venv
 source venv/bin/activate
 
+# Upgrade packaging tools
+pip install --upgrade pip setuptools wheel
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
+### Configure Environment Variables
+Create a `.env` file in the root directory:
+```env
+GEMINI_API_KEY=your_google_gemini_api_key_here
+```
+*Note: If no API key is specified, the system automatically falls back to local regex-based heuristic parsing and continues working fully offline.*
+
 ---
 
-# Running
+## 🎮 Running the Demos
 
-### Week 1
+Anchor includes a fully integrated simulation system (`--mock`) to test all pipelines without physical cameras or audio recording hardware.
 
+### Week 1: Identity Binding Demo
+Learns face features and queries audio logs to bind names:
 ```bash
+# Run in simulated mode
+python demo_week1.py --mock
+
+# Run in real webcam mode
 python demo_week1.py
 ```
 
-Mock mode
-
+### Week 2: Passive Object Tracking & Voice Search Demo
+Tracks objects, switches rooms, and answers query questions:
 ```bash
-python demo_week1.py --mock
-```
+# Run in simulated mode
+python demo_week2.py --mock
 
----
-
-### Week 2
-
-```bash
+# Run in real camera mode
 python demo_week2.py
 ```
 
-Mock mode
+#### Week 2 Interactive Controls:
+- **Press `f`**: Start the audio query listener. Speak *"Where is my phone?"* or *"Where are my keys?"* to query the database.
+- **Press `r`**: Simulate a room transition (toggles between Living Room, Kitchen, Bedroom, Bathroom) to test spatial logging.
+- **Press `q`**: Exit the program and save database state.
 
+---
+
+## 🔬 Running Unit Tests
+A comprehensive test suite validates all components, including databases, query parsers, and neural models:
 ```bash
-python demo_week2.py --mock
+python3 -m unittest discover tests
 ```
 
 ---
 
-# Vision
+## 🗺️ Roadmap
 
-Today's assistants answer questions.
-
-Tomorrow's assistants will remember your life.
-
-Memora is a step toward wearable AI capable of building a persistent understanding of people, places, conversations, and experiences—bringing long-term contextual memory to everyday computing.
-
----
-
-# Future Goals
-
-- AR Smart Glass Integration
-- Multi-modal Memory Graph
-- Long-term Episodic Memory
-- Multi-user Recognition
-- Real-time Scene Understanding
-- Predictive Memory Assistance
-- On-device AI Inference
-- Cloud Synchronization
-- Privacy-first Architecture
-
----
-
-# License
-
-This project is released under the MIT License.
-
----
-
-<div align="center">
-
-### Building the future of wearable AI memory.
-
-⭐ Star the repository if you find the project interesting.
-
-</div>
+- [x] **Phase I**: Identity binding & relationship deduction from conversation audio logs (Week 1 MVP).
+- [x] **Phase II**: YOLOv8-nano visual ledger, room transition classifications, and voice search retrieval (Week 2 MVP).
+- [ ] **Phase III**: Epistemic relationship graph and temporal/episodic memory mapping.
+- [ ] **Phase IV**: Wearable smart glasses migration (Samsung XR integration) and on-device offline LLM compilation.
