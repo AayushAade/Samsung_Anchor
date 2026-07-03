@@ -257,28 +257,14 @@ class MemoraFaceRecognizer:
                         "embedding": embedding
                     })
 
-        # Bypassed gating in mock mode, otherwise apply 500ms gating filter
-        if self.backend != "mock":
-            if not detected_faces:
-                self.face_first_seen_time = None
-                self._update_missed_tracks(now_time, database)
-                return results
+        if not detected_faces:
+            self._update_missed_tracks(now_time, database)
+            return results
 
-            if self.face_first_seen_time is None:
-                self.face_first_seen_time = now_time
-                if settings.DEBUG:
-                    print("[Face Recognizer] Face detected. Calibrating gating filter (500ms)...")
-                self._update_missed_tracks(now_time, database)
-                return results
-
-            elapsed = now_time - self.face_first_seen_time
-            if elapsed < self.gating_threshold:
-                self._update_missed_tracks(now_time, database)
-                return results
-        else:
-            if not detected_faces:
-                self._update_missed_tracks(now_time, database)
-                return results
+        # Frame counter increment
+        if not hasattr(self, "frame_counter"):
+            self.frame_counter = 0
+        self.frame_counter += 1
 
         # --- TRACK ASSOCIATION PIPELINE ---
         unassociated_detections = list(detected_faces)
@@ -292,10 +278,18 @@ class MemoraFaceRecognizer:
             best_det_idx = -1
             best_det_score = -1.0
             
+            print(f"\n--- Association Check for Track [{track_id}] (Frame {self.frame_counter}) ---")
+            
             for idx, det in enumerate(unassociated_detections):
                 iou = compute_iou(det["box"], track_box)
                 dist = np.hypot(det["center"][0] - track_center[0], det["center"][1] - track_center[1])
                 
+                # Compute embedding distance for debugging
+                emb_dist = 999.0
+                if track["embeddings"] and len(det["embedding"]) > 0:
+                    track_avg_emb = np.mean(track["embeddings"], axis=0)
+                    emb_dist = float(np.linalg.norm(det["embedding"] - track_avg_emb))
+
                 is_match = False
                 score = 0.0
                 if iou > 0.2:
@@ -304,6 +298,12 @@ class MemoraFaceRecognizer:
                 elif dist < 100:
                     is_match = True
                     score = 1.0 / (dist + 1)
+                
+                print(f"Detection {idx}:")
+                print(f"  IoU = {iou:.3f}")
+                print(f"  Center Distance = {dist:.1f}px")
+                print(f"  Embedding Distance = {emb_dist:.3f}")
+                print(f"  Spatial Match = {is_match} (score = {score:.3f})")
                     
                 if is_match and score > best_det_score:
                     best_det_score = score
@@ -320,6 +320,23 @@ class MemoraFaceRecognizer:
                 track["last_seen_time"] = now_time
                 track["embeddings"].append(det["embedding"])
                 track["frames_seen"] += 1
+                
+                # Compute embedding distance for the associated detection
+                emb_dist = 999.0
+                if len(track["embeddings"]) > 1 and len(det["embedding"]) > 0:
+                    track_avg_emb = np.mean(track["embeddings"][:-1], axis=0)
+                    emb_dist = float(np.linalg.norm(det["embedding"] - track_avg_emb))
+
+                # Print exact requested format
+                print(f"\nFrame {self.frame_counter}")
+                print(f"Detection {best_det_idx}")
+                print(f"\nAssociated with:")
+                print(f"{track_id}")
+                print(f"\nIoU = {compute_iou(det['box'], track_box):.3f}")
+                print(f"\nCenter Distance = {np.hypot(det['center'][0] - track_center[0], det['center'][1] - track_center[1]):.1f}")
+                print(f"\nEmbedding Distance = {emb_dist:.3f}")
+                print(f"\nmatched = True")
+                print(f"\nReset missed_frames = 0\n")
                 
                 # State transitions
                 if track["state"] == "STABILIZING" or track["state"] == "UNKNOWN":
@@ -492,6 +509,11 @@ class MemoraFaceRecognizer:
                     }
                     associated_tracks.add(cand_id)
                     log_event("cand_create", f"Unknown candidate [{cand_id}] created (1/15 stable frames)")
+                    
+                    # Print exact requested format
+                    print(f"\nFrame {self.frame_counter}")
+                    print("No existing track matched.")
+                    print("\nCreating Temp_Candidate.\n")
                     
                     results.append({
                         "box": det["box"],
