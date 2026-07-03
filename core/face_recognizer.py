@@ -173,7 +173,8 @@ class MemoraFaceRecognizer:
                 track["missed_frames"] += 1
                 mf = track["missed_frames"]
                 if mf <= 30:
-                    print(f"Keeping [{track_id}] alive: missed_frames = {mf}/30")
+                    if settings.DEBUG:
+                        print(f"Keeping [{track_id}] alive: missed_frames = {mf}/30")
                 else:
                     info_t = database.get_identity(track_id)
                     disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else track_id
@@ -278,7 +279,8 @@ class MemoraFaceRecognizer:
             best_det_idx = -1
             best_det_score = -1.0
             
-            print(f"\n--- Association Check for Track [{track_id}] (Frame {self.frame_counter}) ---")
+            if settings.DEBUG:
+                print(f"\n--- Association Check for Track [{track_id}] (Frame {self.frame_counter}) ---")
             
             for idx, det in enumerate(unassociated_detections):
                 iou = compute_iou(det["box"], track_box)
@@ -299,11 +301,12 @@ class MemoraFaceRecognizer:
                     is_match = True
                     score = 1.0 / (dist + 1)
                 
-                print(f"Detection {idx}:")
-                print(f"  IoU = {iou:.3f}")
-                print(f"  Center Distance = {dist:.1f}px")
-                print(f"  Embedding Distance = {emb_dist:.3f}")
-                print(f"  Spatial Match = {is_match} (score = {score:.3f})")
+                if settings.DEBUG:
+                    print(f"Detection {idx}:")
+                    print(f"  IoU = {iou:.3f}")
+                    print(f"  Center Distance = {dist:.1f}px")
+                    print(f"  Embedding Distance = {emb_dist:.3f}")
+                    print(f"  Spatial Match = {is_match} (score = {score:.3f})")
                     
                 if is_match and score > best_det_score:
                     best_det_score = score
@@ -328,15 +331,16 @@ class MemoraFaceRecognizer:
                     emb_dist = float(np.linalg.norm(det["embedding"] - track_avg_emb))
 
                 # Print exact requested format
-                print(f"\nFrame {self.frame_counter}")
-                print(f"Detection {best_det_idx}")
-                print(f"\nAssociated with:")
-                print(f"{track_id}")
-                print(f"\nIoU = {compute_iou(det['box'], track_box):.3f}")
-                print(f"\nCenter Distance = {np.hypot(det['center'][0] - track_center[0], det['center'][1] - track_center[1]):.1f}")
-                print(f"\nEmbedding Distance = {emb_dist:.3f}")
-                print(f"\nmatched = True")
-                print(f"\nReset missed_frames = 0\n")
+                if settings.DEBUG:
+                    print(f"\nFrame {self.frame_counter}")
+                    print(f"Detection {best_det_idx}")
+                    print(f"\nAssociated with:")
+                    print(f"{track_id}")
+                    print(f"\nIoU = {compute_iou(det['box'], track_box):.3f}")
+                    print(f"\nCenter Distance = {np.hypot(det['center'][0] - track_center[0], det['center'][1] - track_center[1]):.1f}")
+                    print(f"\nEmbedding Distance = {emb_dist:.3f}")
+                    print(f"\nmatched = True")
+                    print(f"\nReset missed_frames = 0\n")
                 
                 # State transitions
                 if track["state"] == "STABILIZING" or track["state"] == "UNKNOWN":
@@ -511,9 +515,10 @@ class MemoraFaceRecognizer:
                     log_event("cand_create", f"Unknown candidate [{cand_id}] created (1/15 stable frames)")
                     
                     # Print exact requested format
-                    print(f"\nFrame {self.frame_counter}")
-                    print("No existing track matched.")
-                    print("\nCreating Temp_Candidate.\n")
+                    if settings.DEBUG:
+                        print(f"\nFrame {self.frame_counter}")
+                        print("No existing track matched.")
+                        print("\nCreating Temp_Candidate.\n")
                     
                     results.append({
                         "box": det["box"],
