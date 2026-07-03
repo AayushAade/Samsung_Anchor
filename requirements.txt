@@ -6,3 +6,5 @@ SpeechRecognition
 PyAudio
 python-dotenv
 setuptools
+insightface
+onnxruntime

@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import time
+import os
 from config import settings
 from core.event_logger import log_event
 
@@ -10,6 +11,13 @@ try:
     FACE_RECOGNITION_AVAILABLE = True
 except ImportError:
     FACE_RECOGNITION_AVAILABLE = False
+
+# Try InsightFace SCRFD
+try:
+    from insightface.model_zoo.scrfd import SCRFD
+    SCRFD_AVAILABLE = True
+except ImportError:
+    SCRFD_AVAILABLE = False
 
 # Try InsightFace
 try:
@@ -120,6 +128,20 @@ class MemoraFaceRecognizer:
             self.mock_mode = True
             self.backend = "mock"
 
+        # Try loading SCRFD face detector for fast/accurate bounding box extraction
+        self.scrfd_detector = None
+        if not self.mock_mode and SCRFD_AVAILABLE:
+            model_path = os.path.join(settings.BASE_DIR, "assets", "scrfd_500m_bnkps.onnx")
+            if os.path.exists(model_path):
+                try:
+                    self.scrfd_detector = SCRFD(model_file=model_path)
+                    self.scrfd_detector.prepare(ctx_id=-1) # -1 is CPU inference
+                    if settings.DEBUG:
+                        print("[Face Recognizer] Loaded SCRFD face detection model.")
+                except Exception as e:
+                    if settings.DEBUG:
+                        print(f"[Face Recognizer Warning] Failed to initialize SCRFD model: {e}")
+
     def _compute_geometric_embedding(self, landmarks, w, h):
         """
         Custom 128D geometric proportion embedding. Computes scale-normalized
@@ -225,7 +247,26 @@ class MemoraFaceRecognizer:
 
         elif self.backend == "face_recognition":
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            face_locations = face_recognition.face_locations(rgb_frame)
+            
+            face_locations = []
+            if self.scrfd_detector is not None:
+                try:
+                    bboxes, kpss = self.scrfd_detector.detect(frame, threshold=0.5)
+                    if bboxes is not None:
+                        for bbox in bboxes:
+                            xmin, ymin, xmax, ymax, score = bbox
+                            top = max(0, int(ymin))
+                            right = min(w - 1, int(xmax))
+                            bottom = min(h - 1, int(ymax))
+                            left = max(0, int(xmin))
+                            face_locations.append((top, right, bottom, left))
+                except Exception as e:
+                    if settings.DEBUG:
+                        print(f"[Face Recognizer Warning] SCRFD detection failed: {e}. Falling back to dlib.")
+                    face_locations = face_recognition.face_locations(rgb_frame)
+            else:
+                face_locations = face_recognition.face_locations(rgb_frame)
+
             for box in face_locations:
                 top, right, bottom, left = box
                 cx, cy = (left + right) // 2, (top + bottom) // 2
