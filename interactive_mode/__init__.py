@@ -1,1 +1,0 @@
-# Interactive Anchoring Package

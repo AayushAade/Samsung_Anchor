@@ -1,1 +1,0 @@
-"""Simulated camera capture stream."""
