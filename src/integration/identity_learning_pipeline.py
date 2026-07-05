@@ -81,7 +81,9 @@ def process_identity_learning(
             "reason": "Invalid parser response",
         }
 
-    name = parsed.get("name")
+    # Support both the current Context Binder API
+    # ("extracted_name") and a future simplified API ("name").
+    name = parsed.get("extracted_name") or parsed.get("name")
     relationship = parsed.get("relationship")
 
     if not name:

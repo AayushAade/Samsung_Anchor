@@ -95,7 +95,9 @@ def test_no_name_extracted():
     assert result["reason"] == "No identity information extracted"
 
 
-def test_successful_learning():
+def test_successful_learning_with_name_key():
+    """Backward compatibility with 'name' key."""
+
     binder = FakeBinder(
         {
             "name": "Rahul",
@@ -129,6 +131,40 @@ def test_successful_learning():
     assert len(database.calls) == 1
     assert database.calls[0]["identity_id"] == "Anonymous_ID_1"
     assert database.calls[0]["name"] == "Rahul"
+
+
+def test_successful_learning_with_extracted_name_key():
+    """Current production Context Binder API."""
+
+    binder = FakeBinder(
+        {
+            "extracted_name": "Rahul",
+            "relationship": "Brother",
+        }
+    )
+
+    database = FakeDatabase(
+        {
+            "name": "Rahul",
+            "relationship": "Brother",
+            "confidence": 0.90,
+            "is_confirmed": True,
+        }
+    )
+
+    result = process_identity_learning(
+        "Anonymous_ID_1",
+        "This is my brother Rahul.",
+        database,
+        binder,
+    )
+
+    assert result["success"] is True
+    assert result["identity_id"] == "Anonymous_ID_1"
+    assert result["name"] == "Rahul"
+    assert result["relationship"] == "Brother"
+    assert result["confidence"] == 0.90
+    assert result["is_confirmed"] is True
 
 
 def test_invalid_parser_response():
