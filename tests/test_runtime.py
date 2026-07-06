@@ -125,7 +125,68 @@ def test_process_single_frame():
 def test_process_single_frame_failure():
     runtime, _ = create_runtime()
 
-    camera = FakeCamera(success=False)
+    camera = FakeFailingCamera()
 
     with pytest.raises(RuntimeError):
         runtime.process_single_frame(camera)
+# ==========================================================
+# Fake Camera
+# ==========================================================
+
+class FakeCamera:
+    def __init__(self):
+        self.frame = object()
+
+    def read(self):
+        return True, self.frame
+
+
+class FakeFailingCamera:
+    def read(self):
+        return False, None
+
+
+# ==========================================================
+# run_once()
+# ==========================================================
+
+def test_run_once():
+
+    runtime, _ = create_runtime()
+
+    runtime.start()
+
+    camera = FakeCamera()
+
+    frame, results = runtime.run_once(camera)
+
+    assert frame is camera.frame
+    assert results is camera.frame
+
+
+def test_run_once_runtime_not_started():
+
+    runtime, _ = create_runtime()
+
+    camera = FakeCamera()
+
+    try:
+        runtime.run_once(camera)
+        assert False
+    except RuntimeError:
+        pass
+
+
+def test_run_once_camera_failure():
+
+    runtime, _ = create_runtime()
+
+    runtime.start()
+
+    camera = FakeFailingCamera()
+
+    try:
+        runtime.run_once(camera)
+        assert False
+    except RuntimeError:
+        pass

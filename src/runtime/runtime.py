@@ -98,3 +98,32 @@ class AnchorRuntime:
         results = self.process_frame(frame)
 
         return frame, results
+    
+        # ---------------------------------------------------------
+    # Runtime Execution
+    # ---------------------------------------------------------
+
+    def run_once(self, camera):
+        """
+        Execute a single runtime iteration.
+
+        Parameters
+        ----------
+        camera
+            An opened CameraDevice.
+
+        Returns
+        -------
+        tuple
+            (frame, results)
+
+        Raises
+        ------
+        RuntimeError
+            If the runtime has not been started.
+        """
+
+        if not self.running:
+            raise RuntimeError("Runtime is not running.")
+
+        return self.process_single_frame(camera)
