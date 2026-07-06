@@ -127,3 +127,30 @@ class AnchorRuntime:
             raise RuntimeError("Runtime is not running.")
 
         return self.process_single_frame(camera)
+    
+        # ---------------------------------------------------------
+    # Runtime Loop
+    # ---------------------------------------------------------
+
+    def run(self, camera):
+        """
+        Execute the application's runtime loop.
+
+        Parameters
+        ----------
+        camera
+            An opened camera object.
+
+        Yields
+        ------
+        tuple
+            (frame, results)
+        """
+
+        self.start()
+
+        try:
+            while self.running:
+                yield self.run_once(camera)
+        finally:
+            self.shutdown()

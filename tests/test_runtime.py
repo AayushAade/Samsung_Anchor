@@ -190,3 +190,54 @@ def test_run_once_camera_failure():
         assert False
     except RuntimeError:
         pass
+
+# ==========================================================
+# run()
+# ==========================================================
+
+def test_run_generator():
+
+    runtime, _ = create_runtime()
+
+    camera = FakeCamera()
+
+    generator = runtime.run(camera)
+
+    frame, results = next(generator)
+
+    assert frame is camera.frame
+    assert results is camera.frame
+
+    generator.close()
+
+    assert runtime.running is False
+
+
+def test_run_starts_runtime():
+
+    runtime, _ = create_runtime()
+
+    camera = FakeCamera()
+
+    generator = runtime.run(camera)
+
+    next(generator)
+
+    assert runtime.running is True
+
+    generator.close()
+
+
+def test_run_shutdown_after_close():
+
+    runtime, _ = create_runtime()
+
+    camera = FakeCamera()
+
+    generator = runtime.run(camera)
+
+    next(generator)
+
+    generator.close()
+
+    assert runtime.running is False
