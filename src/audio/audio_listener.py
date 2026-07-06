@@ -1,7 +1,7 @@
 import speech_recognition as sr
 import sys
 import struct
-from core.event_logger import log_event
+from src.utils.event_logger import log_event
 from config import settings
 
 class MemoraAudioListener:

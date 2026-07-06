@@ -3,7 +3,7 @@ import numpy as np
 import time
 import os
 from config import settings
-from core.event_logger import log_event
+from src.utils.event_logger import log_event
 
 # Try dlib-based face_recognition
 try:
