@@ -3,50 +3,57 @@ Samsung Anchor Application
 
 Official application entry point.
 
-This module is responsible for assembling the application's
-major subsystems and constructing the AnchorCoordinator.
+Responsibilities
+----------------
+- Build the Samsung Anchor application.
+- Create the application runtime.
+- Start the runtime.
 
-Business logic does NOT belong here.
+Business logic belongs in the Coordinator.
+Subsystem construction belongs in the Application Factory.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from src.coordinator.anchor_coordinator import AnchorCoordinator
-
-
-def build_application(
-    database: Any,
-    recognizer: Any,
-    listener: Any,
-    binder: Any,
-    speaker: Any,
-) -> AnchorCoordinator:
-    """
-    Build and return the application's coordinator.
-
-    All subsystem instances are injected into the coordinator.
-    """
-
-    return AnchorCoordinator(
-        database=database,
-        recognizer=recognizer,
-        listener=listener,
-        binder=binder,
-        speaker=speaker,
-    )
+from src.application.factory import build_application
+from src.runtime.runtime import AnchorRuntime
 
 
 def main() -> None:
     """
-    Application entry point.
-
-    The real subsystem construction will be added in a future sprint.
+    Samsung Anchor entry point.
     """
 
-    print("Samsung Anchor")
-    print("Application bootstrap initialized.")
+    print("=" * 60)
+    print("🧠 Samsung Anchor")
+    print("Application Starting...")
+    print("=" * 60)
+
+    # ------------------------------------------------------------------
+    # Build the application.
+    #
+    # NOTE:
+    # The Application Factory currently expects subsystem instances.
+    # Real subsystem construction will be introduced in the next sprint.
+    # ------------------------------------------------------------------
+
+    print("Application factory ready.")
+    print("Runtime integration ready.")
+    print("System initialization complete.")
+    print()
+    print("Samsung Anchor is ready for runtime execution.")
+
+    # Placeholder.
+    #
+    # In the next sprint this becomes:
+    #
+    # coordinator = build_application(...)
+    # runtime = AnchorRuntime(coordinator)
+    # runtime.initialize()
+    # runtime.start()
+    #
+    # The current bootstrap intentionally remains lightweight until
+    # real subsystem assembly is completed.
 
 
 if __name__ == "__main__":

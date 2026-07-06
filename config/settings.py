@@ -1,45 +1,59 @@
 """
-Global project configuration.
-
-This module contains shared runtime configuration used by the
-Memory, Vision, Audio, and future Reasoning subsystems.
-
-Only stable, project-wide configuration values should be defined here.
+Global runtime configuration for Samsung Anchor.
 """
 
-# ==========================================================
-# Memory Configuration
-# ==========================================================
+from __future__ import annotations
 
-# SQLite database location.
-# Uses a relative path so the project remains portable across
-# different operating systems and developer machines.
-DB_PATH = "memora_db.sqlite"
+import os
 
-# Default face-matching threshold.
-#
-# Used when no explicit tolerance is provided to the
-# face recognition pipeline.
-#
-# NOTE:
-# This is an initial prototype value and should be
-# calibrated after collecting real recognition data.
-FACE_TOLERANCE = 0.60
-
+from config.constants import (
+    DEFAULT_AUDIO_DURATION,
+    DEFAULT_FACE_TOLERANCE,
+    DEFAULT_SPATIAL_CELL_SIZE,
+    DEFAULT_YOLO_MODEL,
+    TRACKED_OBJECTS,
+)
+from config.paths import (
+    BASE_DIR,
+    DATABASE_PATH,
+)
 
 # ==========================================================
-# Vision Configuration
+# General
 # ==========================================================
-# (Reserved for future project settings)
 
-
-# ==========================================================
-# Audio Configuration
-# ==========================================================
-# (Reserved for future project settings)
-
+DEBUG = True
 
 # ==========================================================
-# Reasoning Configuration
+# Database
 # ==========================================================
-# (Reserved for future project settings)
+
+DB_PATH = str(DATABASE_PATH)
+
+# ==========================================================
+# Vision
+# ==========================================================
+
+FACE_TOLERANCE = DEFAULT_FACE_TOLERANCE
+
+# ==========================================================
+# Audio
+# ==========================================================
+
+AUDIO_DURATION_SEC = DEFAULT_AUDIO_DURATION
+
+# ==========================================================
+# Reasoning
+# ==========================================================
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# ==========================================================
+# Object Memory
+# ==========================================================
+
+YOLO_MODEL_NAME = DEFAULT_YOLO_MODEL
+
+SPATIAL_CELL_SIZE = DEFAULT_SPATIAL_CELL_SIZE
+
+TRACKED_OBJECTS = TRACKED_OBJECTS
