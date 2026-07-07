@@ -1,3 +1,4 @@
+from src.interaction.events import PresenceEventType
 from src.interaction.presence_engine import PresenceEngine
 
 
@@ -5,7 +6,7 @@ def test_greet_known_person():
 
     engine = PresenceEngine()
 
-    greeting = engine.process(
+    event = engine.process(
         {
             "face_id": "1",
             "name": "Alice",
@@ -13,7 +14,11 @@ def test_greet_known_person():
         }
     )
 
-    assert greeting == "Alice is here. They are your Friend."
+    assert event is not None
+    assert event.type == PresenceEventType.PERSON_ARRIVED
+    assert event.face_id == "1"
+    assert event.name == "Alice"
+    assert event.relationship == "Friend"
 
 
 def test_same_person_only_once():
@@ -34,7 +39,7 @@ def test_unknown_person():
 
     engine = PresenceEngine()
 
-    greeting = engine.process(
+    event = engine.process(
         {
             "face_id": "1",
             "name": None,
@@ -42,7 +47,10 @@ def test_unknown_person():
         }
     )
 
-    assert greeting is None
+    assert event is not None
+    assert event.type == PresenceEventType.UNKNOWN_PERSON_DETECTED
+    assert event.face_id == "1"
+    assert event.name is None
 
 
 def test_different_people():
@@ -53,7 +61,7 @@ def test_different_people():
         {
             "face_id": "1",
             "name": "Alice",
-            "relationship": "Friend",
+            "relationship": None,
         }
     )
 
