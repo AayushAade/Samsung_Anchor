@@ -30,6 +30,17 @@ class FakeRecognizer:
         }
 
 
+class FakePipelineRecognizer:
+    def process_frame(self, frame, database):
+        return [
+            {
+                "face_id": "1",
+                "name": "Alice",
+                "relationship": "Friend",
+            }
+        ]
+
+
 class FakeListener:
     pass
 
@@ -68,6 +79,7 @@ def test_initialize():
     coordinator.initialize()
 
     assert coordinator.running is False
+    assert coordinator.consume_actions() == []
 
 
 def test_start():
@@ -97,6 +109,34 @@ def test_process_frame():
     assert coordinator.recognizer.called is True
     assert result["frame"] is frame
     assert result["database"] is coordinator.database
+
+
+def test_consume_actions_empty():
+    coordinator = create_coordinator()
+
+    assert coordinator.consume_actions() == []
+
+
+def test_pending_actions_generated():
+
+    coordinator = AnchorCoordinator(
+        database=FakeDatabase(),
+        recognizer=FakePipelineRecognizer(),
+        listener=FakeListener(),
+        binder=FakeBinder(),
+        speaker=FakeSpeaker(),
+    )
+
+    coordinator.process_frame(object())
+
+    actions = coordinator.consume_actions()
+
+    assert len(actions) == 1
+    assert actions[0].message == (
+        "Alice is here. They are your Friend."
+    )
+
+    assert coordinator.consume_actions() == []
 
 
 @patch("src.coordinator.anchor_coordinator.process_identity_learning")

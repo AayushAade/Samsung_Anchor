@@ -1,63 +1,64 @@
 """
-Samsung Anchor Presence Engine.
+Presence Engine.
 
-Tracks visible identities during a session and determines
-whether greeting actions should be triggered.
+Converts face recognition results into Presence Events.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from src.interaction.events import (
+    PresenceEvent,
+    PresenceEventType,
+)
+
 
 class PresenceEngine:
     """
-    Handles presence-related behaviour.
-
-    Responsibilities
-    ----------------
-    - Track greeted identities.
-    - Generate greeting messages.
+    Tracks who has already appeared during a session.
     """
 
     def __init__(self) -> None:
-        self._greeted: set[str] = set()
+        self._visible: set[str] = set()
 
-    def process(self, result: dict[str, Any]) -> str | None:
+    def process(
+        self,
+        result: dict[str, Any],
+    ) -> PresenceEvent | None:
         """
-        Process one face recognition result.
-
-        Returns
-        -------
-        str | None
-            Greeting text if a greeting should be spoken,
-            otherwise None.
+        Process one recognition result and emit a PresenceEvent.
         """
 
         face_id = result.get("face_id")
         name = result.get("name")
         relationship = result.get("relationship")
 
-        if not face_id or not name:
+        if not face_id:
             return None
 
-        if face_id in self._greeted:
+        if face_id in self._visible:
             return None
 
-        self._greeted.add(face_id)
+        self._visible.add(face_id)
 
-        greeting = f"{name} is here"
+        if name is None:
+            return PresenceEvent(
+                type=PresenceEventType.UNKNOWN_PERSON_DETECTED,
+                face_id=face_id,
+                name=None,
+            )
 
-        if relationship:
-            greeting += f". They are your {relationship}"
-
-        greeting += "."
-
-        return greeting
+        return PresenceEvent(
+            type=PresenceEventType.PERSON_ARRIVED,
+            face_id=face_id,
+            name=name,
+            relationship=relationship,
+        )
 
     def reset(self) -> None:
         """
         Reset session state.
         """
 
-        self._greeted.clear()
+        self._visible.clear()

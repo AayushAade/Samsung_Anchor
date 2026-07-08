@@ -18,10 +18,11 @@ from src.integration.identity_learning_pipeline import (
     process_identity_learning,
 )
 
+from src.pipeline.cognitive_pipeline import CognitivePipeline
+from src.interaction.actions import InteractionAction
+
 # ------------------------------------------------------------------
 # Import subsystem types ONLY for static type checking.
-# This prevents pytest from importing the entire Vision stack during
-# unit testing.
 # ------------------------------------------------------------------
 
 if TYPE_CHECKING:
@@ -63,6 +64,14 @@ class AnchorCoordinator:
         self.visible_faces = set()
         self.visible_objects = set()
 
+        # ------------------------------------------------------
+        # Cognitive Pipeline
+        # ------------------------------------------------------
+
+        self.pipeline = CognitivePipeline()
+
+        self._pending_actions: list[InteractionAction] = []
+
     # ==========================================================
     # Lifecycle
     # ==========================================================
@@ -73,6 +82,8 @@ class AnchorCoordinator:
         """
 
         self.running = False
+        self._pending_actions.clear()
+        self.pipeline.reset()
 
     def start(self) -> None:
         """
@@ -95,12 +106,38 @@ class AnchorCoordinator:
     def process_frame(self, frame):
         """
         Process a single frame through the Vision subsystem.
+
+        Recognition results are passed through the cognitive
+        pipeline to generate interaction actions.
         """
 
-        return self.recognizer.process_frame(
+        results = self.recognizer.process_frame(
             frame,
             self.database,
         )
+
+        iterable = [results] if isinstance(results, dict) else results
+
+        self._pending_actions.clear()
+
+        for result in iterable:
+            self._pending_actions.extend(
+                self.pipeline.process(result)
+            )
+
+        return results
+
+    def consume_actions(self) -> list[InteractionAction]:
+        """
+        Return pending interaction actions.
+
+        Calling this method also clears the queue.
+        """
+
+        actions = list(self._pending_actions)
+        self._pending_actions.clear()
+
+        return actions
 
     # ==========================================================
     # Identity Learning Pipeline
