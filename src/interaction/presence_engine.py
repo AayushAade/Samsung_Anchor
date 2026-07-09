@@ -62,3 +62,4 @@ class PresenceEngine:
         """
 
         self._visible.clear()
+        

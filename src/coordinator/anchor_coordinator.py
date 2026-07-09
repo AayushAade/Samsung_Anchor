@@ -12,10 +12,15 @@ Vision, Audio, Memory, or Reasoning.
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any
 
 from src.integration.identity_learning_pipeline import (
     process_identity_learning,
+)
+
+from src.integration.async_identity_learning import (
+    start_identity_learning,
 )
 
 from src.pipeline.cognitive_pipeline import CognitivePipeline
@@ -72,6 +77,15 @@ class AnchorCoordinator:
 
         self._pending_actions: list[InteractionAction] = []
 
+        # Faces currently undergoing identity learning.
+        self._learning_faces: set[str] = set()
+
+        # Last learning attempt for each face.
+        self._last_learning_attempt: dict[str, float] = {}
+
+        # Seconds before asking again.
+        self._learning_cooldown = 10.0
+
     # ==========================================================
     # Lifecycle
     # ==========================================================
@@ -121,9 +135,22 @@ class AnchorCoordinator:
         self._pending_actions.clear()
 
         for result in iterable:
+
+            # Existing cognitive pipeline
             self._pending_actions.extend(
                 self.pipeline.process(result)
             )
+
+            # Trigger identity learning for unknown people
+            face_id = result.get("face_id")
+            name = result.get("name")
+
+            if (
+    face_id
+    and name is None
+    and self._can_start_learning(face_id)
+):
+                self.start_identity_learning(face_id)
 
         return results
 
@@ -138,6 +165,80 @@ class AnchorCoordinator:
         self._pending_actions.clear()
 
         return actions
+
+
+    def _can_start_learning(
+    self,
+    face_id: str,
+) -> bool:
+        """
+        Returns True if identity learning may begin.
+        """
+
+        if face_id in self._learning_faces:
+            return False
+
+        last = self._last_learning_attempt.get(face_id)
+
+        if last is None:
+            return True
+
+        import time
+
+        return (time.time() - last) >= self._learning_cooldown
+
+    # ==========================================================
+    # Live Identity Learning
+    # ==========================================================
+
+    def start_identity_learning(
+        self,
+        face_id: str,
+    ) -> bool:
+        """
+        Start background identity learning for an unknown face.
+
+        Returns
+        -------
+        bool
+            True if learning was started.
+        """
+
+        if not face_id:
+            return False
+
+        if face_id in self._learning_faces:
+            return False
+
+        self._learning_faces.add(face_id)
+
+        import time
+        self._last_learning_attempt[face_id] = time.time()
+
+        def finished(
+            finished_face_id: str,
+            result: dict,
+        ) -> None:
+
+            self._learning_faces.discard(
+                finished_face_id
+            )
+
+            print(
+                f"\n🧠 Identity Learning Finished:"
+                f" {result}"
+            )
+
+        start_identity_learning(
+            face_id=face_id,
+            listener=self.listener,
+            binder=self.binder,
+            database=self.database,
+            speaker=self.speaker,
+            on_finished=finished,
+        )
+
+        return True
 
     # ==========================================================
     # Identity Learning Pipeline
