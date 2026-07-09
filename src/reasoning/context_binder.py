@@ -84,7 +84,7 @@ class MemoraContextBinder:
         
         # 0. Check for specific direct address relation pattern first (e.g., "Mark, your daughter is calling")
         direct_address_match = re.search(
-            r"\b([a-z]+),\s+your\s+(son|daughter|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\b",
+            r"\b([a-z]+),\s+your\s+(son|daughter|brother|sister|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\b",
             transcript_lower
         )
         if direct_address_match:
@@ -99,7 +99,7 @@ class MemoraContextBinder:
         # Match relationship tags
         # E.g. "it's your son, Mark" -> relationship is Son
         rel_match = re.search(
-            r"\b(son|daughter|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\b", 
+            r"\b(son|daughter|brother|sister|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\b",
             transcript_lower
         )
         if rel_match:
@@ -147,7 +147,7 @@ class MemoraContextBinder:
                 "thursday", "friday", "saturday", "sunday", "january", "february", "march", "april", 
                 "may", "june", "july", "august", "september", "october", "november", "december",
                 "grandpa", "grandma", "grandfather", "grandmother", "dad", "mom", "father", "mother",
-                "son", "daughter", "brother", "sister", "caregiver", "doctor", "friend", "nurse"
+                "son", "daughter", "caregiver", "doctor", "friend", "nurse"
             }
 
             for w in words:
@@ -159,7 +159,7 @@ class MemoraContextBinder:
             # Absolute Fallback using original regex patterns if no name was resolved grammatically
             if not extracted_name:
                 relationship_match = re.search(
-                    r"\b(?:it's|its|i am|i'm)\s+(?:your\s+)?(?:son|daughter|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\s+([a-z]+)", 
+                    r"\b(?:it's|its|i am|i'm|this is my|this is)\s+(?:your\s+|my\s+)?(?:son|daughter|brother|sister|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\s+([a-z]+)",
                     transcript_lower
                 )
                 if relationship_match:
@@ -179,7 +179,19 @@ class MemoraContextBinder:
                             name_candidate = match.group(1).capitalize()
                             if name_candidate.lower() not in ["dad", "mom", "grandpa", "grandma", "grandson", "daughter", "son", "there", "friend"]:
                                 extracted_name = name_candidate
-                                
+        
+        # Handle patterns like:
+        # "I'm Rahul, your brother."
+        if extracted_name and relationship is None:
+            reverse_match = re.search(
+                r"\b(?:i am|i'm)\s+([a-z]+)\s*,?\s*your\s+(son|daughter|brother|sister|grandson|granddaughter|wife|husband|friend|doctor|caregiver|nurse|niece|nephew)\b",
+                transcript_lower
+            )
+        
+            if reverse_match:
+                extracted_name = reverse_match.group(1).capitalize()
+                relationship = reverse_match.group(2).capitalize()
+
         return {
             "extracted_name": extracted_name,
             "relationship": relationship
