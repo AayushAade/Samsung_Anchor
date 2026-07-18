@@ -3,12 +3,12 @@ Samsung Anchor Speaker Device.
 
 Hardware abstraction for speech output.
 
-The current implementation prints messages to stdout.
-A future implementation will replace the print statement
-with a real text-to-speech engine.
+Uses the native macOS speech engine.
 """
 
 from __future__ import annotations
+
+import subprocess
 
 from src.interaction.actions import (
     InteractionAction,
@@ -27,9 +27,20 @@ class SpeakerDevice:
     ) -> None:
         """
         Execute an interaction action.
-
-        Currently supports SPEAK actions only.
         """
 
-        if action.type == InteractionActionType.SPEAK:
-            print(action.message)
+        if action.type != InteractionActionType.SPEAK:
+            return
+
+        # Still print for debugging/logging
+        print(action.message)
+
+        try:
+            subprocess.Popen(
+                [
+                    "say",
+                    action.message,
+                ]
+            )
+        except Exception as e:
+            print(f"[Speaker Error] {e}")

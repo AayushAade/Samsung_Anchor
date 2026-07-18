@@ -51,3 +51,7 @@ class RelevantMemory:
     commitments: list[str] = field(default_factory=list)
 
     tags: list[str] = field(default_factory=list)
+    
+    historical_usefulness: float = 0.5
+    
+    confidence: float = 1.0

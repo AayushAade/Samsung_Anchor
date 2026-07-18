@@ -12,6 +12,9 @@ import threading
 from src.integration.identity_learning_pipeline import (
     process_identity_learning,
 )
+from src.cognition.conversation import Conversation
+from src.cognition.episode_builder import EpisodeBuilder
+from src.cognition.episode_engine import EpisodeEngine
 
 
 def start_identity_learning(
@@ -20,6 +23,7 @@ def start_identity_learning(
     listener,
     binder,
     database,
+    memory_manager,
     speaker=None,
     on_finished=None,
 ) -> threading.Thread:
@@ -39,6 +43,9 @@ def start_identity_learning(
 
     database
         MemoraDatabase.
+
+    memory_manager
+        CognitiveMemoryManager to consolidate the episode.
 
     speaker
         Optional SpeakerDevice.
@@ -74,13 +81,30 @@ def start_identity_learning(
                 )
 
                 if (
-                    speaker is not None
-                    and result.get("success")
+                    result.get("success")
                     and result.get("is_confirmed")
                 ):
-                    print(
-                        f"\n✅ Learned identity: {result['name']}"
+                    if speaker is not None:
+                        print(
+                            f"\n✅ Learned identity: {result['name']}"
+                        )
+                    
+                    # Create and store the episode!
+                    engine = EpisodeEngine(
+                        builder=EpisodeBuilder(),
+                        repository=database.episode_repo
                     )
+                    
+                    conversation = Conversation(
+                        person=result["name"],
+                        transcript=transcript,
+                    )
+                    
+                    episode = engine.remember(conversation)
+                    print(f"🧠 Saved new episodic memory: {episode.summary}")
+                    
+                    # TRIGGER COGNITIVE CONSOLIDATION
+                    memory_manager.process_episode(episode)
 
             if on_finished is not None:
                 on_finished(face_id, result)

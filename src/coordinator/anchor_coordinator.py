@@ -13,6 +13,8 @@ Vision, Audio, Memory, or Reasoning.
 from __future__ import annotations
 
 import time
+import threading
+import queue
 from typing import TYPE_CHECKING, Any
 
 from src.integration.identity_learning_pipeline import (
@@ -25,6 +27,9 @@ from src.integration.async_identity_learning import (
 
 from src.pipeline.cognitive_pipeline import CognitivePipeline
 from src.interaction.actions import InteractionAction
+from src.core.event_bus import EventBus
+from src.cognition.cognitive_memory_manager import CognitiveMemoryManager
+from src.llm.reasoning_client import MockReasoningClient
 
 # ------------------------------------------------------------------
 # Import subsystem types ONLY for static type checking.
@@ -70,12 +75,23 @@ class AnchorCoordinator:
         self.visible_objects = set()
 
         # ------------------------------------------------------
-        # Cognitive Pipeline
+        # Event Bus & Asynchronous Decoupling
+        # ------------------------------------------------------
+        
+        self.event_bus = EventBus()
+        self._cognitive_queue = queue.Queue()
+        self._action_queue = queue.Queue()
+        
+        self.event_bus.subscribe("face_detected", self._on_face_detected)
+
+        # ------------------------------------------------------
+        # Cognitive Pipeline & Memory Manager
         # ------------------------------------------------------
 
-        self.pipeline = CognitivePipeline()
+        self.pipeline = CognitivePipeline(self.database)
+        self.memory_manager = CognitiveMemoryManager(self.database.SessionFactory, MockReasoningClient())
 
-        self._pending_actions: list[InteractionAction] = []
+        self._cognitive_thread = None
 
         # Faces currently undergoing identity learning.
         self._learning_faces: set[str] = set()
@@ -96,22 +112,58 @@ class AnchorCoordinator:
         """
 
         self.running = False
-        self._pending_actions.clear()
+        while not self._action_queue.empty():
+            self._action_queue.get_nowait()
+        while not self._cognitive_queue.empty():
+            self._cognitive_queue.get_nowait()
         self.pipeline.reset()
 
     def start(self) -> None:
         """
         Start coordinator execution.
         """
-
         self.running = True
+        self._cognitive_thread = threading.Thread(target=self._cognitive_worker_loop, daemon=True)
+        self._cognitive_thread.start()
 
     def shutdown(self) -> None:
         """
         Gracefully stop coordinator execution.
         """
-
         self.running = False
+        if self._cognitive_thread is not None:
+            self._cognitive_thread.join(timeout=2.0)
+        self.memory_manager.shutdown()
+
+    # ==========================================================
+    # Event Handlers & Workers
+    # ==========================================================
+
+    def _on_face_detected(self, result: dict):
+        """Callback from EventBus. Pushes to worker queue."""
+        self._cognitive_queue.put(result)
+
+    def _cognitive_worker_loop(self):
+        """
+        Background thread pulling from cognitive queue, running 
+        the pipeline, and putting actions into the action queue.
+        This ensures camera frames are never dropped due to slow reasoning.
+        """
+        while self.running:
+            try:
+                # Wait for an event with timeout to allow graceful shutdown
+                result = self._cognitive_queue.get(timeout=0.1)
+                
+                actions = self.pipeline.process(result)
+                for action in actions:
+                    self._action_queue.put(action)
+                    
+            except queue.Empty:
+                continue
+            except Exception as e:
+                import traceback
+                print(f"[Coordinator Error] Cognitive Worker failed: {e}")
+                traceback.print_exc()
 
     # ==========================================================
     # Vision Pipeline
@@ -121,8 +173,9 @@ class AnchorCoordinator:
         """
         Process a single frame through the Vision subsystem.
 
-        Recognition results are passed through the cognitive
-        pipeline to generate interaction actions.
+        Recognition results are published to the EventBus, completely
+        decoupling the synchronous camera loop from the heavy
+        cognitive processing.
         """
 
         results = self.recognizer.process_frame(
@@ -132,24 +185,19 @@ class AnchorCoordinator:
 
         iterable = [results] if isinstance(results, dict) else results
 
-        self._pending_actions.clear()
-
         for result in iterable:
+            # Publish to event bus instead of calling synchronously
+            self.event_bus.publish("face_detected", result)
 
-            # Existing cognitive pipeline
-            self._pending_actions.extend(
-                self.pipeline.process(result)
-            )
-
-            # Trigger identity learning for unknown people
+            # Trigger identity learning for unknown people (still handled async)
             face_id = result.get("face_id")
             name = result.get("name")
 
             if (
-    face_id
-    and name is None
-    and self._can_start_learning(face_id)
-):
+                face_id
+                and name is None
+                and self._can_start_learning(face_id)
+            ):
                 self.start_identity_learning(face_id)
 
         return results
@@ -160,17 +208,18 @@ class AnchorCoordinator:
 
         Calling this method also clears the queue.
         """
-
-        actions = list(self._pending_actions)
-        self._pending_actions.clear()
-
+        actions = []
+        while not self._action_queue.empty():
+            try:
+                actions.append(self._action_queue.get_nowait())
+            except queue.Empty:
+                break
         return actions
 
-
     def _can_start_learning(
-    self,
-    face_id: str,
-) -> bool:
+        self,
+        face_id: str,
+    ) -> bool:
         """
         Returns True if identity learning may begin.
         """
@@ -182,8 +231,6 @@ class AnchorCoordinator:
 
         if last is None:
             return True
-
-        import time
 
         return (time.time() - last) >= self._learning_cooldown
 
@@ -212,7 +259,6 @@ class AnchorCoordinator:
 
         self._learning_faces.add(face_id)
 
-        import time
         self._last_learning_attempt[face_id] = time.time()
 
         def finished(
@@ -234,6 +280,7 @@ class AnchorCoordinator:
             listener=self.listener,
             binder=self.binder,
             database=self.database,
+            memory_manager=self.memory_manager,
             speaker=self.speaker,
             on_finished=finished,
         )

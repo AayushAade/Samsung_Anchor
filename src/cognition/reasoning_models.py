@@ -15,3 +15,5 @@ class MemoryRecall:
     should_greet: bool = True
 
     recalled_memories: list[RelevantMemory] | None = None
+    
+    generated_response: str | None = None
