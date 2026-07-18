@@ -4,27 +4,54 @@ import json
 class CognitiveInspector:
     """
     Developer tool for transparency and debuggability.
-    Dumps the internal state of the Cognitive Pipeline to the console.
+    Renders the internal state, context fusion, and reasoning of Samsung Anchor.
     """
     
     @staticmethod
-    def log_interaction(
-        face_id: str, 
-        name: str,
-        retrieved_count: int,
-        attention_decision, # AttentionDecision
-        prompt: str,
-        generated_response: str,
-        final_action: str
-    ):
-        print("\n" + "="*50)
-        print("🧠 COGNITIVE INSPECTOR: INTERACTION LOG")
-        print("="*50)
-        print(f"Time           : {datetime.now().strftime('%H:%M:%S')}")
-        print(f"Detected Person: {name} (ID: {face_id})")
-        print(f"Memories Found : {retrieved_count} relevant episodes/semantic nodes")
+    def print_pipeline_run(
+        cognitive_context, 
+        attention_decision, 
+        goal_hypotheses=None,
+        prompt: str = "",
+        generated_response: str = "",
+        final_action: str = ""
+    ) -> None:
+        print("\n================================================================")
+        print("  SAMSUNG ANCHOR : COGNITIVE TRACE")
+        print("================================================================\n")
         
-        print("\n--- Attention Engine ---")
+        print("--- Context Fusion ---")
+        print(f"Providers Executed : {len(cognitive_context.provider_latencies)}")
+        for provider, latency in cognitive_context.provider_latencies.items():
+            print(f"  -> {provider}: {latency:.1f}ms")
+        
+        if cognitive_context.dropped_providers:
+            print(f"Dropped Providers  : {', '.join(cognitive_context.dropped_providers)}")
+            
+        print(f"\nIdentity Context   : {cognitive_context.identity.name if cognitive_context.identity and cognitive_context.identity.name else 'Unknown'}")
+        print(f"Temporal Context   : {cognitive_context.temporal.time_of_day if cognitive_context.temporal else 'Unknown'}")
+        
+        mem_count = len(cognitive_context.memory.memories) if cognitive_context.memory else 0
+        print(f"Memory Context     : {mem_count} items retrieved")
+
+        print("\n--- Goal Reasoning ---")
+        if goal_hypotheses:
+            for i, g in enumerate(goal_hypotheses, 1):
+                print(f"  [{i}] {g.name:30s} : {g.confidence:.2f}  ({g.state.value})")
+                if g.supporting_evidence:
+                    evidence_str = ", ".join(
+                        f"{e.signal} (+{e.weight:.2f})" for e in g.supporting_evidence[-3:]
+                    )
+                    print(f"      Supporting : {evidence_str}")
+                if g.contradicting_evidence:
+                    evidence_str = ", ".join(
+                        f"{e.signal} (-{e.weight:.2f})" for e in g.contradicting_evidence[-3:]
+                    )
+                    print(f"      Contradicting: {evidence_str}")
+        else:
+            print("  (No goal hypotheses generated)")
+
+        print("\n--- Executive Function (Attention Engine) ---")
         print(f"Decision       : {'INTERRUPT' if attention_decision.should_interrupt else 'SILENCE'}")
         if attention_decision.should_interrupt:
             print(f"Selected       : {len(attention_decision.selected_memories)} memories")

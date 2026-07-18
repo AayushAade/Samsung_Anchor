@@ -8,8 +8,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.cognition.memory_engine import MemoryEngine
-from src.cognition.memory_query import MemoryQuery
 from src.cognition.context_restoration_engine import ContextRestorationEngine
+from src.cognition.context.registry import ContextProviderRegistry
+from src.cognition.context.fusion_engine import ContextFusionEngine
+from src.cognition.context.providers.identity import IdentityContextProvider
+from src.cognition.context.providers.memory import MemoryContextProvider
+from src.cognition.context.providers.temporal import TemporalContextProvider
+from src.cognition.goals.inference_engine import GoalInferenceEngine
 
 from src.interaction.actions import InteractionAction
 from src.interaction.interaction_manager import InteractionManager
@@ -33,6 +38,16 @@ class CognitivePipeline:
         self.memory_engine = MemoryEngine(
             self.memory_repository
         )
+        
+        # Setup Context Framework
+        self.context_registry = ContextProviderRegistry()
+        self.context_registry.register(IdentityContextProvider())
+        self.context_registry.register(MemoryContextProvider(self.memory_engine))
+        self.context_registry.register(TemporalContextProvider())
+        
+        self.context_fusion_engine = ContextFusionEngine(self.context_registry)
+
+        self.goal_inference_engine = GoalInferenceEngine()
 
         self.context_restoration_engine = ContextRestorationEngine()
 
@@ -62,33 +77,35 @@ class CognitivePipeline:
                 return actions
                 
             # --------------------------------------------------
-            # 2. Retrieve Memory
+            # 2. Collect Multimodal Context
             # --------------------------------------------------
-            metrics.start_timer("latency.memory.retrieval")
-            query = MemoryQuery(face_id=event.face_id)
-            memories = self.memory_engine.retrieve(query)
-            metrics.stop_timer("latency.memory.retrieval")
+            metrics.start_timer("latency.context.fusion")
+            cognitive_context = self.context_fusion_engine.fuse_context(event)
+            metrics.stop_timer("latency.context.fusion")
             
-            print(f"[DEBUG] Memories retrieved: {len(memories)}")
-            for m in memories:
-                print(f"[DEBUG] Memory: {m.summary}, Importance: {m.importance}")
+            # Optional Debugging output:
+            mem_count = len(cognitive_context.memory.memories) if cognitive_context.memory else 0
+            print(f"[DEBUG] Context Gathered. Memories: {mem_count}, Time: {cognitive_context.temporal.time_of_day if cognitive_context.temporal else 'Unknown'}")
             
             # --------------------------------------------------
-            # 3. Context Restoration & Attention
+            # 3. Goal Inference
+            # --------------------------------------------------
+            metrics.start_timer("latency.cognition.goal_inference")
+            goal_hypotheses = self.goal_inference_engine.infer(cognitive_context)
+            metrics.stop_timer("latency.cognition.goal_inference")
+            
+            # --------------------------------------------------
+            # 4. Context Restoration & Attention
             # --------------------------------------------------
             metrics.start_timer("latency.cognition.attention_and_llm")
-            # Use the new Context Restoration Engine to generate the rich LLM-backed recall
-            # Passing mock location/time as we don't have dynamic env tracking perfectly wired yet
             recall = self.context_restoration_engine.generate_context_cue(
-                event=event,
-                raw_memories=memories,
-                current_location="Living Room", 
-                current_time="12:00 PM"
+                cognitive_context=cognitive_context,
+                goal_hypotheses=goal_hypotheses
             )
             metrics.stop_timer("latency.cognition.attention_and_llm")
             
             # --------------------------------------------------
-            # 4. Interaction Manager
+            # 5. Interaction Manager
             # --------------------------------------------------
             action = self.interaction_manager.handle_event(
                 event,

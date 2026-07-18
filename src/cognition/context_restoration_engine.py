@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 from src.cognition.memory_models import RelevantMemory
+from src.cognition.goals.models import GoalHypothesis
 from src.interaction.events import PresenceEvent
 from src.cognition.context_builder import ContextBuilder
 from src.llm.reasoning_client import ReasoningClient, MockReasoningClient
 from src.cognition.reasoning_models import MemoryRecall
 from src.cognition.attention.attention_engine import CognitiveAttentionEngine
-from src.cognition.attention.attention_models import CognitiveState
+from src.cognition.context.models import CognitiveContext
 from datetime import datetime
 
 class ContextRestorationEngine:
@@ -24,26 +25,17 @@ class ContextRestorationEngine:
 
     def generate_context_cue(
         self, 
-        event: PresenceEvent, 
-        raw_memories: List[RelevantMemory], 
-        current_location: str, 
-        current_time: str
+        cognitive_context: CognitiveContext,
+        goal_hypotheses: Optional[List[GoalHypothesis]] = None
     ) -> MemoryRecall:
         """
-        Takes raw retrieved memories and an event, filters them, 
-        builds a structured prompt, and gets a natural language response from the LLM.
+        Takes the unified CognitiveContext and GoalHypotheses,
+        runs the Attention Engine, builds a goal-aware prompt,
+        and gets a natural language response from the LLM.
         """
         
         # 1. Attention Engine (Executive Function)
-        state = CognitiveState(
-            current_time=datetime.now(),
-            current_location=current_location,
-            face_id=event.face_id,
-            name=event.name,
-            relationship=event.relationship
-        )
-        
-        decision = self.attention_engine.evaluate(raw_memories, state)
+        decision = self.attention_engine.evaluate(cognitive_context)
         
         if not decision.should_interrupt:
             # Cognitive Silence
@@ -56,12 +48,30 @@ class ContextRestorationEngine:
         ranked_memories = decision.selected_memories
         
         # 2. Build Structured Context
-        prompt = self.builder.build_prompt(
-            event=event,
-            memories=ranked_memories,
-            current_location=current_location,
-            current_time=current_time
+        # Synthesize PresenceEvent for backwards compatibility with ContextBuilder
+        from src.interaction.events import PresenceEventType
+        synthesized_event = PresenceEvent(
+            type=PresenceEventType.PERSON_ARRIVED,
+            face_id=cognitive_context.identity.face_id if cognitive_context.identity else "unknown",
+            name=cognitive_context.identity.name if cognitive_context.identity else None,
+            relationship=cognitive_context.identity.relationship if cognitive_context.identity else None
         )
+        
+        prompt = self.builder.build_prompt(
+            event=synthesized_event,
+            memories=ranked_memories,
+            current_location="Living Room", # Mock
+            current_time=cognitive_context.temporal.time_of_day if cognitive_context.temporal else "Unknown"
+        )
+        
+        # 2b. Inject Goal Awareness into the prompt
+        if goal_hypotheses:
+            top_goals = [g for g in goal_hypotheses if g.confidence > 0.10]
+            if top_goals:
+                goal_section = "\n\nInferred User Goals:\n"
+                for g in top_goals[:3]:
+                    goal_section += f"- {g.name} (Confidence: {g.confidence:.0%}, State: {g.state.value})\n"
+                prompt += goal_section
         
         # 3. LLM Generation
         response_text = self.client.generate_cue(prompt)

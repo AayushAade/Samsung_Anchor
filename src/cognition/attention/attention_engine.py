@@ -1,5 +1,6 @@
 from typing import List
 from src.cognition.memory_models import RelevantMemory
+from src.cognition.context.models import CognitiveContext
 from src.cognition.attention.attention_models import CognitiveState, AttentionDecision, ScoredMemory
 from src.cognition.attention.scorers import (
     AttentionScorer, 
@@ -32,13 +33,26 @@ class CognitiveAttentionEngine:
             AdaptiveAttentionScorer()
         ]
 
-    def evaluate(self, memories: List[RelevantMemory], state: CognitiveState) -> AttentionDecision:
+    def evaluate(self, cognitive_context: CognitiveContext) -> AttentionDecision:
         """
-        Evaluate retrieved memories against the current cognitive state.
-        Returns the top memories and a boolean indicating if we should speak at all.
+        Calculates an attention score for every memory in the current context.
+        If the highest score exceeds the threshold, returns an INTERRUPT decision.
         """
+        
+        memories = cognitive_context.memory.memories if cognitive_context.memory else []
         if not memories:
-            return AttentionDecision(should_interrupt=False, selected_memories=[])
+            return AttentionDecision(should_interrupt=False, selected_memories=[], highest_score=0.0)
+            
+        # We synthesize a CognitiveState for the scorers from the CognitiveContext
+        from src.cognition.attention.attention_models import CognitiveState
+        
+        state = CognitiveState(
+            current_time=cognitive_context.temporal.current_time if cognitive_context.temporal else cognitive_context.timestamp,
+            current_location="Living Room", # Mock for now until SpatialContext is added
+            face_id=cognitive_context.identity.face_id if cognitive_context.identity else "unknown",
+            name=cognitive_context.identity.name if cognitive_context.identity else None,
+            relationship=cognitive_context.identity.relationship if cognitive_context.identity else None
+        )
             
         scored_memories: List[ScoredMemory] = []
         
