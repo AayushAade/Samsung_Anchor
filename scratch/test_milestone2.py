@@ -13,8 +13,27 @@ class MockRecognizer:
         time.sleep(0.02)
         return {"face_id": "Anonymous_ID_1", "name": "Sarah", "relationship": "Daughter"}
 
+class _FakeQuery:
+    def filter_by(self, **kw): return self
+    def first(self): return None
+    def all(self): return []
+
+class MockSessionFactory:
+    def __call__(self): return self
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def query(self, *args): return _FakeQuery()
+    def commit(self): pass
+    def add(self, *args): pass
+
+class MockMemoryRepo:
+    def find(self, query): return []
+    def save(self, memory): pass
+
 class MockDatabase:
-    pass
+    def __init__(self):
+        self.memory_repo = MockMemoryRepo()
+        self.SessionFactory = MockSessionFactory()
 
 class MockListener:
     pass

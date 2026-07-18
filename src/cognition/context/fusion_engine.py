@@ -1,4 +1,5 @@
 import time
+import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List
 from datetime import datetime
@@ -44,7 +45,6 @@ class ContextFusionEngine:
             for p in active_providers
         }
         
-        import concurrent.futures
         
         # Collect with timeout
         try:

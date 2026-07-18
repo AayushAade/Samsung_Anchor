@@ -17,7 +17,9 @@ def main():
     print("🧠 Samsung Anchor Demo")
     print("=" * 60)
 
-    pipeline = CognitivePipeline()
+    from src.memory.database import MemoraDatabase
+    db = MemoraDatabase()
+    pipeline = CognitivePipeline(db)
     encoder = MemoryEncoder()
 
     # ---------------------------------------------

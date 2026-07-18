@@ -31,3 +31,4 @@ class AttentionDecision:
     """
     should_interrupt: bool
     selected_memories: List[RelevantMemory]
+    highest_score: float = 0.0

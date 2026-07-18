@@ -1,3 +1,9 @@
+"""
+Samsung Anchor — Context Restoration Engine Test (Modernized for Phase 2+).
+
+Tests the full context restoration pipeline using CognitiveContext.
+"""
+
 import os
 import sys
 from datetime import datetime, timedelta
@@ -5,84 +11,64 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.cognition.memory_models import RelevantMemory, MemoryType, MemoryImportance
-from src.interaction.events import PresenceEvent, PresenceEventType
 from src.cognition.context_restoration_engine import ContextRestorationEngine
+from src.cognition.context.models import (
+    CognitiveContext, IdentityContext, MemoryContext, TemporalContext,
+)
+
 
 def main():
-    print("Testing Milestone 4: Context Restoration Engine...\n")
-    
-    # 1. Setup Mock Event
-    event = PresenceEvent(
-        type=PresenceEventType.PERSON_ARRIVED,
-        face_id="Face_1",
-        name="Sarah",
-        relationship="Daughter"
-    )
-    
-    # 2. Setup Mock Memories
+    print("Testing Context Restoration Engine (Phase 2+ API)...\n")
+
     now = datetime.now()
-    memories = [
-        # Very old memory (should be ranked lower)
-        RelevantMemory(
-            memory_id="1",
-            memory_type=MemoryType.EPISODIC,
-            importance=MemoryImportance.NORMAL,
-            summary="Sarah visited and we watched TV.",
-            timestamp=now - timedelta(days=30)
+
+    # Build a CognitiveContext with medical memories that should trigger INTERRUPT
+    ctx = CognitiveContext(
+        timestamp=now,
+        identity=IdentityContext(
+            face_id="Face_1", name="Sarah", relationship="Daughter",
+            confidence=1.0, is_known=True,
         ),
-        # Recent memory with commitments (should rank very high)
-        RelevantMemory(
-            memory_id="2",
-            memory_type=MemoryType.EPISODIC,
-            importance=MemoryImportance.HIGH,
-            summary="Sarah mentioned her new dog.",
-            timestamp=now - timedelta(hours=2),
-            commitments=["Ask about dog"]
+        memory=MemoryContext(
+            memories=[
+                RelevantMemory(
+                    memory_id="2",
+                    memory_type=MemoryType.EPISODIC,
+                    importance=MemoryImportance.HIGH,
+                    summary="Sarah mentioned her new dog.",
+                    timestamp=now - timedelta(hours=2),
+                    commitments=["Ask about dog"],
+                ),
+                RelevantMemory(
+                    memory_id="4",
+                    memory_type=MemoryType.SEMANTIC,
+                    importance=MemoryImportance.CRITICAL,
+                    summary="Sarah reminded to take heart medication.",
+                    timestamp=now - timedelta(days=1),
+                ),
+            ],
+            confidence=1.0,
         ),
-        # Trivial memory
-        RelevantMemory(
-            memory_id="3",
-            memory_type=MemoryType.SEMANTIC,
-            importance=MemoryImportance.LOW,
-            summary="Sarah likes blue.",
-            timestamp=now - timedelta(days=5)
+        temporal=TemporalContext(
+            current_time=now, time_of_day="Afternoon",
+            day_of_week="Monday", confidence=1.0,
         ),
-        # Medical memory
-        RelevantMemory(
-            memory_id="4",
-            memory_type=MemoryType.SEMANTIC,
-            importance=MemoryImportance.CRITICAL,
-            summary="Sarah reminded to take heart medication.",
-            timestamp=now - timedelta(days=1)
-        )
-    ]
-    
-    # 3. Run Engine
+    )
+
     engine = ContextRestorationEngine()
-    
-    # Print the raw prompt generation to verify structure
-    prompt = engine.builder.build_prompt(
-        event=event,
-        memories=engine.ranker.rank(memories),
-        current_location="Living Room",
-        current_time="4:30 PM"
-    )
-    
-    print("--- GENERATED PROMPT SENT TO LLM ---")
-    print(prompt)
-    print("------------------------------------\n")
-    
-    # 4. End-to-end Pipeline Test
-    recall = engine.generate_context_cue(
-        event=event,
-        raw_memories=memories,
-        current_location="Living Room",
-        current_time="4:30 PM"
-    )
-    
-    print(f"Engine returned generated response: '{recall.generated_response}'")
-    
-    print("\nMilestone 4 Engine Test Passed!")
+
+    # Run the full pipeline
+    recall = engine.generate_context_cue(cognitive_context=ctx)
+
+    print(f"Should Greet : {recall.should_greet}")
+    print(f"Memories Used: {len(recall.recalled_memories) if recall.recalled_memories else 0}")
+    print(f"LLM Response : '{recall.generated_response}'")
+
+    assert recall.should_greet, "Should have chosen to greet (medical memory present)"
+    assert recall.recalled_memories, "Should have selected memories"
+
+    print("\nContext Restoration Engine Test Passed!")
+
 
 if __name__ == "__main__":
     main()

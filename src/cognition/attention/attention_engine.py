@@ -43,8 +43,7 @@ class CognitiveAttentionEngine:
         if not memories:
             return AttentionDecision(should_interrupt=False, selected_memories=[], highest_score=0.0)
             
-        # We synthesize a CognitiveState for the scorers from the CognitiveContext
-        from src.cognition.attention.attention_models import CognitiveState
+        # Synthesize a CognitiveState for the scorers from the CognitiveContext
         
         state = CognitiveState(
             current_time=cognitive_context.temporal.current_time if cognitive_context.temporal else cognitive_context.timestamp,

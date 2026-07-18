@@ -20,3 +20,7 @@ ENV/
 # ML Models
 *.pt
 
+
+# Runtime generated face vector database
+face_embeddings.index
+face_mapping.json

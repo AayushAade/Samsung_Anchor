@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Optional
 from src.cognition.memory_models import RelevantMemory
 from src.cognition.goals.models import GoalHypothesis
-from src.interaction.events import PresenceEvent
+from src.interaction.events import PresenceEvent, PresenceEventType
 from src.cognition.context_builder import ContextBuilder
 from src.llm.reasoning_client import ReasoningClient, MockReasoningClient
 from src.cognition.reasoning_models import MemoryRecall
@@ -49,7 +49,6 @@ class ContextRestorationEngine:
         
         # 2. Build Structured Context
         # Synthesize PresenceEvent for backwards compatibility with ContextBuilder
-        from src.interaction.events import PresenceEventType
         synthesized_event = PresenceEvent(
             type=PresenceEventType.PERSON_ARRIVED,
             face_id=cognitive_context.identity.face_id if cognitive_context.identity else "unknown",
