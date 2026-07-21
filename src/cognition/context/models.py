@@ -48,6 +48,7 @@ class CognitiveContext:
     identity: Optional[IdentityContext]
     memory: Optional[MemoryContext]
     temporal: Optional[TemporalContext]
+    continuity: Optional[Any] = None
     
     # Future Extension Points (Left as None for now)
     spatial: Optional[Any] = None

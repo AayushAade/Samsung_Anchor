@@ -32,7 +32,7 @@ def test_person_arrived():
     assert action is not None
     assert action.type == InteractionActionType.SPEAK
     assert action.message == (
-        "Alice is here. They are your Friend."
+        "Hello. Your friend, Alice, is here."
     )
 
 
@@ -56,7 +56,7 @@ def test_person_with_memory():
     )
 
     assert (
-        "Last time you discussed the Samsung prototype."
+        "Here's a gentle reminder: discussed the Samsung prototype."
         in action.message
     )
 
@@ -84,7 +84,7 @@ def test_person_with_commitment():
     )
 
     assert (
-        "You also planned to send the presentation."
+        "By the way, you also planned to send the presentation."
         in action.message
     )
 

@@ -1,0 +1,134 @@
+
+src/
+  - __init__.py: No docstring
+
+src/mapping/
+  - spatial_slam.py: No docstring
+  - __init__.py: No docstring
+
+src/pipeline/
+  - __init__.py: No docstring
+  - cognitive_pipeline.py: Samsung Anchor Cognitive Pipeline.
+
+src/coordinator/
+  - anchor_coordinator.py: Anchor Coordinator
+  - __init__.py: No docstring
+
+src/llm/
+  - reasoning_client.py: No docstring
+  - gemini_client.py: No docstring
+
+src/core/
+  - metrics.py: No docstring
+  - inspector.py: No docstring
+  - event_bus.py: No docstring
+
+src/memory/
+  - models.py: No docstring
+  - vector_store.py: No docstring
+  - object_ledger.py: No docstring
+  - database.py: No docstring
+  - __init__.py: No docstring
+
+src/memory/repositories/
+  - identity_repository.py: No docstring
+  - object_repository.py: No docstring
+  - episode_repository.py: No docstring
+  - __init__.py: No docstring
+  - memory_repository.py: No docstring
+
+src/cognition/
+  - memory_models.py: No docstring
+  - reasoning_engine.py: No docstring
+  - context_restoration_engine.py: No docstring
+  - episode.py: Episode Model
+  - conversation.py: No docstring
+  - context_builder.py: No docstring
+  - memory_taxonomy.py: No docstring
+  - context_cue.py: Context Cue
+  - episode_repository.py: Episode Repository
+  - memory_query.py: No docstring
+  - experience.py: No docstring
+  - __init__.py: No docstring
+  - episode_builder.py: Episode Builder.
+  - memory_repository.py: Memory Repository.
+  - cue_manager.py: Cue Manager
+  - cognitive_memory_manager.py: No docstring
+  - forgetting_strategy.py: No docstring
+  - memory_engine.py: Memory Engine.
+  - reasoning_models.py: No docstring
+  - context_restorer.py: Context Restorer
+  - memory_encoder.py: No docstring
+  - memory_consolidator.py: No docstring
+  - cue_formatter.py: Cue Formatter.
+  - episode_engine.py: Episode Engine.
+
+src/cognition/attention/
+  - scorers.py: No docstring
+  - attention_engine.py: No docstring
+  - attention_models.py: No docstring
+
+src/cognition/context/
+  - fusion_engine.py: No docstring
+  - models.py: No docstring
+  - provider.py: No docstring
+  - registry.py: No docstring
+
+src/cognition/context/providers/
+  - temporal.py: No docstring
+  - memory.py: No docstring
+  - identity.py: No docstring
+
+src/cognition/goals/
+  - inference_engine.py: Samsung Anchor — Goal Inference Engine.
+  - models.py: Samsung Anchor — Goal Reasoning Data Models.
+  - reasoner.py: Samsung Anchor — Goal Reasoner.
+  - __init__.py: No docstring
+  - lifecycle.py: Samsung Anchor — Goal Lifecycle Manager.
+  - repository.py: Samsung Anchor — Goal Repository.
+
+src/cognition/reflection/
+  - confidence_manager.py: No docstring
+  - feedback.py: No docstring
+  - reflection_engine.py: No docstring
+
+src/integration/
+  - identity_learning_pipeline.py: Identity Learning Pipeline
+  - __init__.py: No docstring
+  - async_identity_learning.py: Async Identity Learning
+
+src/runtime/
+  - __init__.py: No docstring
+  - runtime.py: Samsung Anchor Runtime
+
+src/utils/
+  - __init__.py: No docstring
+  - dock_monitor.py: Sleep monitor and cold start dock sensor integrations (Pillar IV).
+  - event_logger.py: No docstring
+
+src/vision/
+  - face_recognizer.py: No docstring
+  - __init__.py: No docstring
+
+src/reasoning/
+  - __init__.py: No docstring
+  - intent_predictor.py: Habits, routines, and proactive context whispers (Pillar III).
+  - context_binder.py: No docstring
+
+src/audio/
+  - audio_listener.py: No docstring
+  - __init__.py: No docstring
+
+src/application/
+  - __init__.py: No docstring
+  - factory.py: Application Factory
+
+src/interaction/
+  - events.py: Samsung Anchor Events.
+  - interaction_manager.py: Interaction Manager.
+  - actions.py: Interaction Actions.
+  - __init__.py: No docstring
+  - presence_engine.py: Presence Engine.
+
+src/services/
+  - identity_learning_service.py: Identity Learning Service.

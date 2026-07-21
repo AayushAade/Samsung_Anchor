@@ -34,10 +34,13 @@ class InteractionManager:
         if event.type != PresenceEventType.PERSON_ARRIVED:
             return None
 
-        message = f"{event.name} is here"
-
-        if event.relationship:
-            message += f". They are your {event.relationship}."
+        if event.name:
+            if event.relationship:
+                message = f"Hello. Your {event.relationship.lower()}, {event.name}, is here."
+            else:
+                message = f"Hello. {event.name} is here."
+        else:
+            message = "Someone is here."
         
         if recall is not None and not recall.should_greet:
             # The Executive Function decided on cognitive silence.
@@ -57,11 +60,11 @@ class InteractionManager:
                 memory = recall.recalled_memories[0]
 
                 if memory.summary:
-                    message += f" Last time you {memory.summary}"
+                    message += f" Here's a gentle reminder: {memory.summary}"
 
                 if memory.commitments:
                     message += (
-                        f" You also planned to "
+                        f" By the way, you also planned to "
                         f"{memory.commitments[0]}."
                     )
 

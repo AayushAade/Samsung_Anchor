@@ -14,7 +14,9 @@ class ContextBuilder:
         event: PresenceEvent, 
         memories: List[RelevantMemory], 
         current_location: str, 
-        current_time: str
+        current_time: str,
+        orientation: Optional[Any] = None,
+        social: Optional[Any] = None
     ) -> str:
         """
         Builds the context string matching the rigorous spec.
@@ -43,6 +45,31 @@ class ContextBuilder:
         # 4. Current Environment
         environment = f"- {current_location}"
         
+        # 5. Orientation Anchor
+        orientation_section = ""
+        if orientation:
+            stage = getattr(orientation, "routine_stage", "Daytime Routine")
+            recent = getattr(orientation, "recent_activity", None)
+            upcoming = getattr(orientation, "upcoming_activity", None)
+            orientation_section = f"\nDaily Orientation Anchor:\n- Routine Stage: {stage}"
+            if recent:
+                orientation_section += f"\n- Recent Activity: {recent}"
+            if upcoming:
+                orientation_section += f"\n- Next Activity: {upcoming}"
+            orientation_section += "\n"
+
+        # 6. Relationship Context
+        relationship_section = ""
+        if social and getattr(social, "active_profile", None):
+            prof = social.active_profile
+            greeting = getattr(prof, "preferred_greeting", "")
+            freq = getattr(prof, "visit_frequency", "")
+            dates = getattr(prof, "important_dates", [])
+            relationship_section = f"\nRelationship Context:\n- Preferred Greeting: {greeting}\n- Visit Cadence: {freq}"
+            if dates:
+                relationship_section += f"\n- Milestones: {', '.join(dates)}"
+            relationship_section += "\n"
+
         # Final Prompt Assembly
         prompt = f"""Current Situation:
 {situation}
@@ -55,9 +82,17 @@ User Profile:
 
 Current Environment:
 {environment}
-
+{orientation_section}{relationship_section}
 Task:
-Generate one short, natural memory cue to help the user remember the context of this person.
-Do not hallucinate. Do not act like an AI. Just provide a natural reminder.
+Generate one short, natural memory cue to help the user remember the context of this person and preserve their warm relationship.
+CRITICAL HUMAN-CENTERED GUIDELINES (DIGNITY FILTER):
+- Speak calmly, gently, and warmly.
+- Never overload the user: present ONE simple idea at a time.
+- Never say "You forgot". Instead, use phrases like "Here is a gentle reminder" or "By the way".
+- Never quiz or test the user. Never ask "Do you remember who this is?".
+- Encourage warm human interaction, do not dominate the conversation.
+- Avoid all medical jargon.
+- Validate their reality; never argue or correct harshly.
+- Do not hallucinate. Do not act like an AI. Just provide a natural, compassionate reminder.
 """
         return prompt.strip()

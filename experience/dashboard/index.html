@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memora — Cognitive Experience Platform</title>
+    <meta name="description" content="Live window into an artificial external hippocampus. Watch cognition happen in real-time.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- ============================================================ -->
+    <!-- Header -->
+    <!-- ============================================================ -->
+    <header class="header">
+        <div class="header__brand">
+            <div class="header__logo">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <circle cx="14" cy="14" r="12" stroke="url(#logo-grad)" stroke-width="2" opacity="0.8"/>
+                    <circle cx="14" cy="14" r="6" fill="url(#logo-grad)" opacity="0.6"/>
+                    <circle cx="14" cy="14" r="2" fill="#fff"/>
+                    <defs>
+                        <linearGradient id="logo-grad" x1="0" y1="0" x2="28" y2="28">
+                            <stop stop-color="#6366f1"/>
+                            <stop offset="1" stop-color="#a78bfa"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="header__title">
+                <h1>Memora</h1>
+                <span class="header__subtitle">Cognitive Experience Platform</span>
+            </div>
+        </div>
+        <div class="header__status">
+            <label class="caregiver-toggle" title="Switch to Caregiver View">
+                <input type="checkbox" id="caregiver-toggle-input">
+                <span class="caregiver-toggle__slider"></span>
+                <span class="caregiver-toggle__label">Caregiver View</span>
+            </label>
+            <div class="status-indicator" id="connection-status">
+                <span class="status-dot"></span>
+                <span class="status-text">Connecting…</span>
+            </div>
+            <div class="header__cycle" id="cycle-counter">Cycle —</div>
+        </div>
+    </header>
+
+    <!-- ============================================================ -->
+    <!-- Main Grid -->
+    <!-- ============================================================ -->
+    <main class="dashboard">
+
+        <!-- ============================== -->
+        <!-- Pipeline Visualization -->
+        <!-- ============================== -->
+        <section class="panel panel--pipeline" id="pipeline-panel">
+            <h2 class="panel__title">Cognitive Pipeline</h2>
+            <div class="pipeline">
+                <div class="pipeline__stage" data-stage="perception">
+                    <div class="stage__icon">👁</div>
+                    <div class="stage__label">Perception</div>
+                    <div class="stage__status">Waiting</div>
+                </div>
+                <div class="pipeline__connector"></div>
+                <div class="pipeline__stage" data-stage="context">
+                    <div class="stage__icon">🔗</div>
+                    <div class="stage__label">Context Fusion</div>
+                    <div class="stage__status">Waiting</div>
+                </div>
+                <div class="pipeline__connector"></div>
+                <div class="pipeline__stage" data-stage="goals">
+                    <div class="stage__icon">🎯</div>
+                    <div class="stage__label">Goal Inference</div>
+                    <div class="stage__status">Waiting</div>
+                </div>
+                <div class="pipeline__connector"></div>
+                <div class="pipeline__stage" data-stage="attention">
+                    <div class="stage__icon">⚡</div>
+                    <div class="stage__label">Executive Function</div>
+                    <div class="stage__status">Waiting</div>
+                </div>
+                <div class="pipeline__connector"></div>
+                <div class="pipeline__stage" data-stage="action">
+                    <div class="stage__icon">💬</div>
+                    <div class="stage__label">Interaction</div>
+                    <div class="stage__status">Waiting</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================== -->
+        <!-- Daily Orientation Panel -->
+        <!-- ============================== -->
+        <section class="panel panel--orientation" id="orientation-panel">
+            <h2 class="panel__title">Daily Orientation</h2>
+            <div class="orientation" id="orientation-content">
+                <div class="orientation__empty">
+                    <p>Initializing orientation anchors…</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================== -->
+        <!-- Identity Panel -->
+        <!-- ============================== -->
+        <section class="panel panel--identity" id="identity-panel">
+            <h2 class="panel__title">Identity</h2>
+            <div class="identity" id="identity-content">
+                <div class="identity__empty">
+                    <div class="identity__avatar identity__avatar--empty">?</div>
+                    <p>No person detected</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================== -->
+        <!-- Relationship Panel -->
+        <!-- ============================== -->
+        <section class="panel panel--relationship" id="relationship-panel">
+            <h2 class="panel__title">Relationship Context</h2>
+            <div class="relationship" id="relationship-content">
+                <div class="relationship__empty">
+                    <p>No active relationship profile loaded</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================== -->
+        <!-- Goal Panel -->
+        <!-- ============================== -->
+        <section class="panel panel--goals" id="goals-panel">
+            <h2 class="panel__title">Goal Hypotheses</h2>
+            <div class="goals" id="goals-content">
+                <div class="goals__empty">No goals inferred</div>
+            </div>
+        </section>
+
+        <!-- ============================== -->
+        <!-- Attention Panel -->
+        <!-- ============================== -->
+        <section class="panel panel--attention" id="attention-panel">
+            <h2 class="panel__title">Executive Attention</h2>
+            <div class="attention" id="attention-content">
+                <div class="attention__empty">Awaiting cognitive cycle</div>
+            </div>
+        </section>
+
+        <!-- ============================== -->
+        <!-- Memory Panel -->
+        <!-- ============================== -->
+        <section class="panel panel--memory" id="memory-panel">
+            <h2 class="panel__title">Retrieved Memories</h2>
+            <div class="memories" id="memory-content">
+                <div class="memories__empty">No memories retrieved</div>
+            </div>
+        </section>
+
+        <!-- ============================== -->
+        <!-- Cognitive Timeline -->
+        <!-- ============================== -->
+        <section class="panel panel--timeline" id="timeline-panel">
+            <h2 class="panel__title">Cognitive Timeline</h2>
+            <div class="timeline" id="timeline-content">
+                <div class="timeline__empty">
+                    <div class="timeline__pulse"></div>
+                    <p>Waiting for cognitive events…</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ============================================================ -->
+    <!-- Footer -->
+    <!-- ============================================================ -->
+    <footer class="footer">
+        <span>Samsung Anchor Research · Computational Cognitive Architecture</span>
+        <span>Artificial External Hippocampus</span>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

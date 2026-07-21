@@ -73,6 +73,8 @@ class ContextFusionEngine:
         identity_ctx = None
         memory_ctx = None
         temporal_ctx = None
+        continuity_ctx = None
+        social_ctx = None
         conflict_traces = []
         
         for r in responses:
@@ -85,6 +87,10 @@ class ContextFusionEngine:
                 memory_ctx = r.data
             elif r.domain == "temporal":
                 temporal_ctx = r.data
+            elif r.domain == "continuity":
+                continuity_ctx = r.data
+            elif r.domain == "social":
+                social_ctx = r.data
                 
         # 3. Snapshot Generation
         return CognitiveContext(
@@ -92,6 +98,8 @@ class ContextFusionEngine:
             identity=identity_ctx,
             memory=memory_ctx,
             temporal=temporal_ctx,
+            continuity=continuity_ctx,
+            social=social_ctx,
             conflict_traces=conflict_traces,
             provider_latencies=provider_latencies,
             dropped_providers=dropped_providers
