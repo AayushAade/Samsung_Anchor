@@ -224,6 +224,180 @@ function renderRelationship(event) {
     setTimeout(() => panel.classList.remove('active'), 2000);
 }
 
+function renderAssistance(event) {
+    const container = document.getElementById('assistance-content');
+    const panel = document.getElementById('assistance-panel');
+
+    if (!container || !panel) return;
+
+    const lvlCode = event.assistance_level !== undefined ? event.assistance_level : 0;
+    const lvlLabel = event.assistance_level_label || `Level ${lvlCode}: Observe`;
+    const rationale = event.assistance_rationale || 'Patient navigating routine independently.';
+
+    container.innerHTML = `
+        <div class="assistance-card">
+            <div class="assistance-card__header">
+                <span class="assistance-level-badge assistance-level--${lvlCode}">${lvlLabel}</span>
+                ${event.escalation_triggered ? '<span style="font-size:0.7rem; color:var(--color-warning); font-weight:600;">⚠️ Escalated</span>' : ''}
+            </div>
+            <div class="assistance-card__rationale">${rationale}</div>
+        </div>`;
+
+    panel.classList.add('active');
+    setTimeout(() => panel.classList.remove('active'), 2000);
+}
+
+function renderConversation(event) {
+    const container = document.getElementById('conversation-content');
+    const panel = document.getElementById('conversation-panel');
+
+    if (!container || !panel) return;
+
+    const state = event.conversation_state || 'Idle';
+    const speaker = event.active_speaker || 'Patient';
+    const strategy = event.response_strategy || 'Supportive Silence';
+    const turns = event.turn_count || 0;
+    const elapsed = event.elapsed_seconds || 0;
+    const topic = event.conversation_topic || 'General Orientation & Support';
+
+    container.innerHTML = `
+        <div class="conversation-card">
+            <div class="conversation-card__header">
+                <span class="conversation-state-badge">💬 ${state}</span>
+                <span style="font-size:0.75rem; color:var(--text-tertiary);">Speaker: ${speaker}</span>
+            </div>
+            <div class="conversation-card__metrics">
+                <span>Turn: #${turns}</span>
+                <span>Duration: ${elapsed}s</span>
+                <span>Topic: ${topic}</span>
+            </div>
+            <div class="conversation-card__strategy">
+                <span style="color:var(--text-tertiary); font-size:0.75rem;">Strategy:</span> <strong>${strategy}</strong>
+            </div>
+        </div>`;
+
+    panel.classList.add('active');
+    setTimeout(() => panel.classList.remove('active'), 2000);
+}
+
+function renderClinical(event) {
+    const container = document.getElementById('clinical-content');
+    const panel = document.getElementById('clinical-panel');
+
+    if (!container || !panel) return;
+
+    const patient = event.patient_name || 'Eleanor';
+    const caregiver = event.primary_caregiver || 'Sarah Jenkins';
+    const meds = (event.pending_medications || []).join(', ') || 'All morning meds confirmed';
+    const appts = (event.upcoming_appointments || []).join(', ') || 'No immediate appointments';
+    const explanation = event.explanation_reason || 'System evaluating routine observation status.';
+    const consent = event.consent_granted ? 'Granted ✓' : 'Revoked ❌';
+
+    container.innerHTML = `
+        <div class="clinical-card">
+            <div class="clinical-card__header">
+                <span class="clinical-tag">Patient: ${patient}</span>
+                <span style="font-size:0.75rem; color:var(--text-tertiary);">Caregiver: ${caregiver}</span>
+            </div>
+            <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:4px;">
+                <div><strong>Pending Meds:</strong> ${meds}</div>
+                <div><strong>Upcoming Appts:</strong> ${appts}</div>
+                <div><strong>Voice Consent:</strong> ${consent}</div>
+            </div>
+            <div class="clinical-card__explanation">
+                <strong>Decision Rationale:</strong> ${explanation}
+            </div>
+        </div>`;
+
+    panel.classList.add('active');
+    setTimeout(() => panel.classList.remove('active'), 2000);
+}
+
+function renderPerception(event) {
+    const container = document.getElementById('perception-content');
+    const panel = document.getElementById('perception-panel');
+
+    if (!container || !panel) return;
+
+    const room = event.current_room || 'Living Room';
+    const activity = event.detected_activity || 'Sitting';
+    const fps = event.sensor_fps !== undefined ? event.sensor_fps : 30.0;
+    const objs = (event.detected_objects || []).join(', ') || 'Reading Glasses, Water Bottle';
+    const auds = (event.audio_events || []).join(', ') || 'Speech Present';
+
+    container.innerHTML = `
+        <div class="perception-card">
+            <div class="perception-card__header">
+                <span class="room-badge">📍 ${room}</span>
+                <span class="activity-badge">🏃 ${activity}</span>
+            </div>
+            <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:6px;">
+                <div><strong>Tracked Objects:</strong> ${objs}</div>
+                <div><strong>Audio Events:</strong> ${auds}</div>
+                <div style="margin-top:2px; font-size:0.75rem; color:var(--text-tertiary);">Sensor Rate: ${fps} FPS</div>
+            </div>
+        </div>`;
+
+    panel.classList.add('active');
+    setTimeout(() => panel.classList.remove('active'), 2000);
+}
+
+function renderRuntime(event) {
+    const container = document.getElementById('runtime-content');
+    const panel = document.getElementById('runtime-panel');
+
+    if (!container || !panel) return;
+
+    const mode = event.runtime_mode || 'Simulation Mode';
+    const cpu = event.cpu_usage_pct !== undefined ? event.cpu_usage_pct : 14.2;
+    const ram = event.ram_usage_pct !== undefined ? event.ram_usage_pct : 36.8;
+    const devCount = event.connected_devices_count !== undefined ? event.connected_devices_count : 6;
+
+    container.innerHTML = `
+        <div class="runtime-card">
+            <div class="runtime-card__header">
+                <span class="mode-badge">⚡ ${mode}</span>
+                <span class="device-chip">STATUS: HEALTHY</span>
+            </div>
+            <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:6px;">
+                <div><strong>System Resources:</strong> CPU: ${cpu}% | RAM: ${ram}%</div>
+                <div><strong>Active Hardware Adapters:</strong> ${devCount} Connected</div>
+                <div style="margin-top:2px; font-size:0.75rem; color:var(--text-tertiary);">Camera, Mic, Speaker, BLE, IMU OK</div>
+            </div>
+        </div>`;
+
+    panel.classList.add('active');
+    setTimeout(() => panel.classList.remove('active'), 2000);
+}
+
+function renderOperations(event) {
+    const container = document.getElementById('ops-content');
+    const panel = document.getElementById('ops-panel');
+
+    if (!container || !panel) return;
+
+    const profile = event.deployment_profile || 'Simulation Profile';
+    const health = event.system_health_status || 'Healthy';
+    const cycles = event.total_cycles_executed !== undefined ? event.total_cycles_executed : 1;
+    const errors = event.active_errors_count !== undefined ? event.active_errors_count : 0;
+
+    container.innerHTML = `
+        <div class="ops-card">
+            <div class="ops-card__header">
+                <span class="profile-badge">⚙️ ${profile}</span>
+                <span class="health-chip">HEALTH: ${health.toUpperCase()}</span>
+            </div>
+            <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:6px;">
+                <div><strong>Total Cycles Executed:</strong> ${cycles}</div>
+                <div><strong>Active Error Alerts:</strong> ${errors}</div>
+                <div style="margin-top:2px; font-size:0.75rem; color:var(--text-tertiary);">Structured JSON Logging & Metrics Active</div>
+            </div>
+        </div>`;
+
+    panel.classList.add('active');
+    setTimeout(() => panel.classList.remove('active'), 2000);
+}
+
 function renderGoals(event) {
     const container = document.getElementById('goals-content');
     const panel = document.getElementById('goals-panel');
@@ -418,6 +592,12 @@ function handleCognitiveEvent(event) {
     renderRelationship(event);
     renderGoals(event);
     renderAttention(event);
+    renderAssistance(event);
+    renderConversation(event);
+    renderClinical(event);
+    renderPerception(event);
+    renderRuntime(event);
+    renderOperations(event);
     renderMemories(event);
     renderTimeline(event);
     updateCycleCounter(event);
@@ -443,6 +623,12 @@ document.addEventListener('DOMContentLoaded', () => {
         'relationship-panel': { tech: 'Relationship Context', care: 'Family & Friend Connection' },
         'goals-panel': { tech: 'Goal Hypotheses', care: 'Estimated Needs / Activities' },
         'attention-panel': { tech: 'Executive Attention', care: 'Decision to Speak / Intervene' },
+        'assistance-panel': { tech: 'Assistance Policy Engine', care: 'Support Level & Independence' },
+        'conversation-panel': { tech: 'Conversation Engine', care: 'Voice & Dialogue Flow' },
+        'clinical-panel': { tech: 'Clinical Ecosystem', care: 'Care & Health Management' },
+        'perception-panel': { tech: 'Edge Perception Engine', care: 'Environment & Activity Monitoring' },
+        'runtime-panel': { tech: 'Hardware Runtime Engine', care: 'Device & System Health' },
+        'ops-panel': { tech: 'Operations & Observability Engine', care: 'System Reliability & Health' },
         'memory-panel': { tech: 'Retrieved Memories', care: 'Recalled Information' },
         'timeline-panel': { tech: 'Cognitive Timeline', care: 'Event Timeline' }
     };

@@ -49,11 +49,12 @@ class CognitiveContext:
     memory: Optional[MemoryContext]
     temporal: Optional[TemporalContext]
     continuity: Optional[Any] = None
+    social: Optional[Any] = None
+    assistance: Optional[Any] = None
     
     # Future Extension Points (Left as None for now)
     spatial: Optional[Any] = None
     medical: Optional[Any] = None
-    social: Optional[Any] = None
     
     # Fusion Metadata
     conflict_traces: List[ConflictTrace] = field(default_factory=list)

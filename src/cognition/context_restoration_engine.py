@@ -62,7 +62,8 @@ class ContextRestorationEngine:
             current_location="Living Room", # Mock
             current_time=cognitive_context.temporal.time_of_day if cognitive_context.temporal else "Unknown",
             orientation=cognitive_context.continuity,
-            social=cognitive_context.social
+            social=cognitive_context.social,
+            assistance=cognitive_context.assistance
         )
         
         # 2b. Inject Goal Awareness into the prompt

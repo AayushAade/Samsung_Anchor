@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  memora-core:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile
+    container_name: memora-core
+    environment:
+      - MEMORA_PROFILE=SIMULATION
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  memora-dashboard:
+    image: nginx:alpine
+    container_name: memora-dashboard
+    ports:
+      - "3000:80"
+    volumes:
+      - ../../experience/dashboard:/usr/share/nginx/html:ro
+    depends_on:
+      - memora-core

@@ -56,6 +56,52 @@ class CognitiveEvent:
     care_notes: Optional[str] = None
     closeness_score: float = 0.0
 
+    # Graduated Assistance Context
+    assistance_level: int = 0
+    assistance_level_name: Optional[str] = None
+    assistance_level_label: Optional[str] = None
+    assistance_rationale: Optional[str] = None
+    escalation_triggered: bool = False
+
+    # Conversation Engine Context
+    conversation_state: Optional[str] = None
+    active_speaker: Optional[str] = None
+    response_strategy: Optional[str] = None
+    interaction_type: Optional[str] = None
+    turn_count: int = 0
+    elapsed_seconds: float = 0.0
+    conversation_topic: Optional[str] = None
+    conversation_owner: Optional[str] = None
+
+    # Clinical Ecosystem Context
+    patient_name: Optional[str] = None
+    primary_caregiver: Optional[str] = None
+    pending_medications: List[str] = None
+    upcoming_appointments: List[str] = None
+    consent_granted: bool = True
+    emergency_active: bool = False
+    explanation_reason: Optional[str] = None
+
+    # Edge Perception Context
+    current_room: Optional[str] = None
+    detected_activity: Optional[str] = None
+    detected_objects: List[str] = None
+    audio_events: List[str] = None
+    sensor_fps: float = 30.0
+
+    # Hardware Runtime Context
+    runtime_mode: Optional[str] = None
+    device_statuses: Dict[str, str] = None
+    cpu_usage_pct: float = 0.0
+    ram_usage_pct: float = 0.0
+    connected_devices_count: int = 0
+
+    # Operations & Observability Context
+    deployment_profile: Optional[str] = None
+    system_health_status: Optional[str] = None
+    total_cycles_executed: int = 0
+    active_errors_count: int = 0
+
     # Memory
     memories: List[Dict[str, Any]] = None
     memory_count: int = 0
@@ -168,6 +214,11 @@ class CognitiveStream:
         generated_response: str = "",
         final_action: str = "",
         total_latency_ms: float = 0.0,
+        conversation_context=None,
+        clinical_context=None,
+        perception_context=None,
+        runtime_summary=None,
+        ops_summary=None,
     ) -> CognitiveEvent:
         """
         Build a CognitiveEvent from the raw pipeline outputs.
@@ -216,6 +267,61 @@ class CognitiveStream:
                 event.communication_preferences = getattr(prof, "communication_preferences", None)
                 event.care_notes = getattr(prof, "care_notes", None)
                 event.closeness_score = getattr(prof, "closeness_score", 0.95)
+
+        # Graduated Assistance Context
+        if cognitive_context and getattr(cognitive_context, "assistance", None):
+            ast = cognitive_context.assistance
+            event.assistance_level = getattr(ast, "level_code", 0)
+            event.assistance_level_name = getattr(getattr(ast, "level", None), "name_simple", "Observe") if hasattr(getattr(ast, "level", None), "name_simple") else "Observe"
+            event.assistance_level_label = getattr(ast, "level_label", "Level 0: Observe")
+            event.assistance_rationale = getattr(ast, "rationale", None)
+            event.escalation_triggered = getattr(ast, "escalation_triggered", False)
+
+        # Conversation Engine Context
+        if conversation_context:
+            event.conversation_state = getattr(getattr(conversation_context, "state", None), "value", "Idle")
+            event.active_speaker = getattr(getattr(conversation_context, "active_speaker", None), "value", "Patient")
+            event.response_strategy = getattr(getattr(conversation_context, "response_strategy", None), "value", "Supportive Silence")
+            event.interaction_type = getattr(getattr(conversation_context, "interaction_type", None), "value", "Casual")
+            event.turn_count = getattr(conversation_context, "turn_count", 0)
+            event.elapsed_seconds = getattr(conversation_context, "elapsed_seconds", 0.0)
+            event.conversation_topic = getattr(conversation_context, "topic", "General Orientation & Support")
+            event.conversation_owner = getattr(conversation_context, "owner", "Patient")
+
+        # Clinical Ecosystem Context
+        if clinical_context:
+            event.patient_name = clinical_context.get("patient_name", "Eleanor")
+            event.primary_caregiver = clinical_context.get("primary_caregiver", "Sarah Jenkins")
+            event.pending_medications = clinical_context.get("pending_medications", [])
+            event.upcoming_appointments = clinical_context.get("upcoming_appointments", [])
+            event.consent_granted = clinical_context.get("consent_granted", True)
+            event.emergency_active = clinical_context.get("emergency_active", False)
+            event.explanation_reason = clinical_context.get("explanation_reason", None)
+
+        # Edge Perception Context
+        if perception_context:
+            event.current_room = getattr(getattr(perception_context, "current_room", None), "value", "Living Room")
+            event.detected_activity = getattr(getattr(perception_context, "detected_activity", None), "value", "Sitting")
+            objs = getattr(perception_context, "detected_objects", [])
+            event.detected_objects = [o.object_name if hasattr(o, "object_name") else str(o) for o in objs]
+            auds = getattr(perception_context, "audio_events", [])
+            event.audio_events = [a.event_type.value if hasattr(a, "event_type") and hasattr(a.event_type, "value") else str(a) for a in auds]
+            event.sensor_fps = getattr(perception_context, "fps", 30.0)
+
+        # Hardware Runtime Context
+        if runtime_summary:
+            event.runtime_mode = runtime_summary.get("mode", "Simulation Mode")
+            event.device_statuses = runtime_summary.get("device_statuses", {})
+            event.cpu_usage_pct = runtime_summary.get("cpu_usage_pct", 14.2)
+            event.ram_usage_pct = runtime_summary.get("ram_usage_pct", 36.8)
+            event.connected_devices_count = runtime_summary.get("connected_devices", 5)
+
+        # Operations & Observability Context
+        if ops_summary:
+            event.deployment_profile = ops_summary.get("deployment_profile", "Simulation")
+            event.system_health_status = ops_summary.get("system_health", "Healthy")
+            event.total_cycles_executed = ops_summary.get("total_cycles", 0)
+            event.active_errors_count = ops_summary.get("active_errors", 0)
 
         # Memory
         if cognitive_context and cognitive_context.memory:

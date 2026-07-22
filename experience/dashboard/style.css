@@ -340,6 +340,328 @@ h1, h2, h3, h4 {
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
+/* ================================================================
+   Graduated Assistance Panel Styles
+   ================================================================ */
+.assistance {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.assistance__empty {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: var(--space-md);
+}
+
+.assistance-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.assistance-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.assistance-level-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 100px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.assistance-level--0 { background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+.assistance-level--1 { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }
+.assistance-level--2 { background: rgba(96, 165, 250, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.3); }
+.assistance-level--3 { background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.3); }
+.assistance-level--4 { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); }
+.assistance-level--5 { background: rgba(248, 113, 113, 0.2); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.4); }
+
+.assistance-card__rationale {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.35;
+    margin-top: 4px;
+}
+
+/* ================================================================
+   Conversation Panel Styles
+   ================================================================ */
+.conversation {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.conversation__empty {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: var(--space-md);
+}
+
+.conversation-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.conversation-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.conversation-state-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 100px;
+    background: var(--accent-glow);
+    color: var(--accent-secondary);
+    border: 1px solid var(--border-active);
+}
+
+.conversation-card__metrics {
+    display: flex;
+    gap: var(--space-md);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.conversation-card__strategy {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed var(--border-subtle);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    margin-top: 4px;
+}
+
+/* ================================================================
+   Clinical Ecosystem Panel Styles
+   ================================================================ */
+.clinical {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.clinical__empty {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: var(--space-md);
+}
+
+.clinical-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.clinical-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.clinical-tag {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 100px;
+    background: rgba(52, 211, 153, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.clinical-card__explanation {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 2px solid var(--accent-primary);
+    padding: 6px 10px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    line-height: 1.35;
+    margin-top: 4px;
+}
+
+/* ================================================================
+   Edge Perception Panel Styles
+   ================================================================ */
+.perception {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.perception__empty {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: var(--space-md);
+}
+
+.perception-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.perception-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.room-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 100px;
+    background: rgba(96, 165, 250, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.activity-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 100px;
+    background: rgba(167, 139, 250, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+/* ================================================================
+   Hardware Runtime Panel Styles
+   ================================================================ */
+.runtime {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.runtime__empty {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: var(--space-md);
+}
+
+.runtime-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.runtime-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mode-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 100px;
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.device-chip {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(52, 211, 153, 0.15);
+    color: #34d399;
+}
+
+/* ================================================================
+   Operations & Observability Panel Styles
+   ================================================================ */
+.ops {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.ops__empty {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: var(--space-md);
+}
+
+.ops-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.ops-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.profile-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 100px;
+    background: rgba(14, 165, 233, 0.15);
+    color: #0ea5e9;
+    border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.health-chip {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(52, 211, 153, 0.15);
+    color: #34d399;
+}
+
 .status-indicator {
     display: flex;
     align-items: center;
