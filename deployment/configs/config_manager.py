@@ -1,6 +1,7 @@
 import os
 from enum import Enum
 from typing import Any, Dict
+from src.runtime.runtime_models import RuntimeMode
 
 
 class DeploymentProfile(Enum):
@@ -60,6 +61,17 @@ class ConfigManager:
 
     def get_profile(self) -> DeploymentProfile:
         return self._profile
+
+    def get_runtime_mode(self) -> RuntimeMode:
+        profile_map = {
+            DeploymentProfile.DEV: RuntimeMode.LAPTOP,
+            DeploymentProfile.SIMULATION: RuntimeMode.SIMULATION,
+            DeploymentProfile.LAPTOP: RuntimeMode.LAPTOP,
+            DeploymentProfile.RASPBERRY_PI: RuntimeMode.RASPBERRY_PI,
+            DeploymentProfile.JETSON: RuntimeMode.JETSON,
+            DeploymentProfile.PRODUCTION: RuntimeMode.PRODUCTION,
+        }
+        return profile_map.get(self._profile, RuntimeMode.SIMULATION)
 
     def get_setting(self, key: str, default: Any = None) -> Any:
         return self._settings.get(key, default)

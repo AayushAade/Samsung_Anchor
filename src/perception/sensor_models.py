@@ -45,6 +45,7 @@ class FrameData:
     width: int = 1280
     height: int = 720
     fps: float = 30.0
+    raw_frame: Optional[Any] = None
 
 
 @dataclass
@@ -82,3 +83,4 @@ class PerceptionContext:
     audio_events: List[AudioEvent] = field(default_factory=list)
     fps: float = 30.0
     last_updated: str = field(default_factory=lambda: datetime.now().strftime("%H:%M:%S"))
+    raw_frame: Optional[Any] = None

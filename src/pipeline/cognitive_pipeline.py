@@ -32,6 +32,7 @@ from src.clinical.emergency_manager import EmergencyManager
 
 from src.perception.perception_manager import PerceptionManager
 
+from src.runtime.runtime_models import HardwareConfig
 from src.runtime.runtime_manager import RuntimeManager
 
 from deployment.configs.config_manager import ConfigManager
@@ -51,7 +52,12 @@ if TYPE_CHECKING:
 
 class CognitivePipeline:
 
-    def __init__(self, database: "MemoraDatabase") -> None:
+    def __init__(
+        self,
+        database: "MemoraDatabase",
+        config_mgr: Optional[ConfigManager] = None,
+        hardware_config: Optional[HardwareConfig] = None,
+    ) -> None:
         
         self.database = database
         self.presence_engine = PresenceEngine()
@@ -95,18 +101,34 @@ class CognitivePipeline:
         # Setup Edge Perception Layer
         self.perception_manager = PerceptionManager()
 
-        # Setup Hardware Runtime Layer
-        self.runtime_manager = RuntimeManager()
-
         # Setup Deployment & Operations Platform
-        self.config_mgr = ConfigManager()
+        self.config_mgr = config_mgr or ConfigManager()
         self.health_checker = HealthChecker()
         self.metrics_collector = MetricsCollector()
         self.logger = StructuredLogger()
 
+        # Setup Hardware Runtime Layer with Explicit HardwareConfig Injection
+        if hardware_config is None:
+            active_mode = self.config_mgr.get_runtime_mode()
+            hw_config = HardwareConfig(mode=active_mode)
+        else:
+            hw_config = hardware_config
+
+        self.runtime_manager = RuntimeManager(config=hw_config)
+
+        # Wire Edge Perception Layer to Hardware Runtime Layer
+        self.perception_manager.camera_pipeline.set_camera_adapter(self.runtime_manager.camera)
+        self.perception_manager.camera_pipeline.set_sensor_bus(self.runtime_manager.sensor_bus)
+
     def reset(self):
         self.presence_engine.reset()
         self.conversation_manager.reset()
+
+    def shutdown(self):
+        """
+        Gracefully shutdown hardware adapters and clear runtime resources.
+        """
+        self.runtime_manager.shutdown_hardware()
 
     def process(
         self,

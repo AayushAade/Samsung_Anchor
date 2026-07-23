@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional
 from src.runtime.bluetooth_adapter import SimulatedBluetoothAdapter
-from src.runtime.camera_adapter import SimulatedCameraAdapter
+from src.runtime.camera_adapter import OpenCVCameraAdapter, SimulatedCameraAdapter
 from src.runtime.display_adapter import SimulatedDisplayAdapter
 from src.runtime.hardware_manager import HardwareManager
 from src.runtime.imu_adapter import SimulatedIMUAdapter
@@ -21,8 +21,12 @@ class RuntimeManager:
         self.sensor_bus = SensorBus()
         self.hardware_manager = HardwareManager()
 
-        # Instantiate Adapters
-        self.camera = SimulatedCameraAdapter(self.config.camera_device)
+        # Instantiate Adapters based on RuntimeMode
+        if self.config.mode != RuntimeMode.SIMULATION:
+            self.camera = OpenCVCameraAdapter(device_name=self.config.camera_device)
+        else:
+            self.camera = SimulatedCameraAdapter(self.config.camera_device)
+
         self.microphone = SimulatedMicrophoneAdapter(self.config.audio_input_device)
         self.speaker = SimulatedSpeakerAdapter(self.config.audio_output_device)
         self.display = SimulatedDisplayAdapter()
@@ -33,6 +37,11 @@ class RuntimeManager:
 
     def initialize_hardware(self) -> bool:
         cam_ok = self.camera.initialize()
+        if not cam_ok and isinstance(self.camera, OpenCVCameraAdapter):
+            # Graceful fallback to simulation if physical camera unavailable
+            self.camera = SimulatedCameraAdapter(self.config.camera_device)
+            cam_ok = self.camera.initialize()
+
         mic_ok = self.microphone.initialize()
 
         self.hardware_manager.register_device("CameraAdapter", self.camera.get_status())

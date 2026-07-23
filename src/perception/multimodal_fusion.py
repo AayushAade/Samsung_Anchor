@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional, Any
 from src.perception.sensor_models import (
     ActivityType,
     AudioEvent,
@@ -23,6 +23,7 @@ class MultimodalFusionEngine:
         objects: List[DetectedObject],
         audio_events: List[AudioEvent],
         fps: float = 30.0,
+        raw_frame: Optional[Any] = None,
     ) -> PerceptionContext:
         """
         Fused PerceptionContext resolving conflicts deterministically.
@@ -40,4 +41,5 @@ class MultimodalFusionEngine:
             audio_events=audio_events,
             fps=fps,
             last_updated=datetime.now().strftime("%H:%M:%S"),
+            raw_frame=raw_frame,
         )

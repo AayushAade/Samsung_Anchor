@@ -55,6 +55,7 @@ class PerceptionManager:
             objects=objects,
             audio_events=audio_events,
             fps=frame.fps,
+            raw_frame=frame.raw_frame,
         )
 
     def set_room(self, room: RoomLocation) -> None:
