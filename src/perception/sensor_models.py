@@ -65,6 +65,8 @@ class DetectedObject:
     confidence: float = 0.90
     last_seen: str = field(default_factory=lambda: datetime.now().strftime("%H:%M:%S"))
     is_moving: bool = False
+    bounding_box: Optional[List[int]] = None
+    frame_id: Optional[int] = None
 
 
 @dataclass

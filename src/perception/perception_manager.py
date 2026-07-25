@@ -35,7 +35,11 @@ class PerceptionManager:
 
         # 3. Track Room & Objects
         room = self.room_tracker.get_current_room()
-        objects = self.object_detector.detect_objects_for_room(room)
+        objects = self.object_detector.detect_objects_for_room(
+            room,
+            raw_frame=frame.raw_frame,
+            frame_id=frame.frame_id,
+        )
 
         # 4. Infer Activity
         obj_names = [o.object_name for o in objects]
