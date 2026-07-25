@@ -24,6 +24,7 @@ class DeviceStatus(Enum):
 class SensorEventType(Enum):
     CAMERA_FRAME = "Camera Frame"
     AUDIO_EVENT = "Audio Event"
+    SPEECH_TRANSCRIPT = "Speech Transcript"
     BLE_BEACON = "BLE Beacon"
     IMU_MOTION = "IMU Motion"
     HEALTH_TELEMETRY = "Health Telemetry"

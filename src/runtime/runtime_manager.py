@@ -4,10 +4,10 @@ from src.runtime.camera_adapter import OpenCVCameraAdapter, SimulatedCameraAdapt
 from src.runtime.display_adapter import SimulatedDisplayAdapter
 from src.runtime.hardware_manager import HardwareManager
 from src.runtime.imu_adapter import SimulatedIMUAdapter
-from src.runtime.microphone_adapter import SimulatedMicrophoneAdapter
+from src.runtime.microphone_adapter import PyAudioMicrophoneAdapter, SimulatedMicrophoneAdapter
 from src.runtime.runtime_models import DeviceStatus, HardwareConfig, HealthMetrics, RuntimeMode
 from src.runtime.sensor_bus import SensorBus
-from src.runtime.speaker_adapter import SimulatedSpeakerAdapter
+from src.runtime.speaker_adapter import PyTTSx3SpeakerAdapter, SimulatedSpeakerAdapter
 
 
 class RuntimeManager:
@@ -24,11 +24,13 @@ class RuntimeManager:
         # Instantiate Adapters based on RuntimeMode
         if self.config.mode != RuntimeMode.SIMULATION:
             self.camera = OpenCVCameraAdapter(device_name=self.config.camera_device)
+            self.microphone = PyAudioMicrophoneAdapter(device_name=self.config.audio_input_device)
+            self.speaker = PyTTSx3SpeakerAdapter(device_name=self.config.audio_output_device)
         else:
             self.camera = SimulatedCameraAdapter(self.config.camera_device)
+            self.microphone = SimulatedMicrophoneAdapter(self.config.audio_input_device)
+            self.speaker = SimulatedSpeakerAdapter(self.config.audio_output_device)
 
-        self.microphone = SimulatedMicrophoneAdapter(self.config.audio_input_device)
-        self.speaker = SimulatedSpeakerAdapter(self.config.audio_output_device)
         self.display = SimulatedDisplayAdapter()
         self.bluetooth = SimulatedBluetoothAdapter()
         self.imu = SimulatedIMUAdapter()
@@ -43,6 +45,10 @@ class RuntimeManager:
             cam_ok = self.camera.initialize()
 
         mic_ok = self.microphone.initialize()
+        if not mic_ok and isinstance(self.microphone, PyAudioMicrophoneAdapter):
+            # Graceful fallback to simulation if physical microphone unavailable
+            self.microphone = SimulatedMicrophoneAdapter(self.config.audio_input_device)
+            mic_ok = self.microphone.initialize()
 
         self.hardware_manager.register_device("CameraAdapter", self.camera.get_status())
         self.hardware_manager.register_device("MicrophoneAdapter", self.microphone.get_status())
