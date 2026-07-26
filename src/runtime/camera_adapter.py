@@ -32,6 +32,15 @@ class CameraAdapter(ABC):
     def shutdown(self) -> None:
         pass
 
+    def read(self) -> tuple[bool, Any]:
+        """
+        Duck-typing interface matching OpenCV VideoCapture / CameraDevice.
+        Returns (success, raw_frame_or_metadata).
+        """
+        frame_data = self.capture_frame()
+        raw = frame_data.get("raw_frame")
+        return True, raw if raw is not None else frame_data
+
 
 class SimulatedCameraAdapter(CameraAdapter):
     """
@@ -57,6 +66,9 @@ class SimulatedCameraAdapter(CameraAdapter):
             "fps": 30.0,
             "timestamp": datetime.now().isoformat(),
         }
+
+    def read(self) -> tuple[bool, Any]:
+        return True, self.capture_frame()
 
     def get_status(self) -> DeviceStatus:
         return self.status
@@ -135,6 +147,11 @@ class OpenCVCameraAdapter(CameraAdapter):
             "timestamp": now_iso,
             "raw_frame": None,
         }
+
+    def read(self) -> tuple[bool, Any]:
+        frame_data = self.capture_frame()
+        raw = frame_data.get("raw_frame")
+        return (raw is not None if self.status == DeviceStatus.HEALTHY else True), (raw if raw is not None else frame_data)
 
     def get_status(self) -> DeviceStatus:
         return self.status

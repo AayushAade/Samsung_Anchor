@@ -6,6 +6,10 @@ from __future__ import annotations
 
 import os
 
+# Prevent OpenMP duplicate runtime library crashes across PyTorch, OpenCV, and FAISS
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
+
 from config.constants import (
     DEFAULT_AUDIO_DURATION,
     DEFAULT_FACE_TOLERANCE,

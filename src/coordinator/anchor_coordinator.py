@@ -79,8 +79,9 @@ class AnchorCoordinator:
         # ------------------------------------------------------
         
         self.event_bus = EventBus()
-        self._cognitive_queue = queue.Queue()
+        self._cognitive_queue = queue.Queue(maxsize=10)
         self._action_queue = queue.Queue()
+        self.dropped_events_count = 0
         
         self.event_bus.subscribe("face_detected", self._on_face_detected)
 
@@ -140,7 +141,13 @@ class AnchorCoordinator:
     # ==========================================================
 
     def _on_face_detected(self, result: dict):
-        """Callback from EventBus. Pushes to worker queue."""
+        """Callback from EventBus. Pushes to worker queue using drop-oldest policy when full."""
+        if self._cognitive_queue.full():
+            try:
+                self._cognitive_queue.get_nowait()
+                self.dropped_events_count += 1
+            except queue.Empty:
+                pass
         self._cognitive_queue.put(result)
 
     def _cognitive_worker_loop(self):
