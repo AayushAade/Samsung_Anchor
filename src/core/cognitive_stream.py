@@ -134,6 +134,12 @@ class CognitiveEvent:
     # Behaviour Intelligence Platform Context (Phase 23)
     behaviour_summary: Optional[Dict[str, Any]] = None
 
+    # Cognitive Reasoning Framework Context (Phase 24)
+    reasoning_summary: Optional[Dict[str, Any]] = None
+
+    # Executive Function Framework Context (Phase 25)
+    executive_summary: Optional[Dict[str, Any]] = None
+
     # Latencies
     total_latency_ms: float = 0.0
 
@@ -230,6 +236,8 @@ class CognitiveStream:
         ops_summary=None,
         cos_summary=None,
         behaviour_summary=None,
+        reasoning_summary=None,
+        executive_summary=None,
     ) -> CognitiveEvent:
         """
         Build a CognitiveEvent from the raw pipeline outputs.
@@ -240,6 +248,12 @@ class CognitiveStream:
             timestamp=datetime.now().isoformat(),
             cycle_id=cycle_id,
         )
+
+        if executive_summary:
+            event.executive_summary = executive_summary
+
+        if reasoning_summary:
+            event.reasoning_summary = reasoning_summary
 
         if behaviour_summary:
             event.behaviour_summary = behaviour_summary

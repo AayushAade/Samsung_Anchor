@@ -41,6 +41,8 @@ from src.trust.caregiver_config import CaregiverConfigManager
 from src.trust.privacy_manager import PrivacyManager
 from src.trust.degradation_manager import DegradationManager
 from src.behaviour.behaviour_manager import BehaviourManager
+from src.reasoning.reasoning_engine import CognitiveReasoningEngine
+from src.executive.executive_engine import ExecutiveEngine
 
 from src.perception.perception_manager import PerceptionManager
 
@@ -159,6 +161,12 @@ class CognitivePipeline:
 
         # Phase 23 — Behaviour Intelligence Platform Infrastructure
         self.behaviour_manager = BehaviourManager()
+
+        # Phase 24 — Cognitive Reasoning Engine Framework
+        self.reasoning_engine = CognitiveReasoningEngine()
+
+        # Phase 25 — Executive Function & Adaptive Planning Framework
+        self.executive_engine = ExecutiveEngine()
 
         self._latest_transcript: Optional[str] = None
         self.runtime_manager.sensor_bus.subscribe(
@@ -433,6 +441,29 @@ class CognitivePipeline:
             )
 
             # --------------------------------------------------
+            # 6.7 Cognitive Reasoning & Multi-Modal Fusion
+            # --------------------------------------------------
+            reasoning_summary = self.reasoning_engine.reason(
+                event_name=getattr(event, "name", None),
+                location=loc_val,
+                user_speech=u_speech,
+                patient_state_mode=self.current_patient_state.mode.value,
+                active_goal_name=goal_hypotheses[0].name if goal_hypotheses else None,
+            )
+
+            # --------------------------------------------------
+            # 6.8 Executive Planning & Adaptive Execution
+            # --------------------------------------------------
+            executive_summary = self.executive_engine.process_cycle(
+                reasoning_summary=reasoning_summary,
+                behaviour_summary=behaviour_summary,
+                location=loc_val,
+                user_speech=u_speech,
+                patient_state_mode=self.current_patient_state.mode.value,
+                emergency_active=self.emergency_mgr.get_current_state().active,
+            )
+
+            # --------------------------------------------------
             # 8. Emit to Experience Platform
             # --------------------------------------------------
             try:
@@ -460,6 +491,8 @@ class CognitivePipeline:
                     ops_summary=ops_summary,
                     cos_summary=cos_summary,
                     behaviour_summary=behaviour_summary,
+                    reasoning_summary=reasoning_summary,
+                    executive_summary=executive_summary,
                 )
                 stream.emit(stream_event)
             except Exception:
