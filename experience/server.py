@@ -115,6 +115,17 @@ class ExperienceServer:
         print(f"[ExperienceServer] Dashboard connected ({len(self._clients)} clients)")
 
         try:
+            # Send initial operational health status
+            from src.operations.orchestrator import SystemOrchestrator
+            import time
+            orch_summary = SystemOrchestrator().get_system_health_summary()
+            status_event = {
+                "event": "SYSTEM_HEALTH_UPDATE",
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "data": orch_summary
+            }
+            await websocket.send(json.dumps(status_event))
+
             # Send history on connect (catch-up)
             history = self._stream.get_history()
             for event in history[-50:]:

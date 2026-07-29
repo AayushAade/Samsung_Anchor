@@ -37,6 +37,12 @@ class ClinicalDecisionTrace:
     final_response: str
     dignity_preserved: bool = True
     caregiver_notified: bool = False
+    # COS-enriched fields (Phase 21)
+    working_memory_snapshot: Optional[Dict[str, Any]] = None
+    attention_focus: Optional[Dict[str, Any]] = None
+    cos_reasoning_path: Optional[str] = None
+    cos_action_type: Optional[str] = None
+
 
 
 class ClinicalDecisionTraceLogger:

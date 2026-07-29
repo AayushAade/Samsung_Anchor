@@ -33,6 +33,14 @@ from src.clinical.patient_state import PatientStateEvaluator, PatientStateMode
 from src.clinical.care_policy import CarePolicyFramework
 from src.clinical.decision_trace import ClinicalDecisionTraceLogger
 from src.perception.visual_memory_engine import VisualEpisodicMemoryEngine
+from src.cognition.cos.kernel import CognitiveKernel
+from src.trust.safety_manager import SafetyManager
+from src.trust.evidence_accumulator import EvidenceAccumulator
+from src.trust.audit_framework import AuditFramework
+from src.trust.caregiver_config import CaregiverConfigManager
+from src.trust.privacy_manager import PrivacyManager
+from src.trust.degradation_manager import DegradationManager
+from src.behaviour.behaviour_manager import BehaviourManager
 
 from src.perception.perception_manager import PerceptionManager
 
@@ -133,6 +141,25 @@ class CognitivePipeline:
         self.care_policy_framework = CarePolicyFramework()
         self.clinical_trace_logger = ClinicalDecisionTraceLogger()
         self.visual_memory_engine = VisualEpisodicMemoryEngine(database)
+        self.cognitive_kernel = CognitiveKernel()
+        
+        # Phase 22 — Trust, Safety, Reliability & Data Lifecycle Infrastructure
+        self.caregiver_config_mgr = CaregiverConfigManager()
+        prefs = self.caregiver_config_mgr.get_preferences()
+        self.safety_manager = SafetyManager(
+            min_confidence_threshold=prefs.min_confidence_threshold,
+            reminder_throttle_seconds=prefs.reminder_frequency_minutes * 60.0,
+            quiet_hours_start=prefs.quiet_hours_start,
+            quiet_hours_end=prefs.quiet_hours_end,
+        )
+        self.evidence_accumulator = EvidenceAccumulator()
+        self.audit_framework = AuditFramework()
+        self.privacy_manager = PrivacyManager()
+        self.degradation_manager = DegradationManager()
+
+        # Phase 23 — Behaviour Intelligence Platform Infrastructure
+        self.behaviour_manager = BehaviourManager()
+
         self._latest_transcript: Optional[str] = None
         self.runtime_manager.sensor_bus.subscribe(
             SensorEventType.SPEECH_TRANSCRIPT,
@@ -257,12 +284,36 @@ class CognitivePipeline:
                     from src.interaction.actions import InteractionAction, InteractionActionType
                     action = InteractionAction(type=InteractionActionType.SPEAK, message=v_res["response"])
 
+            # --------------------------------------------------
+            # 6.5 Cognitive Operating System & Safety Guardrails
+            # --------------------------------------------------
+            cos_action = self.cognitive_kernel.reason(
+                context=cognitive_context,
+                goals=goal_hypotheses,
+                patient_state=self.current_patient_state,
+                attention_decision=attention_decision,
+            )
+
+            # Mandatory Safety Guardrails Evaluation
+            safety_eval = self.safety_manager.evaluate_action(
+                action=cos_action,
+                context=cognitive_context,
+                goals=goal_hypotheses,
+                patient_state=self.current_patient_state,
+                working_memory_snapshot=self.cognitive_kernel.working_memory.snapshot(),
+            )
+
             care_decision = self.care_policy_framework.evaluate_policy(
                 patient_state=self.current_patient_state,
                 current_message=action.message if action else None,
                 patient_name=p_profile.preferred_name,
                 location=getattr(event, "room", "Living Room"),
             )
+
+            p_name = getattr(event, "name", p_profile.preferred_name) or p_profile.preferred_name
+            p_room = getattr(event, "room", "Living Room")
+            loc_val = p_room.value if hasattr(p_room, "value") else str(p_room)
+            c_time = cognitive_context.temporal.time_of_day if cognitive_context and cognitive_context.temporal else "Day"
 
             if action is not None:
                 if care_decision.message_override:
@@ -276,10 +327,6 @@ class CognitivePipeline:
                         self.runtime_manager.speaker.speak(action.message)
 
                 # Automatic Experience Encoding into MemoryRepository
-                p_name = getattr(event, "name", p_profile.preferred_name) or p_profile.preferred_name
-                p_room = getattr(event, "room", "Living Room")
-                loc_val = p_room.value if hasattr(p_room, "value") else str(p_room)
-                c_time = cognitive_context.temporal.time_of_day if cognitive_context and cognitive_context.temporal else "Day"
                 self.memory_encoder.encode_experience(
                     person_name=p_name,
                     location=loc_val,
@@ -307,6 +354,11 @@ class CognitivePipeline:
                 memory_written=memory_written,
                 final_response=action.message if (action and speech_produced) else "Supportive Silence",
             )
+            # Enrich trace with COS metadata
+            self.latest_clinical_trace.working_memory_snapshot = self.cognitive_kernel.working_memory.snapshot()
+            self.latest_clinical_trace.attention_focus = self.cognitive_kernel.attention_manager.get_current_focus().to_dict()
+            self.latest_clinical_trace.cos_reasoning_path = cos_action.reasoning_path
+            self.latest_clinical_trace.cos_action_type = cos_action.action_type.value
             ast_lvl = getattr(cognitive_context.assistance, "level_code", 0) if cognitive_context and cognitive_context.assistance else 0
             strat_val = getattr(getattr(conversation_context, "response_strategy", None), "value", "Supportive Silence")
             pres_state = "PERMITTED" if (attention_decision and attention_decision.should_interrupt) or event.name else "SUPPRESSED"
@@ -351,10 +403,48 @@ class CognitivePipeline:
                 "active_errors": self.metrics_collector.errors_count,
             }
 
+            # Record Phase 22 Structured Audit Record
+            self.latest_audit_record = self.audit_framework.record_audit(
+                cycle_id=cycle_id,
+                triggering_event=getattr(event, "type", "PERSON_ARRIVED").value if hasattr(getattr(event, "type", None), "value") else str(getattr(event, "type", "PERSON_ARRIVED")),
+                active_goal=goal_hypotheses[0].name if goal_hypotheses else None,
+                active_context_summary=f"Identity: {event.name or 'Unknown'}, Time: {c_time}, Room: {loc_val}",
+                working_memory_keys=list(self.cognitive_kernel.working_memory.snapshot().get("slots", {}).keys()),
+                selected_care_policy=care_decision.principle.value,
+                evidence_summary=f"Safety: {safety_eval.status.value}, Passed: {sum(1 for c in safety_eval.check_results if c.passed)}/{len(safety_eval.check_results)}",
+                safety_status=safety_eval.status.value,
+                safety_checks_passed=sum(1 for c in safety_eval.check_results if c.passed),
+                safety_checks_failed=[c.check_name for c in safety_eval.check_results if not c.passed],
+                proposed_action=cos_action.action_type.value,
+                final_action=safety_eval.final_action.action_type.value,
+                explanation=safety_eval.evaluation_reason,
+                patient_name=p_profile.preferred_name,
+            )
+
+            # --------------------------------------------------
+            # 6.6 Behaviour Intelligence & Longitudinal Analytics
+            # --------------------------------------------------
+            behaviour_summary = self.behaviour_manager.update_cycle(
+                event_name=getattr(event, "name", None),
+                location=loc_val,
+                user_speech=u_speech,
+                patient_state_mode=self.current_patient_state.mode.value,
+                time_of_day=c_time,
+            )
+
             # --------------------------------------------------
             # 8. Emit to Experience Platform
             # --------------------------------------------------
             try:
+                cos_summary = {
+                    "working_memory": self.cognitive_kernel.working_memory.snapshot(),
+                    "attention_focus": self.cognitive_kernel.attention_manager.get_current_focus().to_dict(),
+                    "action_type": safety_eval.final_action.action_type.value,
+                    "reasoning_path": safety_eval.final_action.reasoning_path,
+                    "safety_status": safety_eval.status.value,
+                    "safety_evaluation_reason": safety_eval.evaluation_reason,
+                    "degradation_health": self.degradation_manager.get_status().overall_health,
+                }
                 stream_event = CognitiveStream.build_event(
                     cycle_id=cycle_id,
                     cognitive_context=cognitive_context,
@@ -368,6 +458,8 @@ class CognitivePipeline:
                     perception_context=perception_context,
                     runtime_summary=runtime_summary,
                     ops_summary=ops_summary,
+                    cos_summary=cos_summary,
+                    behaviour_summary=behaviour_summary,
                 )
                 stream.emit(stream_event)
             except Exception:

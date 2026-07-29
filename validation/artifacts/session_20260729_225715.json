@@ -1,0 +1,17 @@
+{
+  "session_name": "Test_Session",
+  "start_time": "2026-07-29 22:57:15 UTC",
+  "duration_seconds": 0.0,
+  "event_count": 1,
+  "events": [
+    {
+      "timestamp": "2026-07-29 17:27:15 UTC",
+      "relative_sec": 0.0,
+      "category": "Test",
+      "title": "Init Test Event",
+      "details": {
+        "status": "OK"
+      }
+    }
+  ]
+}

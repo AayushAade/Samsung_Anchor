@@ -125,6 +125,15 @@ class CognitiveEvent:
     generated_response: Optional[str] = None
     final_action: Optional[str] = None
 
+    # Cognitive Operating System Context (Phase 21)
+    working_memory_snapshot: Optional[Dict[str, Any]] = None
+    attention_focus: Optional[Dict[str, Any]] = None
+    cos_action_type: Optional[str] = None
+    cos_reasoning_path: Optional[str] = None
+
+    # Behaviour Intelligence Platform Context (Phase 23)
+    behaviour_summary: Optional[Dict[str, Any]] = None
+
     # Latencies
     total_latency_ms: float = 0.0
 
@@ -219,6 +228,8 @@ class CognitiveStream:
         perception_context=None,
         runtime_summary=None,
         ops_summary=None,
+        cos_summary=None,
+        behaviour_summary=None,
     ) -> CognitiveEvent:
         """
         Build a CognitiveEvent from the raw pipeline outputs.
@@ -229,6 +240,15 @@ class CognitiveStream:
             timestamp=datetime.now().isoformat(),
             cycle_id=cycle_id,
         )
+
+        if behaviour_summary:
+            event.behaviour_summary = behaviour_summary
+
+        if cos_summary:
+            event.working_memory_snapshot = cos_summary.get("working_memory")
+            event.attention_focus = cos_summary.get("attention_focus")
+            event.cos_action_type = cos_summary.get("action_type")
+            event.cos_reasoning_path = cos_summary.get("reasoning_path")
 
         # Identity
         if cognitive_context and cognitive_context.identity:
