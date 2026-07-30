@@ -45,7 +45,7 @@ from src.reasoning.reasoning_engine import CognitiveReasoningEngine
 from src.executive.executive_engine import ExecutiveEngine
 from src.experience.experience_engine import ExperienceEngine
 from src.knowledge.knowledge_engine import KnowledgeEngine
-from src.memory.memory_engine import MemoryEngine
+from src.memory.memory_engine import MemoryEngine as LTMMemoryEngine
 from src.runtime.runtime_engine import CentralRuntimeEngine
 from src.session.session_engine import SessionEngine
 
@@ -180,7 +180,7 @@ class CognitivePipeline:
         self.knowledge_engine = KnowledgeEngine()
 
         # Phase 29 — Long-Term Memory Consolidation Framework
-        self.memory_engine = MemoryEngine()
+        self.ltm_memory_engine = LTMMemoryEngine()
 
         # Phase 30 — Clinical Runtime, Observability & Deployment Framework
         self.central_runtime = CentralRuntimeEngine()
@@ -455,7 +455,7 @@ class CognitivePipeline:
             # --------------------------------------------------
             # 6.55 Long-Term Memory Consolidation & Recall
             # --------------------------------------------------
-            memory_summary = self.memory_engine.process_cycle(
+            memory_summary = self.ltm_memory_engine.process_cycle(
                 user_speech=u_speech,
                 location=loc_val,
             )

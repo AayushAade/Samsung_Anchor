@@ -50,7 +50,7 @@ class SafetyManager:
 
         # Tracking state for reminder throttling
         self._last_reminder_timestamps: Dict[str, float] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         # Metrics counters
         self._total_evaluations = 0

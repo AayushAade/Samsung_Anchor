@@ -39,7 +39,11 @@ class DatabaseMemoryRepository:
             # 1. Fetch Explicit Memories
             q_mem = session.query(RelevantMemoryModel)
             if query.face_id is not None:
-                q_mem = q_mem.filter(RelevantMemoryModel.person == query.face_id)
+                clean_id = query.face_id.replace("face_", "").lower()
+                q_mem = q_mem.filter(
+                    (RelevantMemoryModel.person == query.face_id) |
+                    (RelevantMemoryModel.person.ilike(f"%{clean_id}%"))
+                )
             for m in q_mem.all():
                 results.append(self._to_domain(m))
 
@@ -71,8 +75,11 @@ class DatabaseMemoryRepository:
             # 3. Fetch Episodes and convert to RelevantMemory dynamically
             q_ep = session.query(EpisodeModel)
             if query.face_id is not None:
-                # Assuming person column stores the identity ID
-                q_ep = q_ep.filter(EpisodeModel.person == query.face_id)
+                clean_id = query.face_id.replace("face_", "").lower()
+                q_ep = q_ep.filter(
+                    (EpisodeModel.person == query.face_id) |
+                    (EpisodeModel.person.ilike(f"%{clean_id}%"))
+                )
                 
             for ep in q_ep.all():
                 try:

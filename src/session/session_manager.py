@@ -24,7 +24,7 @@ class SessionManager:
 
     def __init__(self) -> None:
         self._sessions: Dict[str, CognitiveSession] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def create_session(
         self,

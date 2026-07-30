@@ -39,7 +39,7 @@ class CognitiveReasoningEngine(ICognitiveSubsystem):
         self.hypothesis_manager = HypothesisManager()
         self._cycle_counter = 0
         self._status = "INITIALIZED"
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def initialize(self) -> bool:
         with self._lock:

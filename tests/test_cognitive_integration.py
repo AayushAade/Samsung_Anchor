@@ -152,5 +152,13 @@ class TestEndToEndPipelineIntegration:
         assert hasattr(pipeline, "executive_engine")
         assert hasattr(pipeline, "experience_engine")
 
+        # Seed a memory for Sarah so MemoryContextProvider retrieves context
+        pipeline.memory_encoder.encode_experience(
+            person_name="Sarah",
+            location="Living Room",
+            content="Sarah brought fresh strawberries and medication reminders.",
+            context="Daughter visit",
+        )
+
         actions = pipeline.process({"face_id": "face_sarah", "name": "Sarah", "relationship": "Daughter"})
         assert len(actions) >= 1

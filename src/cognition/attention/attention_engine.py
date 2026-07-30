@@ -19,7 +19,7 @@ class CognitiveAttentionEngine:
     """
     
     # If the highest scored memory is below this threshold, the system remains silent.
-    GLOBAL_ATTENTION_THRESHOLD = 35.0
+    GLOBAL_ATTENTION_THRESHOLD = 30.0
     
     def __init__(self, max_attention_items: int = 3):
         self.max_attention_items = max_attention_items

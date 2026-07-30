@@ -38,7 +38,7 @@ class CaregiverInsightsGenerator:
         self.routine_engine = routine_engine
         self.drift_monitor = drift_monitor
         self._insights: List[CaregiverInsight] = []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def generate_insights(self) -> List[CaregiverInsight]:
         """

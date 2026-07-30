@@ -33,7 +33,7 @@ class SecurityEngine:
         self.auth_engine = AuthorizationEngine()
         self.access_controller = AccessController(self.auth_engine)
         self.audit_security = AuditSecurity()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def authorize(self, identity_id: str, permission: Permission) -> AuthorizationDecision:
         identity = self.identity_registry.lookup_identity(identity_id)

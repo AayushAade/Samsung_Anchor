@@ -1,7 +1,7 @@
 # MEMORA (Samsung Anchor) — Clinical Evaluation & Caregiver Summary Report
 
 **Patient**: Eleanor  
-**Generated At**: 2026-07-29 17:27:12 UTC  
+**Generated At**: 2026-07-30 20:56:35 UTC  
 **Evaluation Mode**: Release Candidate RC1 Clinical Governance  
 
 ---
@@ -14,7 +14,7 @@
 ---
 
 ## 2. Family Identity Recognition & Presence Log
-- **Tracked Family & Visitors**: 1 identity profile(s).
+- **Tracked Family & Visitors**: 2 identity profile(s).
 - **Confirmed Members Active**: Riya
 - **Identity Matching Safety**: 100% of identity matches satisfied safety threshold (Multi-frame consensus = 3).
 
@@ -23,7 +23,7 @@
 ## 3. Spatial Object Location Memory
 | Misplaced Item | Last Observed Location | Spatial Status |
 | :--- | :--- | :--- |
-| Reading Glasses | Living Room Coffee Table | Observed at 2026-07-29T22:57:12.370006 |
+| Reading Glasses | Living Room Coffee Table | Observed at 2026-07-31T02:26:35.310405 |
 
 ---
 

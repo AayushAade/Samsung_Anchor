@@ -233,7 +233,8 @@ class TestPipelineMemoryIntegration:
         db.clear()
         pipeline = CognitivePipeline(database=db)
         
-        assert hasattr(pipeline, "memory_engine")
+        assert hasattr(pipeline, "ltm_memory_engine") or hasattr(pipeline, "memory_engine")
         
         actions = pipeline.process({"face_id": "face_sarah", "name": "Sarah", "relationship": "Daughter"})
-        assert pipeline.memory_engine._cycle_counter == 1
+        engine = getattr(pipeline, "ltm_memory_engine", getattr(pipeline, "memory_engine", None))
+        assert engine._cycle_counter == 1

@@ -49,9 +49,10 @@ class MemoryRepository:
 
         for memory in self._memories:
 
-            if (
-                query.face_id is not None
-                and memory.person == query.face_id
+            if query.face_id is not None and memory.person and (
+                query.face_id.lower() == memory.person.lower()
+                or memory.person.lower() in query.face_id.lower()
+                or query.face_id.lower() in memory.person.lower()
             ):
                 results.append(memory)
 
