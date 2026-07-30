@@ -34,7 +34,7 @@ class EdgeEngine:
         self.resource_manager = ResourceManager()
 
         self._active_profile_name = "SMARTPHONE"
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         # Register default device profile
         self.register_device(

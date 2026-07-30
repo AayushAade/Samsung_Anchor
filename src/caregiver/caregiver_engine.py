@@ -39,7 +39,7 @@ class CaregiverEngine:
         self.summary_generator = ClinicalSummaryGenerator()
 
         self._summaries: List[CaregiverSummary] = []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def ingest_event(
         self,

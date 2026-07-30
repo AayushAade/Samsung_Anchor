@@ -39,7 +39,7 @@ class InteroperabilityEngine:
         self._exported_count = 0
         self._translated_count = 0
         self._rejected_count = 0
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def import_record(
         self,

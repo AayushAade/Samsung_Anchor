@@ -22,7 +22,7 @@ class IdentityRegistry:
 
     def __init__(self) -> None:
         self._identities: Dict[str, Identity] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._seed_default_identities()
 
     def register_identity(self, identity: Identity) -> None:

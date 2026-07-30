@@ -30,7 +30,7 @@ class IOEngine:
         self.router = IORouter()
         self.validator = IOValidator()
         self._rejected_count = 0
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def receive(
         self,

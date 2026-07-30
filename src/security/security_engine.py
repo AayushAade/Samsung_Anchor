@@ -28,7 +28,7 @@ class SecurityEngine:
     Unified public façade for Security, Identity & Access Control.
     """
 
-    def __init__() -> None:
+    def __init__(self) -> None:
         self.identity_registry = IdentityRegistry()
         self.auth_engine = AuthorizationEngine()
         self.access_controller = AccessController(self.auth_engine)

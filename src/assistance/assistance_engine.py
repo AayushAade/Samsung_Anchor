@@ -40,7 +40,7 @@ class AssistanceEngine:
 
         self._active_plans: Dict[str, AssistancePlan] = {}
         self._executed_outcomes: List[Tuple[AssistancePlan, AssistanceOutcome]] = []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def create_plan(
         self,
