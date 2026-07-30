@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 import time
 import os
+import threading
 from config import settings
-from core.event_logger import log_event
+from src.utils.event_logger import log_event
 
 # Try dlib-based face_recognition
 try:
@@ -63,9 +64,11 @@ class MemoraFaceRecognizer:
     Implements 500ms face gating, a persistent spatial face tracker,
     and embedding stability averaging.
     """
-    def __init__(self, tolerance=settings.FACE_TOLERANCE, mock_mode=False):
+    def __init__(self, tolerance=settings.FACE_TOLERANCE, mock_mode=False, required_consensus_frames=3):
+        self._lock = threading.Lock()
         self.tolerance = tolerance
         self.mock_mode = mock_mode
+        self.required_consensus_frames = required_consensus_frames
         self.face_mesh = None
         self.face_recognition_active = False
         
@@ -194,12 +197,13 @@ class MemoraFaceRecognizer:
             if track_id not in associated_tracks:
                 track["missed_frames"] += 1
                 mf = track["missed_frames"]
-                if mf <= 30:
+                last_seen_diff = now_time - track.get("last_seen_time", now_time)
+                if mf <= 30 and last_seen_diff <= 60.0:
                     if settings.DEBUG:
                         print(f"Keeping [{track_id}] alive: missed_frames = {mf}/30")
                 else:
                     info_t = database.get_identity(track_id)
-                    disp_t = info_t["display_name"] if (info_t and info_t["status"] == "confirmed") else track_id
+                    disp_t = info_t["display_name"] if (info_t and info_t.get("status") == "confirmed") else track_id
                     print(f"Removing [{track_id}] because: missed_frames = {mf} - timeout exceeded")
                     log_event("face_leave", f"Face leaves scene: [{disp_t}]")
                     stale_keys.append(track_id)
@@ -208,6 +212,11 @@ class MemoraFaceRecognizer:
                 del self.active_tracks[k]
 
     def process_frame(self, frame, database):
+        """Thread-safe frame processing entry point."""
+        with self._lock:
+            return self._process_frame_internal(frame, database)
+
+    def _process_frame_internal(self, frame, database):
         """
         Processes a BGR camera frame:
         1. Extract face embeddings (dlib, insightface, or MediaPipe custom).
@@ -219,6 +228,14 @@ class MemoraFaceRecognizer:
         results = []
         if frame is None:
             return results
+
+        if isinstance(frame, dict):
+            if frame.get("raw_frame") is not None:
+                frame = frame["raw_frame"]
+            else:
+                h = frame.get("height", 720)
+                w = frame.get("width", 1280)
+                frame = np.zeros((h, w, 3), dtype=np.uint8)
 
         h, w, _ = frame.shape
         now_time = time.time()
@@ -438,9 +455,9 @@ class MemoraFaceRecognizer:
                         database.increment_times_seen(face_id)
                         
                         info = database.get_identity(face_id)
-                        is_confirmed = info["status"] == "confirmed"
-                        best_match_name = info["display_name"] if info["display_name"] else face_id
-                        confidence_pct = int(info["confidence"] * 100)
+                        is_confirmed = info.get("status") == "confirmed" if info else False
+                        best_match_name = info.get("display_name") if (info and info.get("display_name")) else face_id
+                        confidence_pct = int(info.get("confidence", 0.9) * 100) if info else 90
                         
                         if not track["recognized_logged"]:
                             if is_confirmed:
@@ -456,21 +473,21 @@ class MemoraFaceRecognizer:
                         results.append({
                             "box": track["box"],
                             "face_id": face_id,
-                            "name": info["display_name"],
-                            "relationship": info["relationship"],
+                            "name": info.get("display_name") if info else None,
+                            "relationship": info.get("relationship") if info else None,
                             "is_new": False,
                             "embedding": det["embedding"]
                         })
                     else:
                         # Database lookup failed/exceeded threshold temporarily, but WE KEEP the recognized identity!
                         info = database.get_identity(track_id)
-                        disp_name = info["display_name"] if (info and info["display_name"]) else track_id
+                        disp_name = info.get("display_name") if (info and info.get("display_name")) else track_id
                         
                         results.append({
                             "box": track["box"],
                             "face_id": track_id,
-                            "name": info["display_name"] if info else None,
-                            "relationship": info["relationship"] if info else None,
+                            "name": info.get("display_name") if info else None,
+                            "relationship": info.get("relationship") if info else None,
                             "is_new": False,
                             "embedding": det["embedding"]
                         })
@@ -480,9 +497,12 @@ class MemoraFaceRecognizer:
             face_id, info, dist = database.find_match(det["embedding"], self.tolerance)
             
             if face_id is not None:
-                is_confirmed = info["status"] == "confirmed"
-                best_match_name = info["display_name"] if info["display_name"] else face_id
-                confidence_pct = int(info["confidence"] * 100)
+                is_confirmed = info.get("status") == "confirmed" if info else False
+                best_match_name = info.get("display_name") if (info and info.get("display_name")) else face_id
+                confidence_pct = int(info.get("confidence", 0.9) * 100) if info else 90
+                
+                is_consensus = (self.required_consensus_frames <= 1) or self.mock_mode
+                initial_state = "RECOGNIZED" if is_consensus else "STABILIZING"
                 
                 log_event("face_enter", f"Face enters scene: [{best_match_name}]")
                 if is_confirmed:
@@ -491,11 +511,12 @@ class MemoraFaceRecognizer:
                     log_event("recognized", f"[{face_id}] recognized (Distance: {dist:.3f})")
                 
                 self.active_tracks[face_id] = {
-                    "state": "RECOGNIZED",
+                    "state": initial_state,
                     "box": det["box"],
                     "center": det["center"],
                     "embeddings": [det["embedding"]],
                     "frames_seen": 1,
+                    "consensus_count": 1,
                     "missed_frames": 0,
                     "last_seen_time": now_time,
                     "recognized_logged": True,
@@ -505,9 +526,9 @@ class MemoraFaceRecognizer:
                 
                 results.append({
                     "box": det["box"],
-                    "face_id": face_id,
-                    "name": info["display_name"],
-                    "relationship": info["relationship"],
+                    "face_id": face_id if is_consensus else None,
+                    "name": info.get("display_name") if (info and is_consensus) else None,
+                    "relationship": info.get("relationship") if (info and is_consensus) else None,
                     "is_new": False,
                     "embedding": det["embedding"]
                 })

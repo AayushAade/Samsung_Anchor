@@ -1,21 +1,63 @@
+"""
+Global runtime configuration for Samsung Anchor.
+"""
+
+from __future__ import annotations
+
 import os
 
-# Base directory of the project
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Prevent OpenMP duplicate runtime library crashes across PyTorch, OpenCV, and FAISS
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
 
-# Database SQLite file path
-DB_PATH = os.path.join(BASE_DIR, "memora_db.json")
+from config.constants import (
+    DEFAULT_AUDIO_DURATION,
+    DEFAULT_FACE_TOLERANCE,
+    DEFAULT_SPATIAL_CELL_SIZE,
+    DEFAULT_YOLO_MODEL,
+    TRACKED_OBJECTS as DEFAULT_TRACKED_OBJECTS,
+)
+from config.paths import (
+    BASE_DIR,
+    DATABASE_PATH,
+)
 
-# Face comparison tolerance (standard L2 norm threshold)
-FACE_TOLERANCE = 0.6
+# ==========================================================
+# General
+# ==========================================================
 
-# Debug flag
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1")
 
-# Object detection and ledger settings
-SPATIAL_CELL_SIZE = 50
-YOLO_MODEL_NAME = "yolov8n.pt"
-TRACKED_OBJECTS = ["phone", "keys", "wallet", "glasses", "backpack"]
+# ==========================================================
+# Database
+# ==========================================================
 
-# API key for Gemini LLM binder
+DB_PATH = str(DATABASE_PATH)
+
+# ==========================================================
+# Vision
+# ==========================================================
+
+FACE_TOLERANCE = DEFAULT_FACE_TOLERANCE
+
+# ==========================================================
+# Audio
+# ==========================================================
+
+AUDIO_DURATION_SEC = DEFAULT_AUDIO_DURATION
+
+# ==========================================================
+# Reasoning
+# ==========================================================
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# ==========================================================
+# Object Memory
+# ==========================================================
+
+YOLO_MODEL_NAME = DEFAULT_YOLO_MODEL
+
+SPATIAL_CELL_SIZE = DEFAULT_SPATIAL_CELL_SIZE
+
+TRACKED_OBJECTS = DEFAULT_TRACKED_OBJECTS

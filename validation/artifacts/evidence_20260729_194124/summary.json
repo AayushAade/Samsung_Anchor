@@ -1,0 +1,131 @@
+{
+  "timestamp": "20260729_194124",
+  "overall_status": "PASS",
+  "system_info": {
+    "python_version": "3.11.15",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "processor": "arm",
+    "system_architecture": "64bit",
+    "git_commit_hash": "a002181966dba2658534edf0e1139e6103f01a85",
+    "timestamp_utc": "2026-07-29 14:11:19 UTC"
+  },
+  "duration_seconds": 5.0,
+  "telemetry": {
+    "uptime_seconds": 5.036153078079224,
+    "startup_timestamp": "2026-07-29 19:41:19",
+    "shutdown_timestamp": "2026-07-29 19:41:24",
+    "avg_cpu_percent": 22.33124999999999,
+    "peak_cpu_percent": 31.2,
+    "avg_ram_mb": 164.62109375,
+    "peak_ram_mb": 165.265625,
+    "peak_threads": 1,
+    "frame_rate_fps": 63.54056261571128,
+    "counters": {
+      "recognition_count": 0,
+      "retrieval_count": 0,
+      "db_writes": 0,
+      "camera_reconnects": 0,
+      "microphone_reconnects": 0,
+      "runtime_exceptions": 0,
+      "warning_count": 0,
+      "processed_frames": 320
+    }
+  },
+  "benchmarks": {
+    "identity_lookup": {
+      "operation": "Identity Lookup Latency",
+      "iterations": 30,
+      "avg_ms": 0.2314986331233134,
+      "min_ms": 0.19504200463416055,
+      "max_ms": 0.32783299684524536,
+      "p95_ms": 0.29179199918871745,
+      "throughput_ops_sec": 4304.752981548834
+    },
+    "vector_search": {
+      "operation": "FAISS Vector Search Latency",
+      "iterations": 30,
+      "avg_ms": 0.002809532694906617,
+      "min_ms": 0.0024999972083605826,
+      "max_ms": 0.005209003575146198,
+      "p95_ms": 0.0036249984987080097,
+      "throughput_ops_sec": 344170.8871015402
+    },
+    "face_recognition": {
+      "operation": "Face Recognition Frame Latency",
+      "iterations": 30,
+      "avg_ms": 1.1305708004025898,
+      "min_ms": 1.014250003208872,
+      "max_ms": 1.549209002405405,
+      "p95_ms": 1.4569580016541295,
+      "throughput_ops_sec": 884.3752992870245
+    },
+    "object_logging": {
+      "operation": "Object Location Logging Latency",
+      "iterations": 30,
+      "avg_ms": 0.3442333009540259,
+      "min_ms": 0.32087499857880175,
+      "max_ms": 0.47937499766703695,
+      "p95_ms": 0.38308299554046243,
+      "throughput_ops_sec": 2904.0808222158325
+    },
+    "db_commit": {
+      "operation": "Database State Commit Latency",
+      "iterations": 30,
+      "avg_ms": 0.12704713347678384,
+      "min_ms": 0.12295800115680322,
+      "max_ms": 0.1429999974789098,
+      "p95_ms": 0.133916997583583,
+      "throughput_ops_sec": 7864.124689850642
+    },
+    "memory_retrieval": {
+      "operation": "Memory Retrieval Latency",
+      "iterations": 30,
+      "avg_ms": 0.16977919973821068,
+      "min_ms": 0.15983399498509243,
+      "max_ms": 0.23804200463928282,
+      "p95_ms": 0.1784999985829927,
+      "throughput_ops_sec": 5886.728739804197
+    },
+    "episode_creation": {
+      "operation": "Episode Creation Latency",
+      "iterations": 30,
+      "avg_ms": 0.09000833354851541,
+      "min_ms": 0.07891599670983851,
+      "max_ms": 0.19112500012852252,
+      "p95_ms": 0.12383400462567806,
+      "throughput_ops_sec": 11095.01511334631
+    }
+  },
+  "fault_tests": [
+    {
+      "scenario": "Corrupted Frame Handling",
+      "passed": true,
+      "recovery_time_ms": 2.887499998905696,
+      "details": "Isolated bad frames and processed subsequent valid frame cleanly"
+    },
+    {
+      "scenario": "Missing Identity Lookup",
+      "passed": true,
+      "recovery_time_ms": 0.1110419980250299,
+      "details": "Returned None cleanly for unknown identity queries"
+    },
+    {
+      "scenario": "Camera Hardware Fallback",
+      "passed": true,
+      "recovery_time_ms": 0.07229100447148085,
+      "details": "Camera HAL isolated invalid device index cleanly"
+    },
+    {
+      "scenario": "Microphone Hardware Fallback",
+      "passed": true,
+      "recovery_time_ms": 3.3917499968083575,
+      "details": "Microphone HAL isolated missing device handles cleanly"
+    },
+    {
+      "scenario": "Database Schema Recovery",
+      "passed": true,
+      "recovery_time_ms": 2.216708002379164,
+      "details": "Database schema drop/recreate restored default state"
+    }
+  ]
+}

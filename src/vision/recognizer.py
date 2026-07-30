@@ -2,7 +2,10 @@ import os
 import json
 import cv2
 import numpy as np
-import face_recognition
+try:
+    import face_recognition
+except ImportError:
+    face_recognition = None
 from typing import List, Dict, Any, Tuple, Union
 
 class FaceRecognizer:
