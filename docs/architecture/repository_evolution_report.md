@@ -1,7 +1,7 @@
 # MEMORA (Samsung Anchor) — Repository Evolution Report
 
-- **Document Version**: 1.9.0
-- **Scope**: Architectural Evolution from Phase 21 through Phase 35
+- **Document Version**: 2.0.0
+- **Scope**: Architectural Evolution from Phase 21 through Phase 36
 - **Target Audience**: Core Engineering Maintainers, Technical Reviewers, Clinical AI Engineers
 
 ---
@@ -24,7 +24,8 @@
 | **Phase 32** | **Cognitive Integrity & Consistency** | Ecosystem-wide read-only health validation, cross-subsystem reference integrity & diagnostics | 387 |
 | **Phase 33** | **Unified Configuration & Policy** | Single deterministic source of truth for runtime parameters, policies, freezing, & profiles | 399 |
 | **Phase 34** | **Security, Identity & Access Control** | Unified role-based permissions, access controller façade, and security audit logs | 412 |
-| **Phase 35** | **Unified Cognitive Input/Output (I/O)** | Single payload-neutral architectural boundary, ingress/egress gateways, and deterministic routing | **423** |
+| **Phase 35** | **Unified Cognitive Input/Output (I/O)** | Single payload-neutral architectural boundary, ingress/egress gateways, and deterministic routing | 423 |
+| **Phase 36** | **Clinical Interoperability (FHIR / HL7)** | Protocol-isolated clinical adapters translating healthcare data into payload-neutral IOMessages | **436** |
 
 ---
 
@@ -45,11 +46,12 @@
 - **Phase 33 (Configuration)**: `src/configuration/` — Configuration Models, Configuration Registry, Policy Registry, Validator, Configuration Engine, Explainer.
 - **Phase 34 (Security)**: `src/security/` — Security Models, Identity Registry, Authorization Engine, Access Controller, Audit Security, Security Engine, Security Explainer.
 - **Phase 35 (I/O Framework)**: `src/io/` — I/O Models, Input Gateway, Output Gateway, I/O Router, I/O Validator, I/O Engine, I/O Explainer.
+- **Phase 36 (Interoperability)**: `src/interoperability/` — Interoperability Models, FHIR Adapter, HL7 Adapter, Clinical Mapper, Validator, Engine, Explainer.
 
 ---
 
 ## 3. Repository Integrity & Test Verification
 
 - **Maturity Rating**: Production-Grade Clinical AI Research Platform (Level 5 / 5).
-- **Verification**: **423 passing tests across 48 test modules (100% pass rate)**.
+- **Verification**: **436 passing tests across 49 test modules (100% pass rate)**.
 - **Performance**: 64.08 FPS video processing, $< 0.1\text{ms}$ query latency per cognitive layer.
