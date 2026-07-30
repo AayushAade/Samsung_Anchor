@@ -1,7 +1,7 @@
 # MEMORA (Samsung Anchor) — Repository Evolution Report
 
-- **Document Version**: 1.5.0
-- **Scope**: Architectural Evolution from Phase 21 through Phase 31
+- **Document Version**: 1.6.0
+- **Scope**: Architectural Evolution from Phase 21 through Phase 32
 - **Target Audience**: Core Engineering Maintainers, Technical Reviewers, Clinical AI Engineers
 
 ---
@@ -20,52 +20,30 @@
 | **Phase 28** | **Semantic Knowledge Graph & World Model** | Explicit entity-relationship world model, BFS/DFS traversal, & fact provenance | 333 |
 | **Phase 29** | **Long-Term Memory Consolidation** | Unified memory encoding, deduplication, multi-indexing, recall & retention rules | 350 |
 | **Phase 30** | **Clinical Runtime & Observability** | Operational lifecycles, structured logging, distributed tracing, fault isolation & recovery | 360 |
-| **Phase 31** | **Cognitive Session Framework** | Unified session lifecycle, execution trace recording, & session explainability | **377** |
+| **Phase 31** | **Cognitive Session Framework** | Unified session lifecycle, execution trace recording, & session explainability | 377 |
+| **Phase 32** | **Cognitive Integrity & Consistency** | Ecosystem-wide read-only health validation, cross-subsystem reference integrity & diagnostics | **387** |
 
 ---
 
-## 2. Primary Subsystems
+## 2. Primary Subsystems Introduced
 
-- **Phase 21**: `src/cognition/cos/` — Working Memory, Attention, Goal Manager, Decision Engine, Cognitive Kernel.
-- **Phase 22**: `src/trust/` — Safety Manager, Evidence Accumulator, Audit Framework, Privacy Manager, Degradation Manager.
-- **Phase 23**: `src/behaviour/` — Routine Learning, Predictive Assistance, Drift Monitor, Behaviour Manager.
-- **Phase 24**: `src/reasoning/` — Cognitive Blackboard, Confidence Engine, Temporal Reasoner, Conflict Detector, Reasoning Engine.
-- **Phase 25**: `src/executive/` — Goal Manager, Task Graph, Deterministic Planner, Execution Monitor, Executive Engine.
-- **Phase 26**: `src/experience/` — Experience Repository, Pattern Library, Outcome Analyzer, Confidence Calibrator, Experience Engine.
-- **Phase 27**: `src/core/` — `ICognitiveSubsystem`, `UnifiedEvent`, `SharedContext`, Cognitive Health Monitor, Dependency Validator, Benchmark Suite.
-- **Phase 28**: `src/knowledge/` — Entity Registry, Relationship Registry, Knowledge Graph, Ontology Manager, Fact Repository, Knowledge Engine.
-- **Phase 29**: `src/memory/` — Memory Repository, Encoder, Consolidator, Multi-Index, Recall Engine, Retention & Forgetting Managers, Memory Engine.
-- **Phase 30**: `src/runtime/` — Runtime Configuration, Service Registry, Scheduler, Fault Manager, Recovery Orchestrator, Metrics, Health, Runtime Engine.
-- **Phase 31**: `src/session/` — Session Models, Session Context, Session Manager, Session Engine, Session Explainer.
-
----
-
-## 3. Pipeline Flow
-
-```
-Step 0:  Central Runtime Engine (Lifecycle & Telemetry)
-Step 1:  Perception Manager & HAL Ingestion
-Step 2:  Context Fusion Engine
-Step 3:  Goal Inference & Context Restoration
-Step 4:  Dialogue Manager & Patient State Evaluation
-Step 6.5:  Cognitive Kernel (Working Memory)
-Step 6.55: Long-Term Memory Consolidation & Recall
-Step 6.6:  Behaviour Intelligence
-Step 6.7:  Cognitive Reasoning Engine
-Step 6.75: Semantic Knowledge Graph
-Step 6.8:  Executive Engine
-Step 6.9:  Experience Engine
-Step 7:  Safety Manager
-Step 8:  CognitiveStream Emission
-Step 9:  Central Runtime (Trace & Recovery)
-```
-
-**Session Wrapper**: `SessionEngine.execute()` wraps the entire pipeline in a `CognitiveSession` lifecycle (CREATED → RUNNING → COMPLETED/FAILED), recording subsystem participation and generating explainable session summaries.
+- **Phase 21 (COS)**: `src/cognition/cos/` — Working Memory, Attention, Goal Manager, Decision Engine, Cognitive Kernel.
+- **Phase 22 (Trust & Safety)**: `src/trust/` — Safety Manager, Evidence Accumulator, Audit Framework, Privacy Manager, Degradation Manager.
+- **Phase 23 (Behaviour)**: `src/behaviour/` — Routine Learning, Predictive Assistance, Drift Monitor, Behaviour Manager.
+- **Phase 24 (Reasoning)**: `src/reasoning/` — Cognitive Blackboard, Confidence Engine, Temporal Reasoner, Conflict Detector, Reasoning Engine.
+- **Phase 25 (Executive)**: `src/executive/` — Goal Manager, Task Graph, Deterministic Planner, Execution Monitor, Executive Engine.
+- **Phase 26 (Experience)**: `src/experience/` — Experience Repository, Pattern Library, Outcome Analyzer, Confidence Calibrator, Experience Engine.
+- **Phase 27 (Consolidation)**: `src/core/` — `ICognitiveSubsystem`, `UnifiedEvent`, `SharedContext`, Cognitive Health Monitor, Dependency Validator, Benchmark Suite.
+- **Phase 28 (Knowledge)**: `src/knowledge/` — Entity Registry, Relationship Registry, Knowledge Graph, Ontology Manager, Fact Repository, Knowledge Engine.
+- **Phase 29 (Memory)**: `src/memory/` — Memory Repository, Encoder, Consolidator, Multi-Index, Recall Engine, Retention & Forgetting Managers, Memory Engine.
+- **Phase 30 (Runtime)**: `src/runtime/` — Runtime Configuration, Service Registry, Scheduler, Fault Manager, Recovery Orchestrator, Metrics, Health, Runtime Engine.
+- **Phase 31 (Session)**: `src/session/` — Session Models, Session Context, Session Manager, Session Engine, Session Explainer.
+- **Phase 32 (Integrity)**: `src/integrity/` — Integrity Models, Integrity Validator, Consistency Checker, Integrity Engine, Integrity Explainer.
 
 ---
 
-## 4. Repository Maturity
+## 3. Repository Integrity & Test Verification
 
 - **Maturity Rating**: Production-Grade Clinical AI Research Platform (Level 5 / 5).
-- **Verification**: **377 passing tests (100% pass rate)**.
-- **Performance**: 64.08 FPS, < 0.1ms query latency per cognitive layer.
+- **Verification**: **387 passing tests across 45 test modules (100% pass rate)**.
+- **Performance**: 64.08 FPS video processing, $< 0.1\text{ms}$ query latency per cognitive layer.
