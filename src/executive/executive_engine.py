@@ -14,6 +14,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+from src.core.interfaces import ICognitiveSubsystem
 from src.executive.executive_models import Goal, GoalStatus, GoalType, InterruptType, Plan
 from src.executive.goal_manager import GoalManager
 from src.executive.planner import DeterministicPlanner
@@ -25,7 +26,7 @@ from src.executive.plan_validator import PlanValidator
 from src.executive.plan_explainer import PlanExplainer
 
 
-class ExecutiveEngine:
+class ExecutiveEngine(ICognitiveSubsystem):
     """
     Central Executive Function Orchestrator.
     """
@@ -38,7 +39,49 @@ class ExecutiveEngine:
         self.interrupt_manager = InterruptManager()
         self.recovery_manager = RecoveryManager()
         self._cycle_counter = 0
+        self._status = "INITIALIZED"
         self._lock = threading.Lock()
+
+    def initialize(self) -> bool:
+        with self._lock:
+            self._status = "RUNNING"
+            return True
+
+    def shutdown(self) -> bool:
+        with self._lock:
+            self._status = "SHUTDOWN"
+            return True
+
+    def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.process_cycle(
+            reasoning_summary=input_data.get("reasoning_summary"),
+            behaviour_summary=input_data.get("behaviour_summary"),
+            location=input_data.get("location", "Living Room"),
+            user_speech=input_data.get("user_speech"),
+            patient_state_mode=input_data.get("patient_state_mode", "Calm"),
+            emergency_active=input_data.get("emergency_active", False),
+        )
+
+    def status(self) -> str:
+        with self._lock:
+            return self._status
+
+    def health(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "status": self._status,
+                "active_goals": len(self.goal_manager.get_active_goals()),
+            }
+
+    def metrics(self) -> Dict[str, Any]:
+        with self._lock:
+            return {"cycle_count": self._cycle_counter}
+
+    def explain(self) -> str:
+        goals = self.goal_manager.get_active_goals()
+        if goals:
+            return f"Executive Engine: Active top goal is '{goals[0].title}' (Priority: {goals[0].priority:.2f})."
+        return "Executive Engine: Monitoring default orientation goal."
 
     def process_cycle(
         self,

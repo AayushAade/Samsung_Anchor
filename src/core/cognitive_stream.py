@@ -140,6 +140,18 @@ class CognitiveEvent:
     # Executive Function Framework Context (Phase 25)
     executive_summary: Optional[Dict[str, Any]] = None
 
+    # Experience Learning Framework Context (Phase 26)
+    experience_summary: Optional[Dict[str, Any]] = None
+
+    # Semantic Knowledge Framework Context (Phase 28)
+    knowledge_summary: Optional[Dict[str, Any]] = None
+
+    # Long-Term Memory Consolidation Context (Phase 29)
+    memory_summary: Optional[Dict[str, Any]] = None
+
+    # Clinical Runtime & Observability Context (Phase 30)
+    runtime_engine_summary: Optional[Dict[str, Any]] = None
+
     # Latencies
     total_latency_ms: float = 0.0
 
@@ -238,6 +250,10 @@ class CognitiveStream:
         behaviour_summary=None,
         reasoning_summary=None,
         executive_summary=None,
+        experience_summary=None,
+        knowledge_summary=None,
+        memory_summary=None,
+        runtime_engine_summary=None,
     ) -> CognitiveEvent:
         """
         Build a CognitiveEvent from the raw pipeline outputs.
@@ -248,6 +264,18 @@ class CognitiveStream:
             timestamp=datetime.now().isoformat(),
             cycle_id=cycle_id,
         )
+
+        if runtime_engine_summary:
+            event.runtime_engine_summary = runtime_engine_summary
+
+        if memory_summary:
+            event.memory_summary = memory_summary
+
+        if knowledge_summary:
+            event.knowledge_summary = knowledge_summary
+
+        if experience_summary:
+            event.experience_summary = experience_summary
 
         if executive_summary:
             event.executive_summary = executive_summary

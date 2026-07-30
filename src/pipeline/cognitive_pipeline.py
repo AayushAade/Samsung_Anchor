@@ -43,6 +43,11 @@ from src.trust.degradation_manager import DegradationManager
 from src.behaviour.behaviour_manager import BehaviourManager
 from src.reasoning.reasoning_engine import CognitiveReasoningEngine
 from src.executive.executive_engine import ExecutiveEngine
+from src.experience.experience_engine import ExperienceEngine
+from src.knowledge.knowledge_engine import KnowledgeEngine
+from src.memory.memory_engine import MemoryEngine
+from src.runtime.runtime_engine import CentralRuntimeEngine
+from src.session.session_engine import SessionEngine
 
 from src.perception.perception_manager import PerceptionManager
 
@@ -168,6 +173,21 @@ class CognitivePipeline:
         # Phase 25 — Executive Function & Adaptive Planning Framework
         self.executive_engine = ExecutiveEngine()
 
+        # Phase 26 — Experience Learning & Adaptive Knowledge Framework
+        self.experience_engine = ExperienceEngine()
+
+        # Phase 28 — Semantic Knowledge Graph & World Model
+        self.knowledge_engine = KnowledgeEngine()
+
+        # Phase 29 — Long-Term Memory Consolidation Framework
+        self.memory_engine = MemoryEngine()
+
+        # Phase 30 — Clinical Runtime, Observability & Deployment Framework
+        self.central_runtime = CentralRuntimeEngine()
+
+        # Phase 31 — Cognitive Session Framework
+        self.session_engine = SessionEngine()
+
         self._latest_transcript: Optional[str] = None
         self.runtime_manager.sensor_bus.subscribe(
             SensorEventType.SPEECH_TRANSCRIPT,
@@ -268,6 +288,9 @@ class CognitivePipeline:
                 event,
                 recall,
             )
+
+            # Operational Phase 30 Clinical Runtime Cycle
+            runtime_engine_summary = self.central_runtime.process_cycle()
             
             u_speech = recognition_result.get("user_speech") or self._latest_transcript
             missed_meds = [m.medication_name for m in self.medication_mgr.get_missed_medications()]
@@ -430,6 +453,14 @@ class CognitivePipeline:
             )
 
             # --------------------------------------------------
+            # 6.55 Long-Term Memory Consolidation & Recall
+            # --------------------------------------------------
+            memory_summary = self.memory_engine.process_cycle(
+                user_speech=u_speech,
+                location=loc_val,
+            )
+
+            # --------------------------------------------------
             # 6.6 Behaviour Intelligence & Longitudinal Analytics
             # --------------------------------------------------
             behaviour_summary = self.behaviour_manager.update_cycle(
@@ -452,6 +483,14 @@ class CognitivePipeline:
             )
 
             # --------------------------------------------------
+            # 6.75 Semantic Knowledge Graph & World Model
+            # --------------------------------------------------
+            knowledge_summary = self.knowledge_engine.process_cycle(
+                location=loc_val,
+                active_person=getattr(event, "name", None),
+            )
+
+            # --------------------------------------------------
             # 6.8 Executive Planning & Adaptive Execution
             # --------------------------------------------------
             executive_summary = self.executive_engine.process_cycle(
@@ -461,6 +500,15 @@ class CognitivePipeline:
                 user_speech=u_speech,
                 patient_state_mode=self.current_patient_state.mode.value,
                 emergency_active=self.emergency_mgr.get_current_state().active,
+            )
+
+            # --------------------------------------------------
+            # 6.9 Experience Learning & Knowledge Accumulation
+            # --------------------------------------------------
+            experience_summary = self.experience_engine.process_cycle(
+                executive_summary=executive_summary,
+                reasoning_summary=reasoning_summary,
+                location=loc_val,
             )
 
             # --------------------------------------------------
@@ -493,6 +541,10 @@ class CognitivePipeline:
                     behaviour_summary=behaviour_summary,
                     reasoning_summary=reasoning_summary,
                     executive_summary=executive_summary,
+                    experience_summary=experience_summary,
+                    knowledge_summary=knowledge_summary,
+                    memory_summary=memory_summary,
+                    runtime_engine_summary=runtime_engine_summary,
                 )
                 stream.emit(stream_event)
             except Exception:

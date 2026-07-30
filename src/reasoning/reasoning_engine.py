@@ -14,6 +14,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+from src.core.interfaces import ICognitiveSubsystem
 from src.reasoning.reasoning_models import (
     CognitiveStateMode,
     ConflictRecord,
@@ -28,7 +29,7 @@ from src.reasoning.explanation_builder import ExplanationBuilder
 from src.reasoning.temporal_reasoner import TemporalReasoner
 
 
-class CognitiveReasoningEngine:
+class CognitiveReasoningEngine(ICognitiveSubsystem):
     """
     Central Cognitive Reasoning Engine.
     """
@@ -37,7 +38,49 @@ class CognitiveReasoningEngine:
         self.blackboard = CognitiveBlackboard()
         self.hypothesis_manager = HypothesisManager()
         self._cycle_counter = 0
+        self._status = "INITIALIZED"
         self._lock = threading.Lock()
+
+    def initialize(self) -> bool:
+        with self._lock:
+            self._status = "RUNNING"
+            return True
+
+    def shutdown(self) -> bool:
+        with self._lock:
+            self._status = "SHUTDOWN"
+            self.blackboard.clear()
+            return True
+
+    def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.reason(
+            event_name=input_data.get("event_name"),
+            location=input_data.get("location", "Living Room"),
+            user_speech=input_data.get("user_speech"),
+            patient_state_mode=input_data.get("patient_state_mode", "Calm"),
+            active_goal_name=input_data.get("active_goal_name"),
+        )
+
+    def status(self) -> str:
+        with self._lock:
+            return self._status
+
+    def health(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "status": self._status,
+                "active_observations": len(self.blackboard.get_active_observations()),
+            }
+
+    def metrics(self) -> Dict[str, Any]:
+        with self._lock:
+            return {"cycle_count": self._cycle_counter}
+
+    def explain(self) -> str:
+        hyps = self.blackboard.get_hypotheses()
+        if hyps:
+            return f"Reasoning Engine: Primary state is '{hyps[0].state_mode.value}' (Confidence: {hyps[0].confidence:.0%})."
+        return "Reasoning Engine: Baseline idle state."
 
     def post_observation(
         self,

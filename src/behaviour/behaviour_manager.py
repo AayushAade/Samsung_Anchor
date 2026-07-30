@@ -18,6 +18,7 @@ from __future__ import annotations
 import threading
 from typing import Any, Dict, List, Optional
 
+from src.core.interfaces import ICognitiveSubsystem
 from src.behaviour.models import ActivityCategory
 from src.behaviour.routine_engine import RoutineLearningEngine
 from src.behaviour.prediction_engine import PredictiveAssistanceEngine
@@ -28,7 +29,7 @@ from src.behaviour.caregiver_insights import CaregiverInsightsGenerator
 from src.behaviour.simulation_framework import BehaviourSimulationFramework
 
 
-class BehaviourManager:
+class BehaviourManager(ICognitiveSubsystem):
     """
     Central orchestrator for the Behaviour Intelligence Platform.
     """
@@ -45,7 +46,48 @@ class BehaviourManager:
         )
         self.simulator = BehaviourSimulationFramework()
         self._cycle_counter = 0
+        self._status = "INITIALIZED"
         self._lock = threading.Lock()
+
+    def initialize(self) -> bool:
+        with self._lock:
+            self._status = "RUNNING"
+            return True
+
+    def shutdown(self) -> bool:
+        with self._lock:
+            self._status = "SHUTDOWN"
+            return True
+
+    def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.update_cycle(
+            event_name=input_data.get("event_name"),
+            location=input_data.get("location", "Living Room"),
+            user_speech=input_data.get("user_speech"),
+            patient_state_mode=input_data.get("patient_state_mode", "Calm"),
+            time_of_day=input_data.get("time_of_day", "Morning"),
+        )
+
+    def status(self) -> str:
+        with self._lock:
+            return self._status
+
+    def health(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "status": self._status,
+                "active_routines": len(self.routine_engine.get_active_routines()),
+            }
+
+    def metrics(self) -> Dict[str, Any]:
+        with self._lock:
+            return {"cycle_count": self._cycle_counter}
+
+    def explain(self) -> str:
+        routines = self.routine_engine.get_active_routines()
+        if routines:
+            return f"Behaviour Platform: Primary routine is '{routines[0].title}' (Confidence: {routines[0].confidence:.0%})."
+        return "Behaviour Platform: Accumulating daily routine observations."
 
     def update_cycle(
         self,
