@@ -36,6 +36,32 @@ class DatabaseEpisodeRepository:
             db_episodes = session.query(EpisodeModel).filter(EpisodeModel.person.ilike(f"%{person}%")).order_by(EpisodeModel.id.desc()).all()
             return [self._to_domain(e) for e in db_episodes]
 
+    def get_all_episodes(self) -> list[Episode]:
+        with self.session_factory() as session:
+            db_episodes = session.query(EpisodeModel).order_by(EpisodeModel.timestamp.asc(), EpisodeModel.id.asc()).all()
+            return [self._to_domain(e) for e in db_episodes]
+
+    def get_episodes_for_today(self) -> list[Episode]:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        with self.session_factory() as session:
+            db_episodes = session.query(EpisodeModel).filter(EpisodeModel.timestamp.startswith(today_str)).order_by(EpisodeModel.timestamp.asc(), EpisodeModel.id.asc()).all()
+            return [self._to_domain(e) for e in db_episodes]
+
+    def get_visitors_for_today(self) -> list[str]:
+        episodes = self.get_episodes_for_today()
+        visitors = []
+        for ep in episodes:
+            if ep.person and ep.person.strip() and ep.person.strip().lower() not in ["unknown", "none", "anonymous"]:
+                p = ep.person.strip()
+                if p not in visitors:
+                    visitors.append(p)
+        return visitors
+
+    def get_recent_episodes(self, limit: int = 20) -> list[Episode]:
+        with self.session_factory() as session:
+            db_episodes = session.query(EpisodeModel).order_by(EpisodeModel.id.desc()).limit(limit).all()
+            return [self._to_domain(e) for e in reversed(db_episodes)]
+
     def clear(self) -> None:
         with self.session_factory() as session:
             session.query(EpisodeModel).delete()
@@ -55,7 +81,8 @@ class DatabaseEpisodeRepository:
             person=db_model.person,
             summary=db_model.summary,
             timestamp=ts,
-            location=db_model.location,
+            location=db_model.location or "",
             commitments=list(db_model.commitments) if db_model.commitments else [],
             tags=list(db_model.tags) if db_model.tags else []
         )
+

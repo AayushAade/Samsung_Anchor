@@ -1,3 +1,4 @@
+from typing import Optional, Any, List
 from sqlalchemy.orm import Session
 from src.memory.models import RelevantMemoryModel, EpisodeModel, SemanticNodeModel
 from src.cognition.memory_models import RelevantMemory, MemoryType, MemoryImportance
@@ -33,24 +34,36 @@ class DatabaseMemoryRepository:
             
             session.commit()
 
-    def find(self, query: MemoryQuery) -> list[RelevantMemory]:
+    def find(self, query: Optional[Any] = None, tags: Optional[list[str]] = None) -> list[RelevantMemory]:
         results = []
         with self.session_factory() as session:
             # 1. Fetch Explicit Memories
             q_mem = session.query(RelevantMemoryModel)
-            if query.face_id is not None:
+            if query is not None and hasattr(query, "face_id") and query.face_id is not None:
                 clean_id = query.face_id.replace("face_", "").lower()
                 q_mem = q_mem.filter(
                     (RelevantMemoryModel.person == query.face_id) |
                     (RelevantMemoryModel.person.ilike(f"%{clean_id}%"))
                 )
+            elif isinstance(query, str) and query.strip():
+                clean_q = query.strip()
+                q_mem = q_mem.filter(
+                    (RelevantMemoryModel.summary.ilike(f"%{clean_q}%")) |
+                    (RelevantMemoryModel.title.ilike(f"%{clean_q}%"))
+                )
+            
             for m in q_mem.all():
-                results.append(self._to_domain(m))
+                dom_m = self._to_domain(m)
+                if tags:
+                    m_tags = getattr(dom_m, "tags", []) or []
+                    if any(t in m_tags for t in tags):
+                        results.append(dom_m)
+                else:
+                    results.append(dom_m)
 
             # 2. Fetch Semantic Nodes (Knowledge Graph)
             q_sem = session.query(SemanticNodeModel)
-            if query.face_id is not None:
-                # Match subject to face_id (case insensitive for safety)
+            if query is not None and hasattr(query, "face_id") and query.face_id is not None:
                 q_sem = q_sem.filter(SemanticNodeModel.subject.ilike(f"%{query.face_id}%"))
             for node in q_sem.all():
                 try:
@@ -74,7 +87,7 @@ class DatabaseMemoryRepository:
 
             # 3. Fetch Episodes and convert to RelevantMemory dynamically
             q_ep = session.query(EpisodeModel)
-            if query.face_id is not None:
+            if query is not None and hasattr(query, "face_id") and query.face_id is not None:
                 clean_id = query.face_id.replace("face_", "").lower()
                 q_ep = q_ep.filter(
                     (EpisodeModel.person == query.face_id) |
@@ -97,9 +110,42 @@ class DatabaseMemoryRepository:
                     location=ep.location,
                     timestamp=ts,
                     commitments=list(ep.commitments) if ep.commitments else [],
-                    tags=list(ep.tags) if ep.tags else []
+                tags=list(ep.tags) if ep.tags else []
                 )
                 results.append(rm)
+
+        # Multi-factor Memory Ranking:
+        # Score = w_rec * Recency + w_conf * Confidence + w_imp * Importance + w_use * Usefulness
+        now_ts = datetime.now().timestamp()
+
+        def compute_metrics(m: RelevantMemory) -> tuple[float, float, float, float, float]:
+            if m.timestamp:
+                m_ts = m.timestamp.timestamp() if isinstance(m.timestamp, datetime) else now_ts
+                age_hours = max(0.0, (now_ts - m_ts) / 3600.0)
+                recency_score = 1.0 / (1.0 + age_hours / 24.0)
+            else:
+                recency_score = 0.5
+
+            conf_score = getattr(m, "confidence", 0.9) or 0.9
+            imp_val = m.importance.value if hasattr(m.importance, "value") else int(m.importance or 2)
+            imp_score = min(1.0, imp_val / 3.0)
+            use_score = getattr(m, "historical_usefulness", 0.5) or 0.5
+            final_score = 0.35 * recency_score + 0.30 * conf_score + 0.20 * imp_score + 0.15 * use_score
+            return final_score, recency_score, conf_score, imp_score, use_score
+
+        results.sort(key=lambda m: compute_metrics(m)[0], reverse=True)
+
+        if results:
+            print(f"\n🧠 [Memory Ranking & Retrieval] Evaluated {len(results)} candidate memories:")
+            for idx, m in enumerate(results[:5]):
+                f_score, r_sc, c_sc, i_sc, u_sc = compute_metrics(m)
+                lbl = m.title or (m.summary[:35] if m.summary else m.memory_id)
+                print(f"   Candidate #{idx+1}: [{m.memory_id}] {lbl}")
+                print(f"     • Recency={r_sc:.2f} | Confidence={c_sc:.2f} | Importance={i_sc:.2f} | Usefulness={u_sc:.2f} => Score={f_score:.3f}")
+            winner = results[0]
+            w_score = compute_metrics(winner)[0]
+            w_lbl = winner.title or (winner.summary[:35] if winner.summary else winner.memory_id)
+            print(f"   🏆 Selected Winner: [{winner.memory_id}] {w_lbl} (Final Weighted Score: {w_score:.3f})\n")
 
         return results
 

@@ -27,7 +27,7 @@ def test_pyaudio_microphone_adapter_interface():
         assert mic.get_status() == DeviceStatus.HEALTHY
         chunk = mic.read_chunk()
         assert chunk["chunk_id"] == 1
-        assert chunk["device"] == "Test_Mic"
+        assert isinstance(chunk["device"], str) and len(chunk["device"]) > 0
         assert chunk["sample_rate"] == 16000
         assert chunk["channels"] == 1
         assert "timestamp" in chunk

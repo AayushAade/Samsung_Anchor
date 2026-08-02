@@ -61,12 +61,14 @@ class MemoraAudioListener:
         if self.mock_mode:
             log_event("audio_start", "Audio listening started (typing simulation)...")
             try:
+                if not sys.stdin or not sys.stdin.isatty():
+                    return None
                 text = input("> ")
                 if not text.strip():
                     return None
-                log_event("transcript", f"Transcript received: \"{text}\"")
+                log_event("transcript", f'Transcript received: "{text}"')
                 return text
-            except (KeyboardInterrupt, EOFError):
+            except (KeyboardInterrupt, EOFError, OSError, ValueError):
                 return None
 
         # Real microphone capture

@@ -25,7 +25,7 @@ from src.reasoning.context_binder import MemoraContextBinder
 
 def build_application(
     *,
-    live_hardware: bool = False,
+    live_hardware: Optional[bool] = None,
     database: Optional[MemoraDatabase] = None,
     recognizer: Optional[MemoraFaceRecognizer] = None,
     listener: Optional[MemoraAudioListener] = None,
@@ -36,9 +36,12 @@ def build_application(
     Build a Samsung Anchor application.
     """
 
+    # If live_hardware is None or True, attempt live hardware with simulation fallbacks
+    use_mock = (live_hardware is False)
+
     db = database if database is not None else MemoraDatabase()
-    rec = recognizer if recognizer is not None else MemoraFaceRecognizer(mock_mode=not live_hardware)
-    listn = listener if listener is not None else MemoraAudioListener(mock_mode=not live_hardware)
+    rec = recognizer if recognizer is not None else MemoraFaceRecognizer(mock_mode=use_mock)
+    listn = listener if listener is not None else MemoraAudioListener(mock_mode=use_mock)
     bind = binder if binder is not None else MemoraContextBinder()
     spk = speaker if speaker is not None else SpeakerDevice()
 

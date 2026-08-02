@@ -38,7 +38,7 @@ def test_visual_memory_recall_confidence_thresholds():
     # 3. Low Confidence / Unknown Item
     res_unk = engine.recall_object_location("Where is my wallet?", "Eleanor")
     assert res_unk["found"] is False
-    assert "I haven't seen that item recently" in res_unk["response"]
+    assert "never observed" in res_unk["response"].lower() or "haven't seen" in res_unk["response"].lower()
 
 
 def test_visual_memory_scenarios_for_five_meaningful_items():

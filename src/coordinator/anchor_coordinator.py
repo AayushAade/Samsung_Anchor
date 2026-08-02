@@ -134,6 +134,9 @@ class AnchorCoordinator:
         self.running = False
         if self._cognitive_thread is not None:
             self._cognitive_thread.join(timeout=2.0)
+            self._cognitive_thread = None
+        if hasattr(self.pipeline, "shutdown"):
+            self.pipeline.shutdown()
         self.memory_manager.shutdown()
 
     # ==========================================================

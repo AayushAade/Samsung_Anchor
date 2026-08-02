@@ -81,8 +81,12 @@ class ObjectDetector:
         )
 
         if not use_live:
-            print("[ObjectDetector] SIMULATION DETECTOR active")
-            return [obj for obj in self._seeded_objects.values() if obj.location == room]
+            if self.mode in ["SIMULATION", "AUTO"]:
+                print("[ObjectDetector] SIMULATION DETECTOR active (Fallback Simulation Profile)")
+                return [obj for obj in self._seeded_objects.values() if obj.location == room]
+            else:
+                print("[ObjectDetector] LIVE DETECTOR: No valid live camera frame available (returning empty detection list).")
+                return []
 
         print(f"[ObjectDetector] LIVE DETECTOR active for frame_id={frame_id}")
         now_str = datetime.now().strftime("%H:%M:%S")
@@ -165,9 +169,12 @@ class ObjectDetector:
         if raw_frame is not None:
             return self.detect_objects_from_frame(raw_frame=raw_frame, room=room, frame_id=frame_id)
 
-        # Failsafe simulation fallback when raw_frame is None
-        print("[ObjectDetector] SIMULATION DETECTOR active")
-        return [obj for obj in self._seeded_objects.values() if obj.location == room]
+        if self.mode in ["SIMULATION", "AUTO"]:
+            print("[ObjectDetector] SIMULATION DETECTOR active")
+            return [obj for obj in self._seeded_objects.values() if obj.location == room]
+        
+        print("[ObjectDetector] LIVE DETECTOR: No camera frame provided (returning empty detection list).")
+        return []
 
     def add_object(self, obj: DetectedObject) -> None:
         self._seeded_objects[obj.object_name] = obj
@@ -200,3 +207,10 @@ class ObjectDetector:
                 2,
             )
         return annotated
+
+    def get_diagnostics(self) -> Dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "opencv_available": HAS_OPENCV_NUMPY,
+            "seeded_objects_count": len(self._seeded_objects),
+        }

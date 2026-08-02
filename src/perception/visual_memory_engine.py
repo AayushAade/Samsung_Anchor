@@ -131,7 +131,7 @@ class VisualEpisodicMemoryEngine:
             return {
                 "found": False,
                 "confidence": 0.0,
-                "response": f"I haven't seen that item recently, {patient_name}.",
+                "response": "I have never observed that object.",
                 "entry": None,
             }
 

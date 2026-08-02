@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Any
 from src.perception.activity_detector import ActivityDetector
 from src.perception.audio_pipeline import AudioPipeline
 from src.perception.camera_pipeline import CameraPipeline
@@ -15,7 +15,8 @@ class PerceptionManager:
     Executes real-time perception cycles and yields unified PerceptionContext.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, database: Optional[Any] = None) -> None:
+        self.database = database
         self.camera_pipeline = CameraPipeline()
         self.face_tracker = FaceTracker()
         self.object_detector = ObjectDetector()
@@ -23,6 +24,9 @@ class PerceptionManager:
         self.activity_detector = ActivityDetector()
         self.audio_pipeline = AudioPipeline()
         self.fusion_engine = MultimodalFusionEngine()
+
+    def set_database(self, database: Any) -> None:
+        self.database = database
 
     def process_cycle(self, recognition_result: Optional[dict] = None) -> PerceptionContext:
         rec = recognition_result or {}
@@ -41,11 +45,30 @@ class PerceptionManager:
             frame_id=frame.frame_id,
         )
 
+        # Log detected objects into persistent database ObjectRepository
+        if self.database and hasattr(self.database, "object_repo") and self.database.object_repo:
+            room_str = room.value if hasattr(room, "value") else str(room)
+            for obj in objects:
+                bbox = obj.bounding_box or [0, 0, 0, 0]
+                cx = bbox[0] + bbox[2] / 2.0 if len(bbox) >= 4 else 0.0
+                cy = bbox[1] + bbox[3] / 2.0 if len(bbox) >= 4 else 0.0
+                try:
+                    self.database.object_repo.log_object(
+                        object_name=obj.object_name,
+                        x=cx,
+                        y=cy,
+                        room=room_str,
+                        bounding_box=bbox,
+                    )
+                except Exception:
+                    pass
+
         # 4. Infer Activity
         obj_names = [o.object_name for o in objects]
         activity = self.activity_detector.infer_activity(room, obj_names, bool(faces))
 
         # 5. Audio Events
+        self.audio_pipeline.process_audio_chunk()
         audio_events = self.audio_pipeline.get_recent_audio_events()
         if not audio_events:
             self.audio_pipeline.detect_event(AudioEventType.SPEECH_PRESENT if faces else AudioEventType.SILENCE)

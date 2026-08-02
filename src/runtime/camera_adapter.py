@@ -80,6 +80,7 @@ class SimulatedCameraAdapter(CameraAdapter):
 class OpenCVCameraAdapter(CameraAdapter):
     """
     Production-grade OpenCV Camera Adapter capturing physical webcam frames.
+    Probes multiple camera backends and indices, reporting explicit failure diagnostics.
     """
 
     def __init__(
@@ -98,44 +99,123 @@ class OpenCVCameraAdapter(CameraAdapter):
         self.status = DeviceStatus.DISCONNECTED
         self.cap: Optional[Any] = None
         self.frame_count = 0
+        self.dropped_frames = 0
+        self.failure_reason: Optional[str] = None
+        self.selected_backend: str = "NONE"
+        self.actual_width: int = 0
+        self.actual_height: int = 0
+        self.actual_fps: float = 0.0
+
+    @classmethod
+    def enumerate_cameras(cls) -> list[dict[str, Any]]:
+        """Scans camera indices 0..3 to report accessible hardware cameras."""
+        available = []
+        if not HAS_OPENCV:
+            return available
+
+        import sys
+        backends = [cv2.CAP_ANY]
+        if sys.platform == "darwin":
+            backends = [cv2.CAP_AVFOUNDATION, cv2.CAP_ANY]
+        elif sys.platform == "win32":
+            backends = [cv2.CAP_DSHOW, cv2.CAP_ANY]
+        elif sys.platform.startswith("linux"):
+            backends = [cv2.CAP_V4L2, cv2.CAP_ANY]
+
+        for idx in range(4):
+            for b in backends:
+                try:
+                    c = cv2.VideoCapture(idx, b)
+                    if c and c.isOpened():
+                        ret, f = c.read()
+                        if ret and f is not None:
+                            h, w = f.shape[:2]
+                            b_name = "AVFOUNDATION" if b == getattr(cv2, "CAP_AVFOUNDATION", -1) else ("DSHOW" if b == getattr(cv2, "CAP_DSHOW", -1) else ("V4L2" if b == getattr(cv2, "CAP_V4L2", -1) else "ANY"))
+                            available.append({
+                                "index": idx,
+                                "backend": b_name,
+                                "width": w,
+                                "height": h,
+                                "fps": c.get(cv2.CAP_PROP_FPS) or 30.0,
+                            })
+                            c.release()
+                            break
+                        c.release()
+                except Exception:
+                    pass
+        return available
 
     def initialize(self) -> bool:
         if not HAS_OPENCV:
             self.status = DeviceStatus.FAULTED
+            self.failure_reason = "OpenCV (cv2) Python module is not installed."
             return False
 
-        try:
-            self.cap = cv2.VideoCapture(self.device_index)
-            if self.cap and self.cap.isOpened():
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.target_width)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.target_height)
-                self.cap.set(cv2.CAP_PROP_FPS, self.target_fps)
-                self.status = DeviceStatus.HEALTHY
-                return True
-            else:
-                self.status = DeviceStatus.FAULTED
-                return False
-        except Exception:
-            self.status = DeviceStatus.FAULTED
-            return False
+        import sys
+        backends = []
+        if sys.platform == "darwin":
+            backends.append(("AVFOUNDATION", cv2.CAP_AVFOUNDATION))
+        elif sys.platform == "win32":
+            backends.append(("DSHOW", cv2.CAP_DSHOW))
+        elif sys.platform.startswith("linux"):
+            backends.append(("V4L2", cv2.CAP_V4L2))
+        backends.append(("ANY", cv2.CAP_ANY))
+
+        candidate_indices = [self.device_index] if self.device_index != 0 else [0, 1, 2, 3]
+
+        attempt_log = []
+        for idx in candidate_indices:
+            for b_name, b_flag in backends:
+                try:
+                    attempt_log.append(f"Index {idx} ({b_name})")
+                    c = cv2.VideoCapture(idx, b_flag)
+                    if c and c.isOpened():
+                        c.set(cv2.CAP_PROP_FRAME_WIDTH, self.target_width)
+                        c.set(cv2.CAP_PROP_FRAME_HEIGHT, self.target_height)
+                        c.set(cv2.CAP_PROP_FPS, self.target_fps)
+
+                        # Test read to verify frame pixels exist
+                        ret, test_frame = c.read()
+                        if ret and test_frame is not None and test_frame.size > 0:
+                            self.cap = c
+                            self.device_index = idx
+                            self.selected_backend = b_name
+                            self.actual_height, self.actual_width = test_frame.shape[:2]
+                            self.actual_fps = c.get(cv2.CAP_PROP_FPS) or self.target_fps
+                            self.status = DeviceStatus.HEALTHY
+                            self.failure_reason = None
+                            return True
+                        c.release()
+                except Exception as e:
+                    attempt_log.append(f"Index {idx} ({b_name}) error: {e}")
+
+        self.status = DeviceStatus.FAULTED
+        self.failure_reason = f"No accessible camera device found across attempted backends ({', '.join(attempt_log)}). OpenCV isOpened()=False or permission denied."
+        return False
 
     def capture_frame(self) -> Dict[str, Any]:
         self.frame_count += 1
         now_iso = datetime.now().isoformat()
 
         if self.status == DeviceStatus.HEALTHY and self.cap and self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if ret and frame is not None:
-                h, w = frame.shape[:2]
-                return {
-                    "frame_id": self.frame_count,
-                    "device": self.device_name,
-                    "width": w,
-                    "height": h,
-                    "fps": self.target_fps,
-                    "timestamp": now_iso,
-                    "raw_frame": frame,
-                }
+            try:
+                ret, frame = self.cap.read()
+                if ret and frame is not None:
+                    h, w = frame.shape[:2]
+                    self.actual_width, self.actual_height = w, h
+                    return {
+                        "frame_id": self.frame_count,
+                        "device": self.device_name,
+                        "width": w,
+                        "height": h,
+                        "fps": self.actual_fps,
+                        "timestamp": now_iso,
+                        "raw_frame": frame,
+                    }
+                else:
+                    self.dropped_frames += 1
+            except Exception:
+                self.dropped_frames += 1
 
         # Fallback metadata generation if capture fails
         return {
@@ -155,6 +235,19 @@ class OpenCVCameraAdapter(CameraAdapter):
 
     def get_status(self) -> DeviceStatus:
         return self.status
+
+    def get_diagnostics(self) -> Dict[str, Any]:
+        return {
+            "status": self.status.value,
+            "backend": self.selected_backend,
+            "device_index": self.device_index,
+            "device_name": self.device_name,
+            "resolution": f"{self.actual_width or self.target_width}x{self.actual_height or self.target_height}",
+            "fps": self.actual_fps or self.target_fps,
+            "processed_frames": self.frame_count,
+            "dropped_frames": self.dropped_frames,
+            "failure_reason": self.failure_reason,
+        }
 
     def shutdown(self) -> None:
         if self.cap and self.cap.isOpened():

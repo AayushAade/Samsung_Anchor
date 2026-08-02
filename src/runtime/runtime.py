@@ -16,6 +16,7 @@ Hardware-specific logic belongs in the subsystem modules.
 from __future__ import annotations
 
 import time
+import threading
 from typing import Any, Dict, Optional
 
 from src.coordinator.anchor_coordinator import AnchorCoordinator
@@ -60,6 +61,17 @@ class AnchorRuntime:
         """
         self.coordinator.shutdown()
         self.running = False
+
+    def print_diagnostic_report(self) -> None:
+        """
+        Print the MEMORA HARDWARE DIAGNOSTIC REPORT.
+        """
+        try:
+            rm = getattr(self.coordinator.pipeline, "runtime_manager", None)
+            if rm and hasattr(rm, "generate_diagnostic_report"):
+                print("\n" + rm.generate_diagnostic_report() + "\n")
+        except Exception:
+            pass
 
     # ---------------------------------------------------------
     # Subsystem Introspection & Observability
@@ -201,8 +213,11 @@ class AnchorRuntime:
         print("⚡ MEMORA Active Processing Loop Started.")
         try:
             while self.running:
+                t0 = time.perf_counter()
                 try:
                     frame, results = self.run_once(camera)
+                    t_lat = (time.perf_counter() - t0) * 1000.0
+                    fps = 1000.0 / (t_lat + 1e-3)
 
                     # Consume and dispatch any pending interaction actions
                     actions = self.coordinator.consume_actions()
@@ -213,10 +228,98 @@ class AnchorRuntime:
                             self.coordinator.speaker.speak(action.message)
 
                     if self.cycle_count % 10 == 0 or self.cycle_count == 1:
-                        print(f"💓 [Heartbeat] Runtime cycle #{self.cycle_count} completed successfully.")
+                        # Extract comprehensive telemetry metrics
+                        faces_cnt = 0
+                        faces_identities = []
+                        if isinstance(results, list):
+                            faces_cnt = len(results)
+                            for r in results:
+                                if isinstance(r, dict):
+                                    name = r.get("name") or r.get("face_id") or "Face"
+                                    faces_identities.append(name)
+
+                        obj_cnt = 0
+                        obj_names = []
+                        mem_hits = 0
+                        speech_cnt = 0
+                        dropped_frames = 0
+                        proc_frames = self.cycle_count
+                        cpu_pct = 0.0
+                        ram_pct = 0.0
+                        q_depth = 0
+                        t_cnt = threading.active_count()
+                        sys_health = "READY"
+
+                        try:
+                            q_depth = self.coordinator._cognitive_queue.qsize()
+                        except Exception:
+                            pass
+
+                        try:
+                            rm = getattr(self.coordinator.pipeline, "runtime_manager", None)
+                            if rm:
+                                hm = rm.get_health_metrics()
+                                cpu_pct = hm.cpu_usage_pct
+                                ram_pct = hm.ram_usage_pct
+                                dropped_frames = getattr(rm.camera, "dropped_frames", 0)
+                                proc_frames = getattr(rm.camera, "frame_count", self.cycle_count)
+                        except Exception:
+                            pass
+
+                        try:
+                            pm = getattr(self.coordinator.pipeline, "perception_manager", None)
+                            if pm:
+                                recent_audio = pm.audio_pipeline.get_recent_audio_events()
+                                speech_cnt = sum(1 for e in recent_audio if getattr(e, "event_type", None) and "SPEECH" in str(e.event_type))
+                                recent_objs = pm.object_detector.get_all_objects()
+                                obj_cnt = len(recent_objs)
+                                obj_names = [o.object_name for o in recent_objs[:3]]
+                        except Exception:
+                            pass
+
+                        try:
+                            trace = getattr(self.coordinator.pipeline, "latest_clinical_trace", None)
+                            if trace and hasattr(trace, "cognitive_context") and trace.cognitive_context:
+                                if trace.cognitive_context.memory:
+                                    mem_hits = len(trace.cognitive_context.memory.memories)
+                        except Exception:
+                            pass
+
+                        statuses = self.get_subsystem_statuses()
+                        if any("FAILED" in s for s in statuses.values()):
+                            sys_health = "FAILED"
+                        elif any("WARNING" in s for s in statuses.values()):
+                            sys_health = "WARNING (Simulated Fallback)"
+
+                        f_str = f" [{', '.join(faces_identities[:2])}]" if faces_identities else ""
+                        o_str = f" [{', '.join(obj_names[:2])}]" if obj_names else ""
+
+                        print(
+                            f"💓 [Heartbeat] Cycle #{self.cycle_count} | "
+                            f"Latency: {t_lat:.1f}ms ({fps:.1f} FPS) | "
+                            f"CPU: {cpu_pct:.1f}% | RAM: {ram_pct:.1f}% | "
+                            f"Threads: {t_cnt} | QDepth: {q_depth} | "
+                            f"Frames: {proc_frames} (Dropped: {dropped_frames}) | "
+                            f"Faces: {faces_cnt}{f_str} | Objects: {obj_cnt}{o_str} | "
+                            f"Memories: {mem_hits} | Speech Evts: {speech_cnt} | "
+                            f"Health: {sys_health}"
+                        )
 
                 except Exception as e:
-                    print(f"⚠️ [Runtime Warning] Cycle iteration error: {e}")
+                    print(f"⚠️ [Runtime Recovery] Hardware iteration notice: {e}. Executing synthetic fallback cycle...")
+                    # Trigger hardware manager fallback if available
+                    try:
+                        rm = self.coordinator.pipeline.runtime_manager
+                        if hasattr(rm, "fallback_camera"):
+                            rm.fallback_camera()
+                    except Exception:
+                        pass
+
+                    fallback_frame = {"frame_id": self.cycle_count, "timestamp": time.time(), "fallback": True}
+                    try:
+                        self.process_frame(fallback_frame)
+                    except Exception as fallback_err:
+                        print(f"⚠️ [Runtime Warning] Fallback processing notice: {fallback_err}")
 
                 if max_cycles is not None and self.cycle_count >= max_cycles:
                     print(f"🛑 Max execution cycles ({max_cycles}) reached.")

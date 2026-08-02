@@ -43,11 +43,14 @@ class ObjectRepository:
 
     def get_last_known_location(self, object_name: str):
         with self.session_factory() as session:
+            # First try exact match, then case-insensitive / partial match
             obj = session.query(Object).filter(Object.name == object_name).first()
+            if not obj:
+                obj = session.query(Object).filter(Object.name.ilike(f"%{object_name}%")).first()
             if not obj:
                 return None
                 
-            histories = session.query(ObjectHistory).filter(ObjectHistory.object_name == object_name).order_by(ObjectHistory.id.asc()).all()
+            histories = session.query(ObjectHistory).filter(ObjectHistory.object_name == obj.name).order_by(ObjectHistory.id.asc()).all()
             
             history_list = []
             for h in histories:
@@ -60,6 +63,7 @@ class ObjectRepository:
                 })
                 
             return {
+                "name": obj.name,
                 "last_seen": obj.last_seen,
                 "x": obj.x,
                 "y": obj.y,
@@ -75,3 +79,19 @@ class ObjectRepository:
             for obj in objs:
                 objects_dict[obj.name] = self.get_last_known_location(obj.name)
         return objects_dict
+
+    def search_object(self, query: str):
+        """
+        Searches for object by query string (case-insensitive substring match).
+        Returns dict with last known location details or None.
+        """
+        if not query:
+            return None
+        q_lower = query.lower().strip()
+        with self.session_factory() as session:
+            objs = session.query(Object).all()
+            for obj in objs:
+                if q_lower in obj.name.lower() or obj.name.lower() in q_lower or any(word in obj.name.lower() for word in q_lower.split() if len(word) > 3):
+                    return self.get_last_known_location(obj.name)
+        return None
+

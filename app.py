@@ -101,7 +101,7 @@ def main(
     max_cycles: Optional[int] = 0,
     run_scenarios: bool = False,
     start_dashboard: bool = False,
-    live_hardware: bool = False,
+    live_hardware: Optional[bool] = None,
     vision_standalone: bool = False,
 ) -> None:
     """
@@ -117,16 +117,20 @@ def main(
     print("🧠 Samsung Anchor")
     print("Application Starting...")
     print("============================================================")
-    if live_hardware:
-        print("🎥 OPERATIONAL MODE: LIVE HARDWARE ACTIVE")
-        print("   • Video Feed : OpenCV Camera Adapter (Index 0)")
-        print("   • Audio Feed : Native PyAudio Microphone Adapter")
-        print("   • Speaker    : Local Native TTS Engine")
-    else:
+    llm_active = bool(os.environ.get("GEMINI_API_KEY"))
+    llm_mode_str = "Gemini (gemini-1.5-flash)" if llm_active else "Local Deterministic Reasoner"
+    if live_hardware is False:
         print("🤖 OPERATIONAL MODE: SIMULATION DEMONSTRATION ACTIVE")
         print("   • Video Feed : Simulated Frame Generator")
         print("   • Audio Feed : Simulated Audio Listener")
         print("   • Speaker    : Console Audio Dispatch Log")
+        print(f"   • LLM Mode   : {llm_mode_str}")
+    else:
+        print("🎥 OPERATIONAL MODE: LIVE HARDWARE (AUTO-DETECT / FALLBACK ACTIVE)")
+        print("   • Video Feed : OpenCV Camera Adapter (Index 0 / Fallback)")
+        print("   • Audio Feed : PyAudio Microphone Adapter (Native / Fallback)")
+        print("   • Speaker    : Text-to-Speech Engine (Native / Console Fallback)")
+        print(f"   • LLM Mode   : {llm_mode_str}")
     print("=" * 60)
 
     # Build application and initialize runtime
@@ -134,15 +138,23 @@ def main(
     runtime = AnchorRuntime(coordinator)
     runtime.initialize()
 
+    # Print MEMORA HARDWARE DIAGNOSTIC REPORT
+    runtime.print_diagnostic_report()
+
     print("Application factory ready.")
     print("Runtime integration ready.")
     print("System initialization complete.")
     print("Samsung Anchor is ready for runtime execution.")
 
-    # Phase 6 Observability Status Report
+    # Phase 6 Observability Status Report & Operational State Determination
     statuses = runtime.get_subsystem_statuses()
+    is_pure_live = all("WARNING" not in s and "FAILED" not in s for s in statuses.values())
+
     print("\n" + "=" * 60)
-    print("📊 MEMORA Subsystem Observability Status")
+    if is_pure_live and live_hardware is not False:
+        print("🟢 STATE A: LIVE HARDWARE MODE (All Hardware Devices VERIFIED & READY)")
+    else:
+        print("🟡 STATE B: SIMULATION FALLBACK MODE (Explicit Hardware Fallbacks Active)")
     print("=" * 60)
     for subsystem, status in statuses.items():
         symbol = "✓" if "READY" in status else ("⚠️" if "WARNING" in status else "❌")
@@ -202,11 +214,17 @@ def cli():
 
     args = parser.parse_args()
 
+    live_hw = None
+    if args.live_hardware:
+        live_hw = True
+    elif args.simulation:
+        live_hw = False
+
     main(
         max_cycles=args.max_cycles,
         run_scenarios=args.scenario,
         start_dashboard=args.dashboard,
-        live_hardware=args.live_hardware,
+        live_hardware=live_hw,
         vision_standalone=args.vision_standalone,
     )
 

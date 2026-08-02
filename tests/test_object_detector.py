@@ -2,8 +2,12 @@ from src.perception.object_detector import ObjectDetector
 from src.perception.sensor_models import DetectedObject, RoomLocation
 
 
-def test_object_detector_room_filtering():
-    detector = ObjectDetector()
+from src.perception.object_detector import ObjectDetector
+from src.perception.sensor_models import DetectedObject, RoomLocation
+
+
+def test_object_detector_room_filtering_simulation():
+    detector = ObjectDetector(mode="SIMULATION")
     living_objs = detector.detect_objects_for_room(RoomLocation.LIVING_ROOM)
 
     assert len(living_objs) >= 2
@@ -12,3 +16,9 @@ def test_object_detector_room_filtering():
 
     kitchen_objs = detector.detect_objects_for_room(RoomLocation.KITCHEN)
     assert any("Medication" in o.object_name for o in kitchen_objs)
+
+
+def test_object_detector_live_mode_no_frame_returns_empty():
+    detector = ObjectDetector(mode="LIVE")
+    objs = detector.detect_objects_for_room(RoomLocation.LIVING_ROOM)
+    assert len(objs) == 0

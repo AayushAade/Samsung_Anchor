@@ -41,7 +41,15 @@ class AudioPipeline:
         if self.microphone_adapter is None:
             return None
 
-        chunk_data = self.microphone_adapter.read_chunk()
+        try:
+            chunk_data = self.microphone_adapter.read_chunk()
+        except Exception as e:
+            print(f"⚠️ [Audio Pipeline Warning] Microphone chunk capture error: {e}. Falling back to simulation.")
+            from src.runtime.microphone_adapter import SimulatedMicrophoneAdapter
+            self.microphone_adapter = SimulatedMicrophoneAdapter()
+            self.microphone_adapter.initialize()
+            chunk_data = self.microphone_adapter.read_chunk()
+
         raw_audio = chunk_data.get("raw_audio")
 
         # Run Voice Activity Detection

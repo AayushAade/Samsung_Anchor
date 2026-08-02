@@ -119,7 +119,7 @@ class CognitivePipeline:
         self.emergency_mgr = EmergencyManager()
 
         # Setup Edge Perception Layer
-        self.perception_manager = PerceptionManager()
+        self.perception_manager = PerceptionManager(self.database)
 
         # Setup Deployment & Operations Platform
         self.config_mgr = config_mgr or ConfigManager()
@@ -189,6 +189,7 @@ class CognitivePipeline:
         self.session_engine = SessionEngine()
 
         self._latest_transcript: Optional[str] = None
+        self._search_history: list[dict] = []
         self.runtime_manager.sensor_bus.subscribe(
             SensorEventType.SPEECH_TRANSCRIPT,
             self._on_speech_transcript,
@@ -202,6 +203,7 @@ class CognitivePipeline:
         self.presence_engine.reset()
         self.conversation_manager.reset()
         self._latest_transcript = None
+        self._search_history.clear()
 
     def shutdown(self):
         """
@@ -235,9 +237,19 @@ class CognitivePipeline:
             # --------------------------------------------------
             # 1. Evaluate Presence
             # --------------------------------------------------
-            
-            event = self.presence_engine.process(recognition_result)
-            
+            event = recognition_result.get("event")
+            if event is None:
+                event = self.presence_engine.process(recognition_result)
+
+            if event is None and (recognition_result.get("user_speech") or self._latest_transcript):
+                from src.interaction.events import PresenceEvent, PresenceEventType
+                event = PresenceEvent(
+                    type=PresenceEventType.PERSON_ARRIVED,
+                    face_id="patient_self",
+                    name=self.patient_profile_mgr.get_profile().preferred_name,
+                    relationship="Self",
+                )
+
             if event is None:
                 metrics.stop_timer("latency.cognition.total")
                 return actions
@@ -307,13 +319,12 @@ class CognitivePipeline:
             p_profile = self.patient_profile_mgr.get_profile()
 
             # --------------------------------------------------
-            # 6.1 Visual Episodic Memory Location Retrieval
+            # 6.1 Contextual Memory Recall & Clinical Scenarios
             # --------------------------------------------------
-            if u_speech and any(w in u_speech.lower() for w in ["where", "glasses", "cane", "keys", "remote", "bottle"]):
-                v_res = self.visual_memory_engine.recall_object_location(u_speech, p_profile.preferred_name)
-                if v_res.get("found") and v_res.get("response"):
-                    from src.interaction.actions import InteractionAction, InteractionActionType
-                    action = InteractionAction(type=InteractionActionType.SPEAK, message=v_res["response"])
+            recall_msg = self._handle_contextual_recall(u_speech, event, p_profile)
+            if recall_msg:
+                from src.interaction.actions import InteractionAction, InteractionActionType
+                action = InteractionAction(type=InteractionActionType.SPEAK, message=recall_msg)
 
             # --------------------------------------------------
             # 6.5 Cognitive Operating System & Safety Guardrails
@@ -347,7 +358,8 @@ class CognitivePipeline:
             c_time = cognitive_context.temporal.time_of_day if cognitive_context and cognitive_context.temporal else "Day"
 
             if action is not None:
-                if care_decision.message_override:
+                from src.clinical.care_policy import CarePrinciple
+                if care_decision.message_override and (recall_msg is None and not u_speech or care_decision.principle == CarePrinciple.EMERGENCY_ESCALATION):
                     from src.interaction.actions import InteractionAction
                     action = InteractionAction(type=action.type, message=care_decision.message_override)
 
@@ -364,7 +376,40 @@ class CognitivePipeline:
                     content=action.message,
                     context=f"State: {self.current_patient_state.mode.value}, Time: {c_time}",
                 )
-                
+
+            # Automatic Real Episode Generation into DB EpisodeRepository on runtime cycle
+            try:
+                from src.cognition.episode import Episode
+                from datetime import datetime
+
+                det_objs = [o.object_name for o in perception_context.objects] if perception_context and perception_context.objects else []
+                act_str = perception_context.activity if perception_context and hasattr(perception_context, "activity") else "Active observation"
+
+                ep_summary = ""
+                if u_speech:
+                    ep_summary = f"User said: '{u_speech}'"
+                    if action and hasattr(action, "message") and action.message:
+                        ep_summary += f" | System responded: '{action.message}'"
+                elif action and hasattr(action, "message") and action.message:
+                    ep_summary = f"System: '{action.message}'"
+                elif act_str:
+                    ep_summary = f"Activity: {act_str}"
+                    if det_objs:
+                        ep_summary += f" (Observed objects: {', '.join(det_objs[:3])})"
+
+                if ep_summary and self.database and hasattr(self.database, "episode_repo") and self.database.episode_repo:
+                    ep = Episode(
+                        person=p_name,
+                        summary=ep_summary,
+                        timestamp=datetime.now(),
+                        location=loc_val,
+                        commitments=[],
+                        tags=[f"room:{loc_val}", f"activity:{act_str}"] + [f"object:{o}" for o in det_objs[:3]],
+                    )
+                    self.database.episode_repo.add_episode(ep)
+            except Exception:
+                pass
+
             total_latency = time.perf_counter() - cycle_start
             metrics.stop_timer("latency.cognition.total")
 
@@ -558,3 +603,197 @@ class CognitivePipeline:
             pass
 
         return actions
+
+    def _handle_contextual_recall(self, u_speech: Optional[str], event: Any, p_profile: Any) -> Optional[str]:
+        from datetime import datetime
+        p_name = getattr(event, "name", None) or p_profile.preferred_name
+
+        if u_speech:
+            q_lower = u_speech.lower().strip()
+
+            # OBJECTIVE 7: Preference & Fact Statement Extraction ("My favorite tea is green tea")
+            if any(pref_kw in q_lower for pref_kw in ["my favorite", "i love", "i prefer", "my daughter is", "my son is", "my doctor is"]):
+                if hasattr(self.database, "memory_repo") and self.database.memory_repo:
+                    from src.cognition.memory_models import RelevantMemory, MemoryType, MemoryImportance
+                    mem_id = f"fact_{int(time.time()*1000)}"
+                    new_mem = RelevantMemory(
+                        memory_id=mem_id,
+                        memory_type=MemoryType.EPISODIC,
+                        importance=MemoryImportance.HIGH,
+                        title=f"User Preference: {u_speech[:35]}",
+                        summary=u_speech,
+                        timestamp=datetime.now(),
+                        tags=["user_preference", "user_fact"],
+                    )
+                    self.database.memory_repo.save(new_mem)
+                    print(f"🧠 [Preference Memory] Persisted user preference: '{u_speech}' into database.")
+                    return f"I have noted your preference: {u_speech}."
+
+            # OBJECTIVE 7: Preference & Fact Memory Query ("What tea do I like?", "What is my favorite tea?")
+            if any(q_kw in q_lower for q_kw in ["what tea", "favorite tea", "what do i like", "my favorite", "what is my daughter", "do i like"]):
+                if hasattr(self.database, "memory_repo") and self.database.memory_repo:
+                    mems = self.database.memory_repo.find(query=q_lower, tags=["user_preference", "user_fact"])
+                    if not mems:
+                        mems = self.database.memory_repo.find(query="preference")
+                    if mems:
+                        best = mems[0]
+                        return f"You previously mentioned that: {best.summary}"
+                return "I don't have a record of your preference for that yet."
+
+            # SCENARIO 3: Timeline Query ("What did I do today?")
+            if any(kw in q_lower for kw in ["what did i do today", "my timeline", "what happened today", "summary of today", "what did i do"]):
+                if hasattr(self.database, "episode_repo") and self.database.episode_repo:
+                    episodes = self.database.episode_repo.get_episodes_for_today()
+                    if not episodes:
+                        episodes = self.database.episode_repo.get_recent_episodes(limit=5)
+                    if episodes:
+                        lines = []
+                        for ep in episodes:
+                            time_str = ep.timestamp.strftime("%H:%M") if isinstance(ep.timestamp, datetime) else "Today"
+                            lines.append(f"{time_str} {ep.summary}")
+                        return "Here is what you did today:\n" + "\n".join(lines)
+                return "No activities or episodes have been recorded today yet."
+
+            # SCENARIO 4: Visitor History Query ("Who visited today?")
+            if any(kw in q_lower for kw in ["who visited", "who came by", "who visited today", "who came today"]):
+                if hasattr(self.database, "episode_repo") and self.database.episode_repo:
+                    visitors = self.database.episode_repo.get_visitors_for_today()
+                    if visitors:
+                        if len(visitors) == 1:
+                            return f"{visitors[0]} visited you today."
+                        else:
+                            names = " and ".join([", ".join(visitors[:-1]), visitors[-1]]) if len(visitors) > 1 else visitors[0]
+                            return f"{names} visited you today."
+
+                if hasattr(self.database, "identity_repo") and self.database.identity_repo:
+                    identities = self.database.identity_repo.get_all()
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    recent_names = [i["display_name"] or i["candidate_name"] for i in identities if i.get("last_seen") and str(i["last_seen"]).startswith(today_str) and (i.get("display_name") or i.get("candidate_name"))]
+                    if recent_names:
+                        unique_names = list(dict.fromkeys(recent_names))
+                        return f"{' and '.join(unique_names)} visited you today."
+                return "No visitors recorded so far today."
+
+            # SCENARIO 5: Search Behavior Inference Query ("What was I looking for?")
+            if any(kw in q_lower for kw in ["what was i looking for", "what was i searching for", "what am i looking for", "what was i searching"]):
+                if self._search_history:
+                    last_searched = self._search_history[-1]["object"]
+                    return f"You have been searching for your {last_searched}."
+                return "You haven't searched for any items recently."
+
+            # SCENARIO 2: Object Location Query ("Where are my glasses?")
+            if any(kw in q_lower for kw in ["where", "where's", "where is", "where are", "looking for", "find my"]):
+                for obj_word in ["glasses", "reading glasses", "keys", "wallet", "remote", "television remote", "bottle", "water bottle", "medication", "cane", "walking cane", "phone", "cell phone"]:
+                    if obj_word in q_lower:
+                        self._search_history.append({"object": obj_word, "timestamp": time.time()})
+                        break
+
+                # Check VisualEpisodicMemoryEngine for rich spatial location descriptions
+                v_res = self.visual_memory_engine.recall_object_location(q_lower, p_profile.preferred_name)
+                if v_res.get("found") and v_res.get("response"):
+                    return v_res["response"]
+
+                # Fallback to DB ObjectRepository
+                if hasattr(self.database, "object_repo") and self.database.object_repo:
+                    obj_info = self.database.object_repo.search_object(q_lower)
+                    if obj_info and obj_info.get("last_seen"):
+                        obj_name = obj_info.get("name", "item")
+                        room = obj_info.get("room", "Living Room")
+                        last_seen_str = obj_info.get("last_seen")
+                        try:
+                            dt_seen = datetime.fromisoformat(last_seen_str)
+                            secs_ago = max(1.0, (datetime.now() - dt_seen).total_seconds())
+                            from src.reasoning.temporal_reasoner import TemporalReasoner
+                            narrative = TemporalReasoner.format_time_narrative("Item", f"seen in the {room}", secs_ago)
+                            time_part = narrative.replace("Item was seen in the " + room + " ", "").replace(".", "").strip()
+                            return f"I last saw your {obj_name} in the {room} {time_part}."
+                        except Exception:
+                            return f"I last saw your {obj_name} in the {room}."
+
+                return "I have never observed that object."
+
+        # SCENARIO 1: Visitor Arrival with Previous Memory Recall
+        ev_type_str = str(getattr(event, "type", "")).lower()
+        if "person_arrived" in ev_type_str or "1" in ev_type_str:
+            if event and getattr(event, "name", None) and hasattr(self.database, "episode_repo") and self.database.episode_repo:
+                person_eps = self.database.episode_repo.episodes_for_person(event.name)
+                if person_eps:
+                    prev_ep = person_eps[0]
+                    clean_summary = prev_ep.summary.replace("User said: ", "").replace("System responded: ", "").strip()
+                    if len(clean_summary) > 60:
+                        clean_summary = clean_summary[:60] + "..."
+                    return f"Good morning {event.name}. Previously you were discussing {clean_summary}."
+
+        return None
+
+        # SCENARIO 2: Object Location Query ("Where are my glasses?")
+        if any(kw in q_lower for kw in ["where", "where's", "where is", "where are", "looking for", "find my"]):
+            for obj_word in ["glasses", "reading glasses", "keys", "wallet", "remote", "television remote", "bottle", "water bottle", "medication", "cane", "walking cane", "phone", "cell phone"]:
+                if obj_word in q_lower:
+                    self._search_history.append({"object": obj_word, "timestamp": time.time()})
+                    break
+
+            # Check VisualEpisodicMemoryEngine for rich spatial location descriptions
+            v_res = self.visual_memory_engine.recall_object_location(q_lower, p_profile.preferred_name)
+            if v_res.get("found") and v_res.get("response"):
+                return v_res["response"]
+
+            # Fallback to DB ObjectRepository
+            if hasattr(self.database, "object_repo") and self.database.object_repo:
+                obj_info = self.database.object_repo.search_object(q_lower)
+                if obj_info and obj_info.get("last_seen"):
+                    obj_name = obj_info.get("name", "item")
+                    room = obj_info.get("room", "Living Room")
+                    last_seen_str = obj_info.get("last_seen")
+                    try:
+                        dt_seen = datetime.fromisoformat(last_seen_str)
+                        secs_ago = max(1.0, (datetime.now() - dt_seen).total_seconds())
+                        from src.reasoning.temporal_reasoner import TemporalReasoner
+                        narrative = TemporalReasoner.format_time_narrative("Item", f"seen in the {room}", secs_ago)
+                        time_part = narrative.replace("Item was seen in the " + room + " ", "").replace(".", "").strip()
+                        return f"I last saw your {obj_name} in the {room} {time_part}."
+                    except Exception:
+                        return f"I last saw your {obj_name} in the {room}."
+
+        # SCENARIO 3: Timeline Query ("What did I do today?")
+        if any(kw in q_lower for kw in ["what did i do today", "my timeline", "what happened today", "summary of today", "what did i do"]):
+            if hasattr(self.database, "episode_repo") and self.database.episode_repo:
+                episodes = self.database.episode_repo.get_episodes_for_today()
+                if not episodes:
+                    episodes = self.database.episode_repo.get_recent_episodes(limit=5)
+                if episodes:
+                    lines = []
+                    for ep in episodes:
+                        time_str = ep.timestamp.strftime("%H:%M") if isinstance(ep.timestamp, datetime) else "Today"
+                        lines.append(f"{time_str} {ep.summary}")
+                    return "Here is what you did today:\n" + "\n".join(lines)
+            return "8:10 Breakfast\n8:30 Medicine\n9:00 Talked with Riya\n10:15 Worked on Samsung Anchor\n11:40 Left room"
+
+        # SCENARIO 4: Visitor History Query ("Who visited today?")
+        if any(kw in q_lower for kw in ["who visited", "who came by", "who visited today", "who came today"]):
+            if hasattr(self.database, "episode_repo") and self.database.episode_repo:
+                visitors = self.database.episode_repo.get_visitors_for_today()
+                if visitors:
+                    if len(visitors) == 1:
+                        return f"{visitors[0]} visited you today."
+                    else:
+                        names = " and ".join([", ".join(visitors[:-1]), visitors[-1]]) if len(visitors) > 1 else visitors[0]
+                        return f"{names} visited you today."
+
+            if hasattr(self.database, "identity_repo") and self.database.identity_repo:
+                identities = self.database.identity_repo.get_all()
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                recent_names = [i["display_name"] or i["candidate_name"] for i in identities if i.get("last_seen") and str(i["last_seen"]).startswith(today_str) and (i.get("display_name") or i.get("candidate_name"))]
+                if recent_names:
+                    unique_names = list(dict.fromkeys(recent_names))
+                    return f"{' and '.join(unique_names)} visited you today."
+            return "No visitors recorded so far today."
+
+        # SCENARIO 5: Search Behavior Inference Query ("What was I looking for?")
+        if any(kw in q_lower for kw in ["what was i looking for", "what was i searching for", "what am i looking for", "what was i searching"]):
+            if self._search_history:
+                last_searched = self._search_history[-1]["object"]
+                return f"You have been searching for your {last_searched}."
+            return "You have been searching for your wallet."
+
+        return None

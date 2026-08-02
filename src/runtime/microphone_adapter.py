@@ -69,6 +69,7 @@ class SimulatedMicrophoneAdapter(MicrophoneAdapter):
 class PyAudioMicrophoneAdapter(MicrophoneAdapter):
     """
     Production-grade PyAudio Microphone Adapter capturing real physical audio streams.
+    Scans PyAudio input devices, reports explicit technical failure diagnostics.
     """
 
     def __init__(
@@ -88,21 +89,67 @@ class PyAudioMicrophoneAdapter(MicrophoneAdapter):
         self.p: Optional[Any] = None
         self.stream: Optional[Any] = None
         self.sample_counter = 0
+        self.failure_reason: Optional[str] = None
+        self.actual_device_name: str = "NONE"
+        self.actual_device_index: int = -1
+        self.audio_energy_rms: float = 0.0
+
+    @classmethod
+    def enumerate_microphones(cls) -> list[dict[str, Any]]:
+        """Scans PyAudio input devices and returns detailed metadata list."""
+        available = []
+        if not HAS_PYAUDIO:
+            return available
+
+        try:
+            p = pyaudio.PyAudio()
+            def_idx = -1
+            try:
+                def_info = p.get_default_input_device_info()
+                def_idx = def_info.get("index", -1)
+            except Exception:
+                pass
+
+            for i in range(p.get_device_count()):
+                try:
+                    info = p.get_device_info_by_index(i)
+                    max_in = info.get("maxInputChannels", 0)
+                    if max_in > 0:
+                        available.append({
+                            "index": i,
+                            "name": info.get("name", "Unknown"),
+                            "channels": max_in,
+                            "sample_rate": int(info.get("defaultSampleRate", 16000)),
+                            "is_default": (i == def_idx),
+                        })
+                except Exception:
+                    pass
+            p.terminate()
+        except Exception:
+            pass
+
+        return available
 
     def initialize(self) -> bool:
         if not HAS_PYAUDIO:
             self.status = DeviceStatus.FAULTED
+            self.failure_reason = "PyAudio Python library is not installed."
             return False
 
         try:
             self.p = pyaudio.PyAudio()
+            device_cnt = self.p.get_device_count()
 
-            # Hardware input device index resolution
+            if device_cnt == 0:
+                self.status = DeviceStatus.FAULTED
+                self.failure_reason = "PortAudio reports 0 accessible input microphone devices."
+                return False
+
             target_idx = self.device_index
             if target_idx is None:
                 # 1. Check if device_name matches an available hardware device
                 if self.device_name and self.device_name not in ["Default_Mic", "PyAudio_Microphone_0"]:
-                    for i in range(self.p.get_device_count()):
+                    for i in range(device_cnt):
                         info = self.p.get_device_info_by_index(i)
                         if info.get("maxInputChannels", 0) > 0 and self.device_name.lower() in info.get("name", "").lower():
                             target_idx = i
@@ -112,19 +159,23 @@ class PyAudioMicrophoneAdapter(MicrophoneAdapter):
                 if target_idx is None:
                     try:
                         default_info = self.p.get_default_input_device_info()
-                        def_idx = default_info.get("index", 0)
-                        def_name = default_info.get("name", "")
-                        target_idx = def_idx
-
-                        # Fallback override if default device is an idle/muted Bluetooth headset
-                        if any(b_name in def_name.lower() for b_name in ["buds", "airpods", "headset", "bluetooth"]):
-                            for i in range(self.p.get_device_count()):
-                                info = self.p.get_device_info_by_index(i)
-                                if info.get("maxInputChannels", 0) > 0 and any(m_name in info.get("name", "").lower() for m_name in ["built-in", "macbook", "microphone"]):
-                                    target_idx = i
-                                    break
+                        target_idx = default_info.get("index", 0)
                     except Exception:
-                        target_idx = None
+                        target_idx = 0
+
+            if target_idx is None or target_idx < 0 or target_idx >= device_cnt:
+                self.status = DeviceStatus.FAULTED
+                self.failure_reason = f"Microphone device index {target_idx} is out of bounds [0..{device_cnt-1}]."
+                return False
+
+            dev_info = self.p.get_device_info_by_index(target_idx)
+            if dev_info.get("maxInputChannels", 0) <= 0:
+                self.status = DeviceStatus.FAULTED
+                self.failure_reason = f"Microphone device index {target_idx} ({dev_info.get('name')}) has 0 input channels."
+                return False
+
+            self.actual_device_index = target_idx
+            self.actual_device_name = dev_info.get("name", f"Microphone_{target_idx}")
 
             self.stream = self.p.open(
                 format=pyaudio.paInt16,
@@ -136,12 +187,15 @@ class PyAudioMicrophoneAdapter(MicrophoneAdapter):
             )
             if self.stream and self.stream.is_active():
                 self.status = DeviceStatus.HEALTHY
+                self.failure_reason = None
                 return True
             else:
                 self.status = DeviceStatus.FAULTED
+                self.failure_reason = f"PortAudio stream failed to activate on device {target_idx} ({self.actual_device_name})."
                 return False
-        except Exception:
+        except Exception as e:
             self.status = DeviceStatus.FAULTED
+            self.failure_reason = f"PortAudio error initializing microphone device: {e}"
             return False
 
     def read_chunk(self) -> Dict[str, Any]:
@@ -151,15 +205,22 @@ class PyAudioMicrophoneAdapter(MicrophoneAdapter):
         if self.status == DeviceStatus.HEALTHY and self.stream and self.stream.is_active():
             try:
                 raw_audio = self.stream.read(self.chunk_size, exception_on_overflow=False)
+                # Compute RMS energy for diagnostic monitoring
+                import struct, math
+                shorts = struct.unpack(f"{len(raw_audio)//2}h", raw_audio) if len(raw_audio) >= 2 else []
+                sum_sq = sum(s * s for s in shorts)
+                self.audio_energy_rms = math.sqrt(sum_sq / len(shorts)) if shorts else 0.0
+
                 return {
                     "chunk_id": self.sample_counter,
-                    "device": self.device_name,
+                    "device": self.actual_device_name,
                     "sample_rate": self.sample_rate,
                     "channels": self.channels,
                     "dtype": "int16",
                     "latency_ms": 12.5,
                     "timestamp": now_iso,
                     "raw_audio": raw_audio,
+                    "energy_rms": self.audio_energy_rms,
                 }
             except Exception:
                 pass
@@ -174,10 +235,22 @@ class PyAudioMicrophoneAdapter(MicrophoneAdapter):
             "latency_ms": 12.5,
             "timestamp": now_iso,
             "raw_audio": None,
+            "energy_rms": 0.0,
         }
 
     def get_status(self) -> DeviceStatus:
         return self.status
+
+    def get_diagnostics(self) -> Dict[str, Any]:
+        return {
+            "status": self.status.value,
+            "device_index": self.actual_device_index,
+            "device_name": self.actual_device_name,
+            "format": f"{self.sample_rate}Hz, {self.channels}ch (int16)",
+            "chunks_processed": self.sample_counter,
+            "audio_energy_rms": round(self.audio_energy_rms, 2),
+            "failure_reason": self.failure_reason,
+        }
 
     def shutdown(self) -> None:
         try:

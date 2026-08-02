@@ -145,6 +145,15 @@ class MemoraFaceRecognizer:
                     if settings.DEBUG:
                         print(f"[Face Recognizer Warning] Failed to initialize SCRFD model: {e}")
 
+    def get_diagnostics(self) -> dict:
+        return {
+            "backend": self.backend,
+            "mock_mode": self.mock_mode,
+            "scrfd_active": self.scrfd_detector is not None,
+            "tolerance": self.tolerance,
+            "active_tracks_count": len(self.active_tracks),
+        }
+
     def _compute_geometric_embedding(self, landmarks, w, h):
         """
         Custom 128D geometric proportion embedding. Computes scale-normalized
