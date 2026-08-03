@@ -223,6 +223,26 @@ def test_conversation_preference_memory_extraction_and_recall():
     assert "green tea" in act2[0].message.lower() or "favorite tea" in act2[0].message.lower()
 
 
+def test_conversation_relationship_fact_memory_extraction_and_recall():
+    """
+    Objective 6 Test: Pure Fact Retrieval ("My daughter is Riya" -> "Who is my daughter?").
+    """
+    db = MemoraDatabase(":memory:")
+    coord = build_application(live_hardware=False, database=db)
+    runtime = AnchorRuntime(coord)
+    runtime.initialize()
+
+    # Step 1: User states fact
+    act1 = coord.pipeline.process({"user_speech": "My daughter is Riya."})
+    assert len(act1) > 0
+    assert "noted" in act1[0].message.lower()
+
+    # Step 2: User asks for fact recall
+    act2 = coord.pipeline.process({"user_speech": "Who is my daughter?"})
+    assert len(act2) > 0
+    assert "riya" in act2[0].message.lower() or "daughter" in act2[0].message.lower()
+
+
 def test_llm_mode_diagnostic_reporting():
     """
     Objective 5 Test: LLM Mode reporting in Runtime diagnostics.

@@ -201,18 +201,32 @@ def main(
         runtime.run_continuous(max_cycles=max_cycles, cycle_delay=0.1)
 
 
+def show_memory_timeline() -> None:
+    """
+    Objective 4: CLI Memory Timeline Viewer.
+    Prints today's timeline, recent visitors, conversations, objects, facts, and DB stats.
+    """
+    from inspect_database import inspect_database
+    inspect_database("memora_db_v2.sqlite")
+
+
 def cli():
     parser = argparse.ArgumentParser(description="MEMORA (Samsung Anchor) Cognitive Platform")
     parser.add_argument("--scenario", action="store_true", help="Run 10 clinical caregiving scenario validations")
     parser.add_argument("--dashboard", action="store_true", help="Launch live Experience Platform browser dashboard")
     parser.add_argument("--max-cycles", type=int, default=None, help="Maximum execution cycles (default: continuous)")
     parser.add_argument("--vision-standalone", action="store_true", help="Run standalone OpenCV vision detection and tracking loop")
+    parser.add_argument("--show-memory", action="store_true", help="Print memory timeline, visitors, conversations, objects, facts, and DB stats")
 
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--live-hardware", action="store_true", help="Enforce physical camera, microphone, and TTS HAL")
     mode_group.add_argument("--simulation", action="store_true", help="Run in simulated mode with synthetic perception")
 
     args = parser.parse_args()
+
+    if args.show_memory:
+        show_memory_timeline()
+        return
 
     live_hw = None
     if args.live_hardware:

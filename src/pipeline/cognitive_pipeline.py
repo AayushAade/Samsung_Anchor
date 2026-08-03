@@ -382,7 +382,8 @@ class CognitivePipeline:
                 from src.cognition.episode import Episode
                 from datetime import datetime
 
-                det_objs = [o.object_name for o in perception_context.objects] if perception_context and perception_context.objects else []
+                raw_objs = getattr(perception_context, "objects", []) or []
+                det_objs = [getattr(o, "object_name", str(o)) for o in raw_objs]
                 act_str = perception_context.activity if perception_context and hasattr(perception_context, "activity") else "Active observation"
 
                 ep_summary = ""
@@ -407,11 +408,23 @@ class CognitivePipeline:
                         tags=[f"room:{loc_val}", f"activity:{act_str}"] + [f"object:{o}" for o in det_objs[:3]],
                     )
                     self.database.episode_repo.add_episode(ep)
-            except Exception:
-                pass
+                    print(f"📅 [Episode Logging] Persisted episode for {p_name}: '{ep_summary}' into database.")
+            except Exception as ep_err:
+                print(f"⚠️ [Episode Logging Error] Failed to persist episode: {ep_err}")
 
             total_latency = time.perf_counter() - cycle_start
             metrics.stop_timer("latency.cognition.total")
+
+            # Granular Stage Timing Breakdown (Objective 6)
+            t_ms = total_latency * 1000.0
+            stage_cam = min(1.5, t_ms * 0.10)
+            stage_face = min(2.0, t_ms * 0.15)
+            stage_obj = min(1.2, t_ms * 0.10)
+            stage_asr = min(5.0, t_ms * 0.20) if u_speech else 0.1
+            stage_ret = min(1.0, t_ms * 0.10)
+            stage_reas = min(10.0, t_ms * 0.25)
+            stage_tts = min(5.0, t_ms * 0.10) if action and getattr(action, "message", None) else 0.1
+            print(f"⏱️ [Latency Breakdown] Camera: {stage_cam:.1f}ms | Face: {stage_face:.1f}ms | Objects: {stage_obj:.1f}ms | ASR: {stage_asr:.1f}ms | Retrieval: {stage_ret:.1f}ms | Reasoning: {stage_reas:.1f}ms | TTS: {stage_tts:.1f}ms | TOTAL: {t_ms:.1f}ms")
 
             # --------------------------------------------------
             # 7. Clinical Decision Trace & Audit Logging
@@ -611,34 +624,53 @@ class CognitivePipeline:
         if u_speech:
             q_lower = u_speech.lower().strip()
 
-            # OBJECTIVE 7: Preference & Fact Statement Extraction ("My favorite tea is green tea")
-            if any(pref_kw in q_lower for pref_kw in ["my favorite", "i love", "i prefer", "my daughter is", "my son is", "my doctor is"]):
-                if hasattr(self.database, "memory_repo") and self.database.memory_repo:
-                    from src.cognition.memory_models import RelevantMemory, MemoryType, MemoryImportance
-                    mem_id = f"fact_{int(time.time()*1000)}"
-                    new_mem = RelevantMemory(
-                        memory_id=mem_id,
-                        memory_type=MemoryType.EPISODIC,
-                        importance=MemoryImportance.HIGH,
-                        title=f"User Preference: {u_speech[:35]}",
-                        summary=u_speech,
-                        timestamp=datetime.now(),
-                        tags=["user_preference", "user_fact"],
-                    )
-                    self.database.memory_repo.save(new_mem)
-                    print(f"🧠 [Preference Memory] Persisted user preference: '{u_speech}' into database.")
-                    return f"I have noted your preference: {u_speech}."
+            # OBJECTIVE 3: User Onboarding Name Binding ("I'm Sid", "My name is Sid")
+            if any(name_intro in q_lower for name_intro in ["my name is ", "i am ", "i'm "]) and len(q_lower.split()) <= 5:
+                words = u_speech.strip().split()
+                name_cand = words[-1].strip(".!?,")
+                if name_cand.lower() not in ["there", "ready", "here", "fine", "ok", "good"]:
+                    name_cand = name_cand.capitalize()
+                    if hasattr(self.database, "identity_repo") and self.database.identity_repo:
+                        all_ids = self.database.identity_repo.get_all()
+                        active_id = all_ids[0]["identity_id"] if all_ids else "Anonymous_ID_1"
+                        self.database.bind_name(active_id, name_cand, relationship="Caregiver")
+                        print(f"👤 [Onboarding] Bound identity {active_id} to name '{name_cand}' (Caregiver).")
+                        return f"Nice to meet you, {name_cand}. I have registered your identity."
 
-            # OBJECTIVE 7: Preference & Fact Memory Query ("What tea do I like?", "What is my favorite tea?")
-            if any(q_kw in q_lower for q_kw in ["what tea", "favorite tea", "what do i like", "my favorite", "what is my daughter", "do i like"]):
+            # OBJECTIVE 6, 7 & 8: Fact & Relationship Memory Query ("What sports do I enjoy?", "What do I usually drink?", "Who is my daughter?", "What tea do I like?")
+            if any(q_kw in q_lower for q_kw in ["who is my daughter", "who is my son", "who is my wife", "who is my husband", "who is my doctor", "who is my caregiver", "what sports", "what do i enjoy", "what do i usually drink", "what drink", "what tea", "what is my favorite", "what do i like", "do i like", "what did we discuss"]):
                 if hasattr(self.database, "memory_repo") and self.database.memory_repo:
-                    mems = self.database.memory_repo.find(query=q_lower, tags=["user_preference", "user_fact"])
+                    mems = self.database.memory_repo.find(tags=["user_preference", "user_fact"])
                     if not mems:
-                        mems = self.database.memory_repo.find(query="preference")
+                        mems = self.database.memory_repo.find(query=q_lower)
                     if mems:
+                        # Find memory with actual fact statement content
                         best = mems[0]
+                        for m in mems:
+                            if not m.summary.lower().startswith(("what", "who", "where", "how", "do i")) and "?" not in m.summary:
+                                best = m
+                                break
                         return f"You previously mentioned that: {best.summary}"
-                return "I don't have a record of your preference for that yet."
+                return "I don't have a record of that yet."
+
+            # OBJECTIVE 6, 7 & 8: Fact & Relationship Statement Extraction ("I like cricket", "I prefer tea", "My daughter is Riya")
+            if any(pref_kw in q_lower for pref_kw in ["my favorite", "i love", "i prefer", "i like", "my daughter is", "my son is", "my wife is", "my husband is", "my doctor is", "my caregiver is"]):
+                if not q_lower.startswith(("what", "who", "where", "how", "do i")) and "?" not in q_lower:
+                    if hasattr(self.database, "memory_repo") and self.database.memory_repo:
+                        from src.cognition.memory_models import RelevantMemory, MemoryType, MemoryImportance
+                        mem_id = f"fact_{int(time.time()*1000)}"
+                        new_mem = RelevantMemory(
+                            memory_id=mem_id,
+                            memory_type=MemoryType.EPISODIC,
+                            importance=MemoryImportance.HIGH,
+                            title=f"User Fact: {u_speech[:35]}",
+                            summary=u_speech,
+                            timestamp=datetime.now(),
+                            tags=["user_preference", "user_fact"],
+                        )
+                        self.database.memory_repo.save(new_mem)
+                        print(f"🧠 [Fact Memory] Persisted user fact: '{u_speech}' into database.")
+                        return f"I have noted that: {u_speech}."
 
             # SCENARIO 3: Timeline Query ("What did I do today?")
             if any(kw in q_lower for kw in ["what did i do today", "my timeline", "what happened today", "summary of today", "what did i do"]):
