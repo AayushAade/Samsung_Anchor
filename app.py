@@ -154,8 +154,9 @@ def main(
     llm_active = bool(os.environ.get("GEMINI_API_KEY"))
     # Replies are produced by deterministic local rules. Gemini, when configured, is
     # only used to extract names during identity learning.
-    llm_mode_str = ("Local rules for replies; Gemini (key set, unverified) for identity-learning name extraction"
-                    if llm_active else "Local rules only (no cloud model configured)")
+    from src.network_policy import cloud_llm_allowed
+    llm_mode_str = ("Local rules for replies; Gemini ENABLED for identity-learning name extraction (transcripts sent to Google)"
+                    if cloud_llm_allowed() else "Local rules only; no cloud model in use")
     if live_hardware is not True:
         print("🤖 OPERATIONAL MODE: SIMULATION (real devices are used only with --live-hardware)")
         print("   • Video Feed : Simulated Frame Generator")

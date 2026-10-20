@@ -60,9 +60,12 @@ Chat commands (`/help` lists them all): `/memories`, `/forget N`, `/medications`
 - Default database: `memora_db_v2.sqlite` in the project folder (face data alongside as
   `memora_db_v2.faces.json`). Override with `MEMORA_DB_PATH=/path/to/memora.sqlite`.
 - `--simulation` and `--scenario` use a separate database under `data/simulation/`.
-- In `--chat` mode no conversation content is sent anywhere. Known exception (open defect C2-22):
-  if the optional `requirements-hardware.txt` extras are installed, startup contacts huggingface.co
-  to check/download a speech-recognition model. The core install and the Docker image do not.
+- `--chat`, `--simulate` and the default runtime make **no network connections** (enforced by
+  `tests/test_network_policy.py`, which intercepts sockets). Features that can contact the internet
+  are off unless explicitly enabled: `MEMORA_ALLOW_MODEL_DOWNLOAD=1` (speech-model download),
+  `MEMORA_ALLOW_CLOUD_ASR=1` (Google speech recognition of microphone audio),
+  `MEMORA_ALLOW_CLOUD_LLM=1` with `GEMINI_API_KEY` (Gemini name extraction). `--check` and
+  `/status` report what is enabled. See `docs/PRIVACY_AND_CONSENT.md`.
 
 ## Other commands
 

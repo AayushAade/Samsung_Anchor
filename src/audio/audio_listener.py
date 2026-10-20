@@ -16,7 +16,8 @@ def cloud_asr_allowed() -> bool:
     Real-microphone transcription here uses Google's online speech service, which
     sends the recorded audio to Google. It is off unless explicitly enabled.
     """
-    return os.environ.get("MEMORA_ALLOW_CLOUD_ASR") == "1"
+    from src.network_policy import cloud_asr_allowed as _allowed
+    return _allowed()
 
 
 class MemoraAudioListener:

@@ -200,7 +200,8 @@ class RuntimeManager:
         llm_active = bool(os.environ.get("GEMINI_API_KEY"))
         lines.append(f"\nReasoning Engine")
         lines.append(f"  Replies    : deterministic local rules")
-        lines.append(f"  LLM Mode   : {'GEMINI_API_KEY set (identity-learning name extraction only; connectivity not verified)' if llm_active else 'not configured'}")
+        from src.network_policy import cloud_llm_allowed
+        lines.append(f"  LLM Mode   : {'Gemini enabled (MEMORA_ALLOW_CLOUD_LLM=1): identity-learning transcripts are sent to Google' if cloud_llm_allowed() else ('GEMINI_API_KEY set but cloud use not enabled (MEMORA_ALLOW_CLOUD_LLM)' if llm_active else 'not configured')}")
         lines.append("==================================================")
 
         return "\n".join(lines)

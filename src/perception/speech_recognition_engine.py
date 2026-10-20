@@ -35,15 +35,25 @@ class SpeechRecognitionEngine:
         self.device = device
         self.compute_type = compute_type
         self.model: Optional[Any] = None
-        self._initialize_engine()
+        self.load_error: Optional[str] = None
+        self._load_attempted = False
+        # The model is loaded lazily, on the first real transcription request, so that
+        # constructing a pipeline (chat, simulation) never touches the model cache or network.
 
     def _initialize_engine(self) -> None:
-        if HAS_FASTER_WHISPER:
-            try:
-                # Load offline Whisper model on CPU using int8 quantization for high-speed edge execution
-                self.model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
-            except Exception:
-                self.model = None
+        self._load_attempted = True
+        if not HAS_FASTER_WHISPER:
+            self.load_error = "faster-whisper is not installed (requirements-hardware.txt)"
+            return
+        from src.network_policy import model_download_allowed
+        try:
+            # Offline by default: only a model already on disk is used unless downloads are allowed.
+            self.model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type,
+                                      local_files_only=not model_download_allowed())
+        except Exception as e:
+            self.model = None
+            self.load_error = (f"speech model '{self.model_size}' is not available locally "
+                               f"(set MEMORA_ALLOW_MODEL_DOWNLOAD=1 to download it): {e}")
 
     def _clean_transcript(self, raw_text: str) -> str:
         if not raw_text:
@@ -80,6 +90,11 @@ class SpeechRecognitionEngine:
         transcript_text = ""
         avg_confidence = 0.95
         detected_language = "en"
+
+        if self.model is None and not self._load_attempted:
+            self._initialize_engine()
+        if self.model is None:
+            avg_confidence = 0.0  # nothing was transcribed; do not report a confidence
 
         if self.model is not None:
             try:

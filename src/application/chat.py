@@ -79,7 +79,7 @@ class ChatSession:
         lines = [
             f"Saving memories to: {self.db.db_path or 'temporary memory (lost on exit)'}",
             "Camera: off    Microphone: off (you type)    Voice output: off",
-            "Cloud AI: not used in this mode. Replies come from rules on this computer.",
+            "Replies come from rules on this computer. Network use: " + " ".join(__import__("src.network_policy", fromlist=["describe"]).describe()),
             f"Memory store: {mem}",
         ] + self._consent_lines()
         if integrity["identities_without_embeddings"]:

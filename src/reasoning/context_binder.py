@@ -24,6 +24,11 @@ _RELATIONSHIPS = {"daughter", "son", "spouse", "wife", "husband", "partner", "fr
                   "neighbour", "niece", "nephew", "cousin", "visitor"}
 
 
+def cloud_llm_allowed() -> bool:
+    from src.network_policy import cloud_llm_allowed as _allowed
+    return _allowed()
+
+
 def _validated_identity(result):
     """
     Treat model output as untrusted: accept only a short plain name and a known
@@ -44,6 +49,9 @@ class MemoraContextBinder:
         
         if not self.api_key:
             print("[Context Binder Warning] GEMINI_API_KEY is not set. Context Binder will run in local rule-based fallback mode.")
+            self.use_api = False
+        elif os.environ.get("MEMORA_ALLOW_CLOUD_LLM") != "1":
+            # A key alone is not consent to send transcripts to Google.
             self.use_api = False
         elif not HAS_GENAI:
             print("[Context Binder Warning] google-genai is not installed. Context Binder will run in local rule-based fallback mode.")

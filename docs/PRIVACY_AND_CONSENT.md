@@ -40,3 +40,17 @@ interaction/feedback records, preferred name, safety contacts, consent decisions
 files (`memora.log*`, `chat_debug.log`), and in-memory session state. Not removed: backups the
 person made with `--backup` (they are told), and data already copied elsewhere. Deleted files
 may remain recoverable on disk until overwritten (no secure erase).
+
+## Network use
+Chat, simulation and the default runtime make no outbound connections; models are loaded only
+from local files and only when needed. Internet features are off unless their opt-in variable is
+"1" (`src/network_policy.py`):
+
+| Variable | Enables | What leaves the computer |
+| :--- | :--- | :--- |
+| `MEMORA_ALLOW_MODEL_DOWNLOAD` | downloading the faster-whisper model (and YOLO weights if that optional component is used) | a model request; no personal data |
+| `MEMORA_ALLOW_CLOUD_ASR` | Google speech recognition during identity learning (also needs `voice` consent and `--live-hardware`) | recorded audio |
+| `MEMORA_ALLOW_CLOUD_LLM` + `GEMINI_API_KEY` | Gemini name extraction during identity learning (also needs `faces` and `memory` consent) | the introduction transcript |
+
+A Gemini key on its own does not enable cloud use. `--check` ("Network Use") and `/status` state
+what is enabled. Verified by `tests/test_network_policy.py` (socket-level interception).

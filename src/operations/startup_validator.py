@@ -210,6 +210,16 @@ class StartupValidator:
                                message="Not installed: " + ", ".join(missing),
                                remediation="pip install -r requirements-hardware.txt / requirements-cloud.txt if needed")
 
+    def check_network_use(self) -> HealthCheckItem:
+        """Report which features could send data off this computer (none by default)."""
+        from src.network_policy import describe, cloud_asr_allowed, cloud_llm_allowed
+        lines = describe()
+        sends_data = cloud_asr_allowed() or cloud_llm_allowed()
+        return HealthCheckItem(component="Network Use", status="WARNING" if sends_data else "PASS",
+                               message=" ".join(lines),
+                               remediation="Unset MEMORA_ALLOW_* variables to keep everything on this computer"
+                               if sends_data else None)
+
     def run_all_checks(self, include_camera: bool = True) -> list[HealthCheckItem]:
         """
         Execute all health check items. include_camera=False avoids opening the
@@ -222,6 +232,7 @@ class StartupValidator:
             self.check_vector_store(),
             self.check_user_database(),
             self.check_optional_capabilities(),
+            self.check_network_use(),
         ]
         if include_camera:
             checks.append(self.check_camera_hardware())
