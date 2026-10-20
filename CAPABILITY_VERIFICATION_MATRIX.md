@@ -15,8 +15,12 @@ pipeline/DB · **E** end-to-end run of a user entry point · **S** simulated onl
 | Orientation (time/date) | same | U/I, scenario CS-05 | system clock | **Verified** (clock only; location is never guessed) |
 | Object "last seen" answers | same + `ObjectRepository` | U/I | real observations | Logic **verified** with logged observations. Real object detection **unverified** (see below) |
 | Urgent-situation guidance | `src/clinical/urgent_safety.py`, patient state, care policy | U/I `test_urgent_safety.py` (30 cases), scenario CS-08 | — | **Verified** for the listed phrasings. Rule-based, English only, not a validated triage tool. MEMORA cannot contact anyone and says so |
-| Scheduled medication reminders | `MedicationManager`, pipeline throttle | U/I `test_medication_manager.py`, `test_scenario_validator_honesty.py`, CS-04 | schedules must be configured | Logic **verified**. **No way for a user to enter schedules; not persisted.** Never infers a dose was taken |
-| Appointments | `AppointmentManager`, `ConversationalMemory._appointment` | I (CS-03) | appointments must be configured | Answers "none recorded" honestly; **no entry UI; not persisted** |
+| Medication schedules and reminders | `MedicationManager`, `CareStore`, `due_reminder_message`, chat `/add-medication` | U/I/E `test_care_schedules.py`, `test_medication_manager.py`, CS-04 | entered by person/carer | **Verified**: persisted, throttled reminders (runtime and chat), stop once a dose is reported. "I took it" is a *report*, never a verification; double-dose statements go to safety |
+| Appointments | `AppointmentManager`, `CareStore`, chat `/add-appointment` | U/I/E `test_care_schedules.py`, CS-03 | entered by person/carer | **Verified**: persisted; answers only from recorded appointments |
+| Backup / restore | `src/memory/backup.py`, `--backup`, `--restore` | U/E `test_backup_restore.py`, run on DB copy | — | **Verified**: consistent snapshot, checksums, tamper rejection, pre-restore copy |
+| Repair of faceless identities | `--repair` | I `test_chat_and_user_data.py`, run on DB copy | — | **Verified**; confirmation + backup; never automatic |
+| Data file permissions | `restrict_permissions`, vector store, logs, exports | U | POSIX filesystem | **Verified** 0600 on macOS; not encrypted at rest |
+| Logging | `app.py configure_logging` | E | — | Console warnings only by default; rotating 0600 file log; `--verbose` |
 | Known-visitor announcement | pipeline `_is_known_visitor_arrival` | I CS-11, `test_scenario_validator_honesty.py` | named identity + real recognition | Logic **verified** with synthetic recognition results |
 | Face recognition | `src/vision/face_recognizer.py` (dlib/insightface/mediapipe fallbacks) | S only (mock embeddings) | camera, models | **Unverified** on real faces |
 | Face-embedding store integrity | `src/memory/vector_store.py`, `check_integrity()` | U/I `test_data_isolation_and_integrity.py` | — | **Verified**: isolation, restart, corruption quarantine, rollback, deletion |
@@ -26,11 +30,13 @@ pipeline/DB · **E** end-to-end run of a user entry point · **S** simulated onl
 | Camera capture | `camera_adapter.py` | — | camera | **Not run** in this work |
 | Simulation mode | simulated adapters, `--simulation` | E | — | **Verified**; separate DB; simulated detections never persisted; status shows "Simulated" |
 | Runtime status / diagnostics | `AnchorRuntime.get_subsystem_statuses`, `RuntimeManager.generate_diagnostic_report`, `--check` | I `test_honest_runtime_reporting.py`, E | — | **Verified** not to claim READY without a check |
-| Runtime stability (long duration) | `--validate-runtime` | E (3–5 cycles only) | — | **Not established.** No long-duration run performed |
+| Runtime stability | `deployment/benchmarks/soak_runtime.py` | E: 20-min soak (found and fixed unbounded growth), 10-min confirmation soak flat | — | **Simulated only**, ≤ 20 min: flat RSS (130.8 MB) and latency (≈10.6 ms median) after fix. Multi-hour and real-hardware stability **not established** |
+| Turn latency (text) | pipeline | E: 400 turns median 2.1 ms / p95 2.6 ms; 20,000 episodes median 3.5 ms | — | Measured on macOS arm64; startup ~2.2 s |
+| Static analysis | `ruff.toml` | E | ruff (dev) | Correctness rules clean; 3 runtime NameErrors fixed |
 | View / export / delete user data | `src/memory/user_data.py`, chat commands | I `test_chat_and_user_data.py` | — | **Verified**; deletion recounted; export 0600, no raw embeddings |
 | Cloud reasoning (Gemini) | `src/reasoning/context_binder.py` | U with fake client | key + network | Request/validation path tested offline; **live API unverified**. Replies never use an LLM |
 | Clinical scenario harness | `src/clinical/scenario_validator.py`, `--scenario` | I (11/11 + harness-failure test) | — | **Verified harness**; scenarios are synthetic, not clinical evidence |
-| Dashboard | `experience/server.py`, `--dashboard` | — | browser | **Not run**; still has an "Eleanor" placeholder default in `app.js` |
+| Dashboard | `experience/server.py`, `--dashboard` | JS syntax check only | browser | **Not run in a browser.** Fictional defaults removed; clinical panel escaped; other panels still use unescaped innerHTML |
 | Caregiver features (reports, escalation policies, FHIR/HL7 adapters) | `src/caregiver/`, `src/interoperability/` | unit tests from earlier phases (not re-reviewed) | — | **Not reviewed**; no notification channel exists |
 | Container deployment | `deployment/docker/Dockerfile` | E (Docker 29.5, linux/aarch64) | Docker | **Verified** for core text mode |
 | Clean install | `requirements*.txt` | E (fresh clone + clean venv: 634 passed, 2 skipped) | Python 3.11 | **Verified** on macOS arm64; other platforms untested |

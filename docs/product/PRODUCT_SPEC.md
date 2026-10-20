@@ -59,6 +59,7 @@ nearest-neighbour search). Candidate areas that *may* be distinctive in
 combination — provenance-tagged conversational memory with supersession and
 "last seen" phrasing; deterministic safety-first reply precedence independent of
 any language model — need a prior-art search and qualified patent counsel before
-any claim is made. Public disclosure (e.g. a public repository) can affect
-patentability; confirm the repository's visibility with counsel. No filing or
+any claim is made. The repository is **public** (verified
+2026-10-20); public disclosure can affect patentability, so discuss timing and
+scope with counsel before further disclosure of any candidate mechanism. No filing or
 legal decision has been made.

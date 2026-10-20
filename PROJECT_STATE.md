@@ -7,7 +7,7 @@ was not run or not checked, it says so._
 
 | Item | State |
 | :--- | :--- |
-| Remote | `git@github.com:AayushAade/Samsung_Anchor.git` (push over SSH verified) |
+| Remote | `git@github.com:AayushAade/Samsung_Anchor.git` (push over SSH verified). **Repository visibility: PUBLIC** (checked with `gh`, 2026-10-20) |
 | Integration branch | `main` (`0c0c6a0`, "Merge branch 'release/rc1'") |
 | Active work branch | `fix/p0-data-isolation-and-safety` (pushed) — based on `feature/interactive-demo` |
 | Other branches | `feature/context-fusion`, `feature/memory-foundation`, `feature/prediction-intelligence`, `feature/realtime-runtime`, `release/rc1`, `origin/project-restructure`: **all are ancestors of `feature/interactive-demo`** (no unmerged work found) |
@@ -18,6 +18,16 @@ Commits on the work branch (newest first):
 
 | Commit | Summary |
 | :--- | :--- |
+| `17ba5ed` | Runtime soak harness + before/after evidence (`docs/evidence/`) |
+| `4bd4968` | Logging with rotation (0600 log); per-cycle diagnostics off the console; `--verbose` |
+| `609d2e8` | Bounded per-track face-embedding history (unbounded growth found by soak) |
+| `87f6e94` | Own turns attributed to the person, not "Eleanor"; own turns are not "visits" |
+| `ecec514` | Dashboard: no fictional defaults; "no data" never shown as "meds confirmed" |
+| `34ef886` | Runtime NameErrors found by ruff fixed; bug-focused `ruff.toml` gate |
+| `4695a8a` | `--backup` / `--restore` with checksums and pre-restore copy |
+| `f4d1cd9` | Persisted medication schedules/appointments; reported (not verified) doses; truthful audit |
+| `e2b97f3` | 0600 data files; `--repair`; MEMORA's own replies no longer stored as memories |
+| `d2ad57c` | Source-of-truth documents |
 | `9f47497` | Scenario harness compares actual vs expected; fixes for defects it exposed |
 | `823a85e` | Reproducible install, working container, `--check`, hardened Gemini path |
 | `85134ff` | `--chat` text conversation mode with view/correct/export/delete controls |
@@ -46,6 +56,10 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | `python app.py --simulation --validate-runtime --max-cycles N` | Runs, exit 0; uses `data/simulation/` DB; measured report |
 | `python app.py --scenario` | 11/11 against specifications (harness now compares actual vs expected) |
 | `python inspect_database.py [path]` | Reports tables and SQLite↔embedding inconsistencies |
+| `python app.py --backup [DIR]` / `--restore DIR` | Verified on a copy of the local DB: backup → delete all episodes → restore recovered 131/131 |
+| `python app.py --repair` | Verified on a copy: 27 faceless identities removed after typed confirmation; episodes kept. **Not run on the real DB** (owner decision) |
+| Chat care commands (`/add-medication`, `/appointments`, …) | Verified across restart; `tests/test_care_schedules.py` |
+| `python deployment/benchmarks/soak_runtime.py SECONDS` | 20 min and 10 min simulated soaks run; see `docs/evidence/RUNTIME_SOAK_20261020.md` |
 | `docker build -f deployment/docker/Dockerfile .` + `docker run -it -v memora-data:/data memora` | Built and run; `--check` passes with optional-capability warning; chat memory persisted across two container runs |
 | `python app.py` (no args), `--live-hardware`, `--vision-standalone`, `--dashboard` | **Not run** in this work (would open camera/microphone/browser) |
 | `demo_mode.py`, `operate.py --demo` | Scripted presentation — output is labelled synthetic |
@@ -56,18 +70,22 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | When | Environment | Result |
 | :--- | :--- | :--- |
 | Start of work (`5ebaa1e`) | `.venv` | 538 passed in 51 s — **but the suite modified the real user DB and wrote into the repo** |
-| Latest (`9f47497`) | `.venv` | 641 passed in 58 s; real DB checksum unchanged; no repo files modified |
+| `9f47497` | `.venv` | 641 passed in 58 s; real DB checksum unchanged; no repo files modified |
+| Latest (`17ba5ed`) | `.venv` | 658 passed in ~60 s; `ruff check .` (E9/F63/F7/F82) clean |
 | `823a85e`-era | Fresh clone + clean venv, `requirements-dev.txt` only | 634 passed, 2 skipped (cloud SDK not installed) |
 | Before `90eab3c` | Fresh clone | **Import failure**: `src/runtime/runtime_engine.py` had never been committed |
 
-There is no linting/type-checking configured and none was run. No CI is active
-(`deployment/ci/github-workflow.yml` is a template).
+Static analysis: `ruff.toml` (correctness rules only) passes; it found three
+runtime NameErrors that were fixed. No type checking is configured. No CI is
+active (`deployment/ci/github-workflow.yml` is a template; activation is the
+owner's decision because Actions minutes may be billed).
 
 ## 5. Known blockers and open issues
 
 - Real hardware paths (camera, microphone, TTS, face recognition, object detection) are **unverified**.
 - Gemini integration is unverified against the live API (no key).
-- 27 identities in the local DB have no face embeddings (lost to the pre-fix shared-index defect); they need re-enrolment or deletion. Not changed automatically.
+- 27 identities in the local DB have no face embeddings (lost to the pre-fix shared-index defect). `python app.py --backup` then `python app.py --repair` will remove them after confirmation; not run on the real DB.
+- The repository is public: the tracked InsightFace model is being redistributed publicly, and public disclosure may affect any future patent filing (see `docs/LICENSING_REVIEW.md`, `docs/product/PRODUCT_SPEC.md`).
 - Licensing: no repository LICENSE; AGPL-3.0 (Ultralytics) and a tracked InsightFace model need review before any commercial use. See `docs/LICENSING_REVIEW.md`.
 - Many legacy documents (README badges, `docs/certification/*`) claim certification/production readiness that is not supported by evidence. See section 6.
 
@@ -86,5 +104,7 @@ There is no linting/type-checking configured and none was run. No CI is active
 ## 7. Most recent verified milestone
 
 Core text-based product loop (talk → remember → recall after restart → inspect /
-correct / export / delete) works end to end with honest safety behaviour, on
-macOS and in a Linux container, from a clean install.
+correct / export / delete), person-entered medication schedules and appointments
+with reported-dose tracking and throttled reminders, backup/restore, and honest
+safety behaviour work end to end on macOS and in a Linux container from a clean
+install. Simulated runtime is stable over a 10-minute soak after the track fix.

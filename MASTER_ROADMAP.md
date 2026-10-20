@@ -14,51 +14,50 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-20._
 | P1 | Usable product loop: `--chat` with view/correct/export/delete | `85134ff` |
 | P2 | Reproducible install, working container, `--check`, Gemini hardening | `823a85e` |
 | P0 | Scenario validator never compared results; unspoken reminders; visitors never announced | `9f47497` |
+| P0 | 0600 data files; `--repair`; own replies no longer stored as memories ("temp" id overwrite) | `e2b97f3` |
+| P0 | Audit `final_action` now records what was actually done (COS SafetyManager is advisory) | `f4d1cd9` |
+| P1 | Persisted schedules/appointments with entry commands; reported-dose tracking | `f4d1cd9` |
+| P2 | Backup/restore | `4695a8a` |
+| P2 | Bug-focused static analysis gate; 3 runtime NameErrors fixed | `34ef886` |
+| P1 | Dashboard fictional defaults / false "meds confirmed" | `ecec514` |
+| P0 | Own turns stored under "Eleanor" and counted as visits | `87f6e94` |
+| P0 | Unbounded face-track memory growth (found by soak) | `609d2e8` |
+| P2 | Logging with rotation; quiet console; soak harness and evidence | `4bd4968`, `17ba5ed` |
 
 ## Next
 
 ### P0 — safety, privacy, correctness
-1. **Restrict on-disk permissions** for the DB and embedding files (0600) and document at-rest
-   encryption options. _Acceptance_: new DB/embedding files created 0600; test proves it.
-2. **Decide what to do with the 27 orphaned identities** in the local DB (owner decision:
-   delete or re-enrol). Provide a `--repair` command that lists and, on confirmation,
-   deletes identities without embeddings. _Acceptance_: tested on a copy; never automatic.
-3. **Make `SafetyManager` either gate output or be removed from the reply path claims.**
-   _Acceptance_: a test shows an unsafe proposed action is blocked, or docs/audit no
-   longer imply gating.
-4. **Stop storing MEMORA's own replies as "memories"** (`MemoryEncoder` in the pipeline) or
-   tag them as system output so they can never be recalled as user facts.
+1. **Owner decision:** run `--backup` then `--repair` on the local DB (27 faceless identities), or re-enrol.
+2. **Decide quiet-hours / throttling policy for proactive speech** (reminders, visitor announcements)
+   and enforce it on the actual reply path, or remove the advisory COS SafetyManager from the cycle.
+   _Acceptance_: a test proves the chosen policy on spoken output.
+3. **Escape all dashboard innerHTML sinks** (user text can reach them). _Acceptance_: no unescaped
+   template interpolation remains; browser check.
+4. **Consent records for face enrolment and voice capture** before any real-hardware use.
+5. **Licensing:** remove or replace the tracked InsightFace model and AGPL dependencies before any
+   commercial build (counsel review); the repository is public.
 
 ### P1 — core product
-5. **Persist the person's profile, medication schedules and appointments**, with chat
-   commands to add/list/remove them (caregiver-entered data labelled as such).
-6. **Reported vs verified medication state**: handle "I took it" as a *reported* action;
-   never mark as verified.
-7. **Voice I/O on real hardware** (microphone → ASR → pipeline → TTS) behind explicit
-   consent, tested on the owner's Mac with recorded fixtures first.
-8. **Real face enrolment flow** (explicit consent, delete on request) and verification with
-   consenting test subjects.
-9. Remove or relabel the remaining "Eleanor" placeholder in `experience/dashboard/app.js`
-   and audit the dashboard for synthetic values.
+6. **Voice I/O on real hardware** (microphone → ASR → pipeline → TTS), consented and tested on the
+   owner's Mac, first with recorded audio fixtures.
+7. **Real face enrolment flow** with explicit consent and deletion, verified with consenting subjects.
+8. **Person profile persistence** (beyond preferred name): caregiver contacts and emergency number
+   used in urgent guidance (currently generic "local emergency number").
+9. **Broader phrasing coverage** for conversational memory (measured against a phrase corpus,
+   reporting precision/recall rather than anecdotes).
 
 ### P2 — operations and quality
-10. Schema migrations (Alembic or a minimal versioned migrator) with tests on DB copies.
-11. Backup/restore command (`--backup`, `--restore`) with integrity verification.
-12. Lint/format/type-check configuration (ruff, mypy on new modules) and a secret scan;
-    activate CI once the owner approves Actions usage.
-13. Replace stdout prints in the pipeline with logging; quiet by default.
-14. Long-duration stability run (≥ 1 h simulated, with recorded memory/thread/latency).
+10. Versioned schema migrations (additive tables work today via `create_all`; column changes would not).
+11. Activate CI (owner approval for GitHub Actions usage).
+12. Multi-hour soak and a real-hardware soak once sensors are verified.
 
 ### P3 — performance and architecture
-15. Lazy-construct the ~20 phase engines that do not influence replies, or remove them
-    from the per-cycle path; measure startup and per-turn latency before/after.
-16. Real object detection with a licence-compatible model (YOLO/Ultralytics is AGPL-3.0).
+13. Lazy-construct or remove the ~20 phase engines that run every cycle without affecting replies.
+14. Licence-compatible object detector to replace the contour heuristic.
 
 ### P4 — commercial
-17. Licensing decisions (repository licence, AGPL and model terms) with counsel —
-    see `docs/LICENSING_REVIEW.md`.
-18. Product specification, customer-discovery plan, and regulatory questions list —
-    see `docs/product/PRODUCT_SPEC.md`.
+15. Licensing decisions with counsel — `docs/LICENSING_REVIEW.md`.
+16. Customer discovery per `docs/product/PRODUCT_SPEC.md`; regulatory questions for professional review.
 
 ## Release stages
 

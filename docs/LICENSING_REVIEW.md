@@ -5,6 +5,8 @@ Every item marked "review" needs confirmation by qualified counsel before any
 commercial distribution._
 
 ## Repository
+- **The GitHub repository is public** (verified 2026-10-20). Anything committed,
+  including the tracked InsightFace model, is publicly redistributed.
 - **No LICENSE file.** README states "Samsung Solve For Tomorrow Competition Entry".
   Ownership of contributions by multiple team members and any competition terms
   should be clarified before commercial use — **review**.
