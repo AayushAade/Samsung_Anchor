@@ -69,9 +69,11 @@ class PerceptionManager:
                         y=cy,
                         room=room_str,
                         bounding_box=bbox,
+                        source="REAL_CAMERA",
                     )
-                except Exception:
-                    pass
+                except Exception as e:  # never let one failed write stop perception, but say so
+                    import logging
+                    logging.getLogger(__name__).warning("Could not save object sighting %s: %s", obj.object_name, e)
 
         # 4. Infer Activity
         obj_names = [o.object_name for o in objects]

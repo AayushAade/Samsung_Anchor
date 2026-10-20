@@ -110,7 +110,7 @@ def open_user_database(db_path: str | None = None) -> "MemoraDatabase":
     target = db_path or settings.DB_PATH
     try:
         return MemoraDatabase(target)
-    except (SQLAlchemyError, OSError) as e:
+    except (SQLAlchemyError, OSError, RuntimeError) as e:
         resolved = resolve_db_url(target)[1] or target
         reason = str(getattr(e, "orig", None) or e).split("\n")[0]
         raise DatabaseUnavailableError(
@@ -205,6 +205,8 @@ class MemoraDatabase:
 
         self.engine = _build_engine(self.db_url)
         Base.metadata.create_all(self.engine)
+        from src.memory.migrations import migrate
+        self.migrations_applied = migrate(self.engine)
         if self.db_path is not None:
             restrict_permissions(self.db_path)
 
@@ -480,12 +482,15 @@ class MemoraDatabase:
         y: float,
         room: str,
         bounding_box: Any = None,
+        source: str | None = None,
+        when: Any = None,
     ) -> Any:
         """
-        Log an observed physical object location to spatial memory.
+        Log an observed physical object location to spatial memory, with where
+        the observation came from (e.g. REAL_CAMERA, SIMULATED_CAMERA).
         """
         with self.lock:
-            return self.object_repo.log_object(object_name, x, y, room, bounding_box)
+            return self.object_repo.log_object(object_name, x, y, room, bounding_box, source=source, when=when)
 
     def get_last_known_location(self, object_name: str) -> dict[str, Any] | None:
         """

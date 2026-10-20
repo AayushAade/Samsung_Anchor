@@ -719,26 +719,33 @@ class ConversationalMemory:
             return None
         if target in PRONOUNS:
             recent = self.search_history[-1] if self.search_history else None
-            if recent and time.time() - recent["timestamp"] < 600:
+            if recent and self.clock().timestamp() - recent["timestamp"] < 600:
                 target = recent["object"]
             else:
                 return "Which item do you mean? For example: where are my glasses?"
 
-        self.search_history.append({"object": target, "timestamp": time.time()})
+        self.search_history.append({"object": target, "timestamp": self.clock().timestamp()})
         now = self.clock()
         visual = self._visual_observation(target)
         obs = self._latest_observation(target)
-        if visual is not None and (obs is None or visual[2] >= obs[2]):
-            name, room, seen_at, spatial, confidence = visual
+        if visual is not None and (obs is None or visual[2] >= obs[2]) and visual[1] is not None:
+            name, room, seen_at, spatial, confidence, vsource = visual
             where = f"{spatial} in the {room}" if spatial else f"in the {room}"
+            label = " (demo data, not a real observation)" if re.search(r"SYNTHETIC|SIMULATED", vsource or "") else ""
             if confidence < 0.5:
                 return f"I'm not certain where your {name} is right now."
             if confidence < 0.8:
-                return f"I think your {name} may still be {where}, but I'm not certain."
-            reply = f"I last saw your {name} {where} {_age_phrase(seen_at, now)}."
+                return f"I think your {name} may still be {where}, but I'm not certain{label}."
+            reply = f"I last saw your {name} {where} {_age_phrase(seen_at, now)}{label}."
         elif obs is not None:
-            name, room, seen_at = obs
+            name, room, seen_at, source = obs
             reply = f"I last saw your {name} in the {room} {_age_phrase(seen_at, now)}."
+            if source is None:
+                verb = "were" if name.endswith("s") and not name.endswith("ss") else "was"
+                reply = (f"I have an older note that your {name} {verb} in the {room} {_age_phrase(seen_at, now)}, "
+                         "but I don't know how it was recorded, so please check.")
+            elif source.startswith("SIMULATED"):
+                reply = reply[:-1] + " (in a simulation, not a real camera)."
         else:
             plural = target.endswith("s") and not target.endswith("ss")
             it, they = ("them", "they are") if plural else ("it", "it is")
@@ -758,7 +765,8 @@ class ConversationalMemory:
             seen_at = datetime.fromisoformat(entry.timestamp)
         except (TypeError, ValueError):
             return None
-        return entry.object_category, entry.room, seen_at, entry.spatial_description, entry.confidence
+        return (entry.object_category, entry.room, seen_at, entry.spatial_description, entry.confidence,
+                getattr(entry, "observation_source", None))
 
     def _latest_observation(self, target: str) -> Optional[tuple[str, str, datetime]]:
         repo = getattr(self.db, "object_repo", None)
@@ -769,4 +777,5 @@ class ConversationalMemory:
             seen_at = datetime.fromisoformat(info["last_seen"])
         except (TypeError, ValueError):
             return None
-        return str(info.get("name", target)).replace("_", " ").lower(), info.get("room") or "an unknown room", seen_at
+        return (str(info.get("name", target)).replace("_", " ").lower(), info.get("room") or "an unknown room",
+                seen_at, info.get("source"))

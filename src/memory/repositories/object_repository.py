@@ -8,8 +8,9 @@ class ObjectRepository:
     def __init__(self, session_factory):
         self.session_factory = session_factory
 
-    def log_object(self, object_name: str, x: float, y: float, room: str, bounding_box: list = None):
-        now_str = datetime.now().isoformat()
+    def log_object(self, object_name: str, x: float, y: float, room: str, bounding_box: list = None,
+                   source: str = None, when: datetime = None):
+        now_str = (when or datetime.now()).isoformat()
         
         with self.session_factory() as session:
             obj = session.query(Object).filter(Object.name == object_name).first()
@@ -22,6 +23,7 @@ class ObjectRepository:
             obj.y = y
             obj.room = room
             obj.bounding_box = bounding_box
+            obj.source = source
             
             history = ObjectHistory(
                 object_name=object_name,
@@ -29,7 +31,8 @@ class ObjectRepository:
                 x=x,
                 y=y,
                 room=room,
-                bounding_box=bounding_box
+                bounding_box=bounding_box,
+                source=source,
             )
             session.add(history)
             
@@ -70,6 +73,7 @@ class ObjectRepository:
                 "y": obj.y,
                 "room": obj.room,
                 "bounding_box": obj.bounding_box,
+                "source": obj.source,
                 "history": history_list
             }
 

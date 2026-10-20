@@ -44,6 +44,7 @@ class Object(Base):
     y = Column(Float)
     room = Column(String)
     bounding_box = Column(JSON, nullable=True)
+    source = Column(String, nullable=True)  # REAL_CAMERA, SIMULATED_CAMERA, ...; NULL = not recorded (legacy)
 
 class ObjectHistory(Base):
     __tablename__ = 'object_history'
@@ -55,6 +56,7 @@ class ObjectHistory(Base):
     y = Column(Float)
     room = Column(String)
     bounding_box = Column(JSON, nullable=True)
+    source = Column(String, nullable=True)
 
 class EpisodeModel(Base):
     __tablename__ = 'episodes'

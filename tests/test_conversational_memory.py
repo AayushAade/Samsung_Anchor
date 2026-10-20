@@ -189,7 +189,7 @@ def test_object_never_seen_is_reported_honestly(mem):
 
 
 def test_object_last_seen_with_age_and_staleness(mem, clock):
-    mem.db.log_object("reading_glasses", 1.0, 2.0, "Living Room")
+    mem.db.log_object("reading_glasses", 1.0, 2.0, "Living Room", source="REAL_CAMERA")
     seen = datetime.fromisoformat(mem.db.get_last_known_location("reading_glasses")["last_seen"])
     clock.now = seen + timedelta(minutes=20)
     assert mem.respond("Where are my glasses?") == "I last saw your reading glasses in the Living Room about 20 minutes ago."
@@ -220,3 +220,12 @@ def test_restatement_drops_trailing_time_words(mem):
 
 def test_unmatched_speech_returns_none(mem):
     assert mem.respond("The weather is nice") is None
+
+
+def test_observation_provenance_is_stated(mem, clock):
+    mem.db.log_object("keys", 0, 0, "Hall", source="SIMULATED_CAMERA", when=clock.now)
+    assert mem.respond("Where are my keys?").endswith("(in a simulation, not a real camera).")
+    mem.db.log_object("wallet", 0, 0, "Kitchen", when=clock.now)  # legacy: no source recorded
+    reply = mem.respond("Where is my wallet?")
+    assert reply.startswith("I have an older note that your wallet was in the Kitchen")
+    assert "don't know how it was recorded" in reply
