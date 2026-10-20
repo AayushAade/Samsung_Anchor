@@ -229,3 +229,37 @@ def test_observation_provenance_is_stated(mem, clock):
     reply = mem.respond("Where is my wallet?")
     assert reply.startswith("I have an older note that your wallet was in the Kitchen")
     assert "don't know how it was recorded" in reply
+
+
+@pytest.mark.parametrize("correction", [
+    "Actually my daughter is Priya", "Actually, my daughter's name is Priya", "No, my daughter is Priya",
+    "no my daughter is Priya", "Sorry, my daughter is called Priya", "I mean, my daughter is Priya"])
+def test_spoken_correction_replaces_single_earlier_name(mem, correction):
+    """Found by the end-to-end CLI journey: a leading 'Actually' made the correction unrecognised."""
+    mem.respond("My daughter is Riya")
+    reply = mem.respond(correction)
+    assert "updated" in reply and "Riya" in reply
+    answer = mem.respond("Who is my daughter?")
+    assert "Priya" in answer and "Riya" not in answer
+
+
+def test_correction_word_does_not_drop_one_of_several_names(mem):
+    mem.respond("I have two daughters, Riya and Asha")
+    reply = mem.respond("Actually my daughter is Priya")
+    assert "more than one daughter" in reply
+    answer = mem.respond("Who is my daughter?")
+    assert all(n in answer for n in ("Riya", "Asha", "Priya"))
+
+
+@pytest.mark.parametrize("said, expected", [
+    ("Actually I like green tea", "you like green tea"), ("Oh, I like coffee", "you like coffee"),
+    ("Well, my son is Leo", "your son is Leo"), ("Actually my name is Asha", "Asha")])
+def test_leading_filler_words_do_not_hide_the_statement(mem, said, expected):
+    assert expected in (mem.respond(said) or "")
+
+
+@pytest.mark.parametrize("said", ["No", "Actually", "Sorry", "Wait for me"])
+def test_bare_lead_words_are_not_treated_as_statements(mem, said):
+    mem.respond("My daughter is Riya")
+    mem.respond(said)
+    assert "Riya" in mem.respond("Who is my daughter?")

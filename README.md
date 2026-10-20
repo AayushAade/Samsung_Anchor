@@ -58,7 +58,9 @@ Chat commands (`/help` lists them all): `/memories`, `/forget N`, `/medications`
 ### Where data is stored
 
 - Default database: `memora_db_v2.sqlite` in the project folder (face data alongside as
-  `memora_db_v2.faces.json`). Override with `MEMORA_DB_PATH=/path/to/memora.sqlite`.
+  `memora_db_v2.faces.json`). Override with `MEMORA_DB_PATH=/path/to/memora.sqlite`;
+  unless that exact file already exists, MEMORA stores it as `/path/to/memora_v2.sqlite`
+  (`--check` and `/status` show the file actually used).
 - `--simulation` and `--scenario` use a separate database under `data/simulation/`.
 - `--chat`, `--simulate` and the default runtime make **no network connections** (enforced by
   `tests/test_network_policy.py`, which intercepts sockets). Features that can contact the internet

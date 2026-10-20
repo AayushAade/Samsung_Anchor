@@ -58,3 +58,13 @@ def test_context_manager_and_close():
         assert db.get_current_room() == "Living Room"
         db.clear()
         assert db.get_current_room() == "Living Room"
+
+
+def test_check_names_the_file_actually_used_when_it_is_damaged(tmp_path, monkeypatch):
+    """Found by the end-to-end journey: --check named memora.sqlite while the damaged file was memora_v2.sqlite."""
+    from config import settings
+    from src.operations.startup_validator import StartupValidator
+    (tmp_path / "memora_v2.sqlite").write_bytes(b"\0" * 4096)
+    monkeypatch.setattr(settings, "DB_PATH", str(tmp_path / "memora.sqlite"))
+    item = StartupValidator().check_user_database()
+    assert item.status == "FAIL" and str(tmp_path / "memora_v2.sqlite") in item.message

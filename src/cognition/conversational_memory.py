@@ -108,6 +108,25 @@ def _age_phrase(ts: datetime, now: datetime) -> str:
     return f"on {ts.strftime('%B')} {ts.day}"
 
 
+# Leading words people put before what they mean ("Actually, my daughter is Priya").
+# Markers that signal a correction are reported so the statement can replace the old value.
+_CORRECTION_LEAD = re.compile(
+    r"^\s*(?:(?:actually|i mean|i meant|correction)\b[,.:!]?|(?:no|sorry|wait)(?:[,.:!]|\s+(?=(?:my|i|i'm|it|it's|that|that's)\b)))\s*",
+    re.IGNORECASE)
+_FILLER_LEAD = re.compile(r"^\s*(?:(?:well|oh|ok|okay|so|right|hmm+|um+|uh+)[,.!]|um+|uh+|hmm+)\s+", re.IGNORECASE)
+
+
+def _strip_lead(text: str) -> tuple[str, bool]:
+    """Remove leading filler and correction words; return (rest, whether a correction was signalled)."""
+    correcting = False
+    while True:
+        m = _CORRECTION_LEAD.match(text) or _FILLER_LEAD.match(text)
+        if not m or not text[m.end():].strip():
+            return text, correcting
+        correcting = correcting or m.re is _CORRECTION_LEAD
+        text = text[m.end():]
+
+
 def _norm(text: str) -> str:
     t = text.lower().replace("’", "'").strip()
     t = re.sub(r"\bfavourite\b", "favorite", t)
@@ -169,6 +188,7 @@ class ConversationalMemory:
             return None
         if detect_urgent_concern(speech) is not None:
             return None  # the safety layer owns this turn
+        speech, correcting = _strip_lead(speech)
         t = _norm(speech)
         for handler in (self._capability_boundaries, self._name_correction_or_question, self._name_introduction,
                         self._orientation, self._forget, self._relation_correction, self._relations_have,
@@ -176,7 +196,7 @@ class ConversationalMemory:
                         self._fact_question, self._timeline, self._visitors, self._last_search,
                         self._medication_report, self._medication_question, self._appointment,
                         self._object_location, self._feelings, self._small_talk):
-            reply = handler(speech, t, face_id=face_id, patient_name=patient_name)
+            reply = handler(speech, t, face_id=face_id, patient_name=patient_name, correcting=correcting)
             if reply:
                 return reply
         return None
@@ -349,11 +369,15 @@ class ConversationalMemory:
             return f"likes:{value}", value, "positive", False
         return None
 
-    def _fact_correction_or_statement(self, raw: str, t: str, face_id=None, **_) -> Optional[str]:
+    def _fact_correction_or_statement(self, raw: str, t: str, face_id=None, correcting=False, **_) -> Optional[str]:
         parsed = self._parse_statement(t)
         if not parsed:
             return None
         key, value, polarity, single_valued = parsed
+        if correcting and key.startswith("relation:") and not single_valued:
+            # "Actually, my daughter is Priya" replaces a single earlier name; with several
+            # stored names it stays ambiguous and the person is asked which one is wrong.
+            single_valued = len({f.value.lower() for f in self.active_facts() if f.key == key} - {value.lower()}) == 1
         if not self._may_store():
             return self.STORAGE_OFF
         if value.strip().lower() in PRONOUNS:

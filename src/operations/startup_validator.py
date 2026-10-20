@@ -172,8 +172,10 @@ class StartupValidator:
                 report = db.check_integrity()
                 path = db.db_path
         except Exception as e:
+            from src.memory.database import resolve_db_url
+            actual = resolve_db_url(settings.DB_PATH)[1] or settings.DB_PATH
             return HealthCheckItem(component="User Memory Database", status="FAIL",
-                                   message=f"Cannot open {settings.DB_PATH}: {e}",
+                                   message=f"Cannot open {actual}: {e}",
                                    remediation="Check the path (MEMORA_DB_PATH) and file permissions; "
                                                "restore from backup if the file is corrupt")
         if report["ok"]:
