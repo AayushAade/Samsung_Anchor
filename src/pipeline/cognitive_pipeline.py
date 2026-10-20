@@ -42,6 +42,7 @@ from src.trust.privacy_manager import PrivacyManager
 from src.trust.degradation_manager import DegradationManager
 from src.behaviour.behaviour_manager import BehaviourManager
 from src.reasoning.reasoning_engine import CognitiveReasoningEngine
+from src.reasoning.intent_predictor import IntentPredictor
 from src.executive.executive_engine import ExecutiveEngine
 from src.experience.experience_engine import ExperienceEngine
 from src.knowledge.knowledge_engine import KnowledgeEngine
@@ -169,6 +170,7 @@ class CognitivePipeline:
 
         # Phase 24 — Cognitive Reasoning Engine Framework
         self.reasoning_engine = CognitiveReasoningEngine()
+        self.intent_predictor = IntentPredictor()
 
         # Phase 25 — Executive Function & Adaptive Planning Framework
         self.executive_engine = ExecutiveEngine()
@@ -213,8 +215,18 @@ class CognitivePipeline:
 
     def process(
         self,
-        recognition_result: dict,
-    ) -> list[InteractionAction]:
+        recognition_result: Optional[dict] = None,
+        user_speech: Optional[str] = None,
+        location: Optional[str] = None,
+        return_dict: bool = False,
+    ) -> Any:
+
+        if recognition_result is None:
+            recognition_result = {}
+        if user_speech:
+            recognition_result["user_speech"] = user_speech
+        if location:
+            recognition_result["location"] = location
 
         actions = []
         stream = CognitiveStream.instance()
@@ -228,6 +240,14 @@ class CognitivePipeline:
             if self._latest_transcript:
                 recognition_result["user_speech"] = self._latest_transcript
                 self._latest_transcript = None
+
+            # Working Memory Reference Resolution (Anaphora)
+            raw_u_speech = recognition_result.get("user_speech")
+            if raw_u_speech:
+                resolution = self.cognitive_kernel.working_memory.resolve_reference(raw_u_speech)
+                if resolution.get("has_reference") and resolution.get("resolved_query"):
+                    print(f"🗣️ [Working Memory Anaphora] Resolved '{raw_u_speech}' -> '{resolution['resolved_query']}' (Referent: {resolution.get('resolved_referent')})")
+                    recognition_result["user_speech"] = resolution["resolved_query"]
 
             # --------------------------------------------------
             # 0. Real-Time Edge Perception Cycle
@@ -552,12 +572,16 @@ class CognitivePipeline:
             # 6.8 Executive Planning & Adaptive Execution
             # --------------------------------------------------
             executive_summary = self.executive_engine.process_cycle(
+                cognitive_context=cognitive_context,
+                working_memory=self.cognitive_kernel.working_memory,
+                patient_state=self.current_patient_state,
                 reasoning_summary=reasoning_summary,
                 behaviour_summary=behaviour_summary,
                 location=loc_val,
                 user_speech=u_speech,
                 patient_state_mode=self.current_patient_state.mode.value,
                 emergency_active=self.emergency_mgr.get_current_state().active,
+                missed_medications=missed_meds,
             )
 
             # --------------------------------------------------
@@ -614,6 +638,16 @@ class CognitivePipeline:
             # Graceful degradation: If anything fails, don't crash the background thread.
             # We can optionally issue a generic error interaction or just fail silently.
             pass
+
+        if return_dict:
+            u_sp = recognition_result.get("user_speech") if recognition_result else None
+            context_ans = self._handle_contextual_recall(u_sp, event, self.patient_profile_mgr.get_profile())
+            final_speech = context_ans or (actions[0].message if actions else "I am here with you.")
+            return {
+                "speech_response": final_speech,
+                "executive_summary": executive_summary,
+                "actions": actions,
+            }
 
         return actions
 
@@ -718,6 +752,8 @@ class CognitivePipeline:
                 for obj_word in ["glasses", "reading glasses", "keys", "wallet", "remote", "television remote", "bottle", "water bottle", "medication", "cane", "walking cane", "phone", "cell phone"]:
                     if obj_word in q_lower:
                         self._search_history.append({"object": obj_word, "timestamp": time.time()})
+                        if hasattr(self, "intent_predictor"):
+                            self.intent_predictor.record_lost_object_search(obj_word)
                         break
 
                 # Check VisualEpisodicMemoryEngine for rich spatial location descriptions

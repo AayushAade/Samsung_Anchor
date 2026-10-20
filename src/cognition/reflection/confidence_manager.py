@@ -44,3 +44,21 @@ class ConfidenceManager:
         """
         # Slightly reduce usefulness, but leave confidence alone
         node.historical_usefulness = max(0.0, node.historical_usefulness - 0.1)
+
+    @staticmethod
+    def compute_composite_confidence(
+        perception_confidence: float = 1.0,
+        speech_confidence: float = 1.0,
+        retrieval_confidence: float = 1.0,
+        reasoning_confidence: float = 1.0,
+    ) -> float:
+        """
+        Combine upstream subsystem confidences mathematically.
+        Final = C_perception * C_speech * C_retrieval * C_reasoning
+        """
+        c_p = max(0.0, min(1.0, perception_confidence))
+        c_s = max(0.0, min(1.0, speech_confidence))
+        c_r = max(0.0, min(1.0, retrieval_confidence))
+        c_re = max(0.0, min(1.0, reasoning_confidence))
+        return round(c_p * c_s * c_r * c_re, 4)
+

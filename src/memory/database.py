@@ -155,6 +155,10 @@ class MemoraDatabase:
         self._init_system_state()
         logger.info("MemoraDatabase initialized successfully with URL: %s", self.db_url)
 
+    @property
+    def session_factory(self):
+        return self.SessionFactory
+
     def __enter__(self) -> "MemoraDatabase":
         return self
 

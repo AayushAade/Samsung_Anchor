@@ -201,3 +201,113 @@ class RecoveryAction:
             "target_task_id": self.target_task_id,
             "explanation": self.explanation,
         }
+
+
+class RiskLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+@dataclass
+class RiskAssessment:
+    level: RiskLevel = RiskLevel.LOW
+    score: float = 0.10
+    factors: List[str] = field(default_factory=list)
+    justification: str = "Baseline safe operating context."
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "level": self.level.value,
+            "score": round(self.score, 3),
+            "factors": list(self.factors),
+            "justification": self.justification,
+        }
+
+
+@dataclass
+class Situation:
+    patient_name: str = "Patient"
+    time_of_day: str = "Day"
+    current_location: str = "Living Room"
+    detected_people: List[str] = field(default_factory=list)
+    detected_objects: List[str] = field(default_factory=list)
+    activity: str = "Sitting"
+    is_night: bool = False
+    repeating_question: bool = False
+    question_count: int = 0
+    searching_activity: bool = False
+    search_target: Optional[str] = None
+    pending_medication: bool = False
+    confusion_score: float = 0.10
+    anxiety_level: float = 0.10
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "patient_name": self.patient_name,
+            "time_of_day": self.time_of_day,
+            "current_location": self.current_location,
+            "detected_people": list(self.detected_people),
+            "detected_objects": list(self.detected_objects),
+            "activity": self.activity,
+            "is_night": self.is_night,
+            "repeating_question": self.repeating_question,
+            "question_count": self.question_count,
+            "searching_activity": self.searching_activity,
+            "search_target": self.search_target,
+            "pending_medication": self.pending_medication,
+            "confusion_score": round(self.confusion_score, 2),
+            "anxiety_level": round(self.anxiety_level, 2),
+        }
+
+
+@dataclass
+class ExecutiveState:
+    emotion_estimate: str = "Calm"
+    stress_level: float = 0.10
+    confusion_score: float = 0.10
+    search_activity: bool = False
+    current_goal: Optional[str] = None
+    attention_target: Optional[str] = None
+    risk_level: str = "LOW"
+    current_room: str = "Living Room"
+    visitor_present: Optional[str] = None
+    conversation_topic: str = "General"
+    care_strategy: str = "Minimal Intervention"
+    composite_confidence: float = 0.90
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "emotion_estimate": self.emotion_estimate,
+            "stress_level": round(self.stress_level, 2),
+            "confusion_score": round(self.confusion_score, 2),
+            "search_activity": self.search_activity,
+            "current_goal": self.current_goal,
+            "attention_target": self.attention_target,
+            "risk_level": self.risk_level,
+            "current_room": self.current_room,
+            "visitor_present": self.visitor_present,
+            "conversation_topic": self.conversation_topic,
+            "care_strategy": self.care_strategy,
+            "composite_confidence": round(self.composite_confidence, 2),
+        }
+
+
+@dataclass
+class SelfReflection:
+    was_successful: bool = True
+    confidence_sufficient: bool = True
+    memory_updated: bool = False
+    goal_transition: Optional[str] = None
+    reflection_notes: str = "Response delivered smoothly with high dignity."
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "was_successful": self.was_successful,
+            "confidence_sufficient": self.confidence_sufficient,
+            "memory_updated": self.memory_updated,
+            "goal_transition": self.goal_transition,
+            "reflection_notes": self.reflection_notes,
+        }
+

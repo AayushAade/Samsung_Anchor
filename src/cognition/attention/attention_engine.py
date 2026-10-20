@@ -8,7 +8,9 @@ from src.cognition.attention.scorers import (
     RecencyScorer, 
     MedicalUrgencyScorer, 
     CommitmentScorer,
-    AdaptiveAttentionScorer
+    AdaptiveAttentionScorer,
+    NoveltyScorer,
+    ConfidenceScorer,
 )
 
 class CognitiveAttentionEngine:
@@ -30,7 +32,9 @@ class CognitiveAttentionEngine:
             RecencyScorer(),
             MedicalUrgencyScorer(),
             CommitmentScorer(),
-            AdaptiveAttentionScorer()
+            AdaptiveAttentionScorer(),
+            NoveltyScorer(),
+            ConfidenceScorer(),
         ]
 
     def evaluate(self, cognitive_context: CognitiveContext) -> AttentionDecision:

@@ -15,9 +15,12 @@ from typing import List
 
 class GoalState(Enum):
     """Lifecycle state of a goal hypothesis."""
+    DETECTED = "DETECTED"
     HYPOTHESIZED = "HYPOTHESIZED"
     ACTIVE = "ACTIVE"
+    IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
+    EXPIRED = "EXPIRED"
     ABANDONED = "ABANDONED"
     INTERRUPTED = "INTERRUPTED"
 

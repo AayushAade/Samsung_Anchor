@@ -20,15 +20,24 @@ from src.memory.models import Identity, Object, ObjectHistory, EpisodeModel, Rel
 
 def validate_database(db_path: str | None = None) -> bool:
     """
-    Objective 7: Database Consistency Checker.
-    Audits DB tables and returns True (PASS) or False (FAIL).
+    Objectives 6 & 7: Database & FAISS Vector Store Consistency Checker.
+    Audits DB tables, FAISS embeddings, orphan records, duplicates, storage size, and query latency.
     """
+    import time
+    import numpy as np
+
     target_path = db_path or "memora_db_v2.sqlite"
+    url, fs_path = resolve_db_url(target_path)
+    file_bytes = os.path.getsize(fs_path) if fs_path and os.path.exists(fs_path) else 0
+    file_mb = round(file_bytes / (1024 * 1024), 3)
+
     db = MemoraDatabase(target_path)
     issues = []
 
-    print("\n🔍 RUNNING DATABASE CONSISTENCY AUDIT...")
-    print("=" * 60)
+    print("\n🔍 RUNNING COMPREHENSIVE DATABASE & FAISS CONSISTENCY AUDIT...")
+    print("=" * 65)
+    print(f"  Target DB Path : {fs_path or target_path}")
+    print(f"  Storage Size   : {file_mb} MB ({file_bytes} bytes)")
 
     with db._session_scope() as session:
         # 1. Orphan Identities Check
@@ -37,7 +46,7 @@ def validate_database(db_path: str | None = None) -> bool:
             if not idx.identity_id:
                 issues.append(f"Orphan identity without identity_id found (ID: {idx.id})")
 
-        # 2. Duplicate Objects Check
+        # 2. Duplicate Objects & Memory Check
         objects = session.query(Object).all()
         obj_names = [o.name for o in objects]
         duplicates = set([x for x in obj_names if obj_names.count(x) > 1])
@@ -62,25 +71,35 @@ def validate_database(db_path: str | None = None) -> bool:
             if not m.title or not m.summary:
                 issues.append(f"Invalid RelevantMemory (id={m.id}): missing title or summary")
 
-    # 6. FAISS Embedding Cache & Store Alignment
+    # 6. FAISS Embedding & Query Latency Audit
     faiss_cnt = db.vector_store.index.ntotal if hasattr(db, "vector_store") and db.vector_store else 0
+    faiss_dim = db.vector_store.index.d if hasattr(db, "vector_store") and db.vector_store else 128
+    query_latency_ms = 0.0
+
+    if faiss_cnt > 0:
+        t0 = time.perf_counter()
+        sample_query = np.random.randn(1, faiss_dim).astype("float32")
+        db.vector_store.find_match(sample_query[0], tolerance=0.6)
+        query_latency_ms = round((time.perf_counter() - t0) * 1000.0, 3)
+
     print(f"  ✓ Identities Count      : {len(identities)}")
     print(f"  ✓ Objects Count         : {len(objects)}")
     print(f"  ✓ Object History Count  : {len(histories)}")
     print(f"  ✓ Episode Rows Count    : {len(episodes)}")
     print(f"  ✓ Memory Rows Count     : {len(memories)}")
-    print(f"  ✓ FAISS Vector Count    : {faiss_cnt} (128D Embeddings)")
+    print(f"  ✓ FAISS Vector Count    : {faiss_cnt} ({faiss_dim}D Embeddings)")
+    print(f"  ✓ FAISS Query Latency   : {query_latency_ms} ms (Target < 5.0ms)")
 
-    print("-" * 60)
+    print("-" * 65)
     if not issues:
-        print("🟢 DATABASE VALIDATION RESULT: PASS (0 Integrity Errors)")
-        print("=" * 60 + "\n")
+        print("🟢 DATABASE & FAISS AUDIT RESULT: PASS (0 Integrity Errors)")
+        print("=" * 65 + "\n")
         return True
     else:
-        print(f"🔴 DATABASE VALIDATION RESULT: FAIL ({len(issues)} Issues Found):")
+        print(f"🔴 DATABASE & FAISS AUDIT RESULT: FAIL ({len(issues)} Issues Found):")
         for iss in issues:
             print(f"   ⚠️  {iss}")
-        print("=" * 60 + "\n")
+        print("=" * 65 + "\n")
         return False
 
 

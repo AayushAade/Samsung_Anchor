@@ -1,7 +1,7 @@
 # MEMORA (Samsung Anchor) — Clinical Evaluation & Caregiver Summary Report
 
 **Patient**: Eleanor  
-**Generated At**: 2026-08-03 04:04:43 UTC  
+**Generated At**: 2026-10-20 09:45:29 UTC  
 **Evaluation Mode**: Release Candidate RC1 Clinical Governance  
 
 ---
@@ -23,7 +23,7 @@
 ## 3. Spatial Object Location Memory
 | Misplaced Item | Last Observed Location | Spatial Status |
 | :--- | :--- | :--- |
-| Reading Glasses | Living Room Coffee Table | Observed at 2026-08-03T09:34:43.529609 |
+| Reading Glasses | Living Room Coffee Table | Observed at 2026-10-20T15:15:29.532989 |
 
 ---
 

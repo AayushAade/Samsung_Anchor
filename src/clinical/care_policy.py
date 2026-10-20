@@ -19,11 +19,17 @@ from src.clinical.patient_state import PatientState, PatientStateMode
 
 class CarePrinciple(Enum):
     VALIDATION_THERAPY = "Validation Therapy"
+    REALITY_ORIENTATION = "Reality Orientation"
+    GENTLE_CUEING = "Gentle Cueing"
+    REASSURANCE = "Reassurance"
+    DISTRACTION = "Distraction"
+    CAREGIVER_ESCALATION = "Caregiver Escalation"
+    EMERGENCY_ESCALATION = "Emergency Safety Escalation"
+    MINIMAL_INTERVENTION = "Minimal Intervention"
     GENTLE_ORIENTATION = "Gentle Orientation"
     SUPPORTIVE_SILENCE = "Supportive Silence"
     ONE_STEP_GUIDANCE = "One-Step Guidance"
     REPETITIVE_REDIRECTION = "Repetitive Query Redirection"
-    EMERGENCY_ESCALATION = "Emergency Safety Escalation"
 
 
 @dataclass
