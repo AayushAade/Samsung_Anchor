@@ -22,7 +22,7 @@ what has been verified and how.
 
 ## Quick start
 
-Requires Python 3.11 or 3.12 (a core dependency does not yet support 3.13).
+Requires Python 3.11, 3.12 or 3.13 (core install verified on all three).
 
 ```bash
 python -m venv .venv

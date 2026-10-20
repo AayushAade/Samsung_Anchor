@@ -44,5 +44,5 @@ How to invoke: `python app.py --chat` (C), `--simulate` (S), `--check` (K), runt
 | Gemini name extraction | EXTERNALLY-UNVERIFIED | `context_binder.py` | R (identity learning) | fake-client tests | No key; API terms need review | Owner-provided test key |
 | Dashboard (developer view) | IMPLEMENTED, TESTED (browser, synthetic events) | `experience/` | `--dashboard` | browser check with hostile input | Telemetry view, not a carer product | — |
 | Docker deployment | IMPLEMENTED, TESTED | `deployment/docker/Dockerfile` | docker | local runs + CI Docker job | Core text mode only | — |
-| Clean install / CI | IMPLEMENTED, TESTED | `requirements*.txt`, `.github/workflows/ci.yml` | — | fresh clone 664 passed + 2 skipped (`8ccf2bd`); CI on Linux x86-64 | Python 3.11–3.12 only (SpeechRecognition uses modules removed in 3.13) | Replace or isolate SpeechRecognition |
+| Clean install / CI | IMPLEMENTED, TESTED | `requirements*.txt`, `.github/workflows/ci.yml` | — | fresh clone 664 passed + 2 skipped (`8ccf2bd`); CI on Linux x86-64 | Core verified on Python 3.11 (macOS, CI), 3.12 and 3.13 (clean containers, `ac87a0f`: 747 passed, 6 skipped with reasons). Microphone capture (optional SpeechRecognition) does not support 3.13 | — |
 | Platforms | — | — | — | macOS arm64 (native), Linux arm64 (Docker), Linux x86-64 (CI) | Windows, Raspberry Pi, wearables untested | — |
