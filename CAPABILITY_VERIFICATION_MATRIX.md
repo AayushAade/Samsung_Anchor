@@ -8,13 +8,13 @@ pipeline/DB · **E** end-to-end run of a user entry point · **S** simulated onl
 | :--- | :--- | :--- | :--- | :--- |
 | Text conversation | `src/application/chat.py`, `app.py --chat` | E (piped sessions, macOS + container), I `tests/test_chat_and_user_data.py` | core deps | **Verified.** Rule-based; understands a bounded set of phrasings |
 | Remember user facts with provenance | `src/cognition/conversational_memory.py` | U/I `test_conversational_memory.py`, `test_pipeline_conversation_correctness.py` | — | **Verified.** likes/dislikes, preferences, favourites, relations |
-| Topic-relevant recall with attribution | same | U/I | — | **Verified.** Unrelated facts are not offered; "don't have a record" otherwise |
+| Topic-relevant recall with attribution | same | U/I; corpus `tests/data/conversation_corpus.json` 40/40 via pipeline | — | **Verified on the corpus.** Unrelated facts are not offered; "don't have a record" otherwise. Corpus coverage is not real-world accuracy |
 | Corrections / supersession with history | same | U/I | — | **Verified.** Old fact kept as superseded; person told what changed |
 | Persistence across restart | SQLite + per-DB embeddings | I (restart tests), E (chat across processes and container runs) | writable DB path | **Verified** |
 | Preferred name onboarding | `ConversationalMemory._name_introduction` | U/I/E | — | **Verified.** "I'm tired" etc. never taken as names |
 | Orientation (time/date) | same | U/I, scenario CS-05 | system clock | **Verified** (clock only; location is never guessed) |
 | Object "last seen" answers | same + `ObjectRepository` | U/I | real observations | Logic **verified** with logged observations. Real object detection **unverified** (see below) |
-| Urgent-situation guidance | `src/clinical/urgent_safety.py`, patient state, care policy | U/I `test_urgent_safety.py` (30 cases), scenario CS-08 | — | **Verified** for the listed phrasings. Rule-based, English only, not a validated triage tool. MEMORA cannot contact anyone and says so |
+| Urgent-situation guidance | `src/clinical/urgent_safety.py`, patient state, care policy | U/I `test_urgent_safety.py` (31 cases), scenario CS-08 | — | **Verified** for the listed phrasings. Rule-based, English only, not a validated triage tool. Uses the configured emergency number and trusted contact; MEMORA cannot contact anyone and says so |
 | Medication schedules and reminders | `MedicationManager`, `CareStore`, `due_reminder_message`, chat `/add-medication` | U/I/E `test_care_schedules.py`, `test_medication_manager.py`, CS-04 | entered by person/carer | **Verified**: persisted, throttled reminders (runtime and chat), stop once a dose is reported. "I took it" is a *report*, never a verification; double-dose statements go to safety |
 | Appointments | `AppointmentManager`, `CareStore`, chat `/add-appointment` | U/I/E `test_care_schedules.py`, CS-03 | entered by person/carer | **Verified**: persisted; answers only from recorded appointments |
 | Backup / restore | `src/memory/backup.py`, `--backup`, `--restore` | U/E `test_backup_restore.py`, run on DB copy | — | **Verified**: consistent snapshot, checksums, tamper rejection, pre-restore copy |
@@ -36,7 +36,8 @@ pipeline/DB · **E** end-to-end run of a user entry point · **S** simulated onl
 | View / export / delete user data | `src/memory/user_data.py`, chat commands | I `test_chat_and_user_data.py` | — | **Verified**; deletion recounted; export 0600, no raw embeddings |
 | Cloud reasoning (Gemini) | `src/reasoning/context_binder.py` | U with fake client | key + network | Request/validation path tested offline; **live API unverified**. Replies never use an LLM |
 | Clinical scenario harness | `src/clinical/scenario_validator.py`, `--scenario` | I (11/11 + harness-failure test) | — | **Verified harness**; scenarios are synthetic, not clinical evidence |
-| Dashboard | `experience/server.py`, `--dashboard` | JS syntax check only | browser | **Not run in a browser.** Fictional defaults removed; clinical panel escaped; other panels still use unescaped innerHTML |
+| Dashboard | `experience/server.py`, `--dashboard` | E: browser pane against synthetic events with hostile input | browser | All event text escaped at the WebSocket boundary (verified no injected elements); fictional routine/escalation/consent/confidence removed. Developer telemetry view, not a caregiver product |
+| No fictional data in real use | seed flags across components | U `test_no_invented_context.py` (object-graph sweep of a real pipeline) | — | **Verified**: no fictional people/prescriptions reachable outside demo mode |
 | Caregiver features (reports, escalation policies, FHIR/HL7 adapters) | `src/caregiver/`, `src/interoperability/` | unit tests from earlier phases (not re-reviewed) | — | **Not reviewed**; no notification channel exists |
 | Container deployment | `deployment/docker/Dockerfile` | E (Docker 29.5, linux/aarch64) | Docker | **Verified** for core text mode |
 | Clean install | `requirements*.txt` | E (fresh clone + clean venv: 634 passed, 2 skipped) | Python 3.11 | **Verified** on macOS arm64; other platforms untested |

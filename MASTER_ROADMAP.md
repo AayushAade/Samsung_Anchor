@@ -23,6 +23,10 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-20._
 | P0 | Own turns stored under "Eleanor" and counted as visits | `87f6e94` |
 | P0 | Unbounded face-track memory growth (found by soak) | `609d2e8` |
 | P2 | Logging with rotation; quiet console; soak harness and evidence | `4bd4968`, `17ba5ed` |
+| P0 | Dashboard XSS sinks; invented routine/escalation/consent/confidence | `1abc9ed` |
+| P0 | Fictional people/prescriptions in knowledge, LTM, caregivers, relationships, personalisation | `839ea7b` |
+| P1 | Emergency number + trusted contact in urgent guidance | `44f385f` |
+| P1 | Phrasing coverage measured (corpus 40/40) | `cdd1465` |
 
 ## Next
 
@@ -31,8 +35,6 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-20._
 2. **Decide quiet-hours / throttling policy for proactive speech** (reminders, visitor announcements)
    and enforce it on the actual reply path, or remove the advisory COS SafetyManager from the cycle.
    _Acceptance_: a test proves the chosen policy on spoken output.
-3. **Escape all dashboard innerHTML sinks** (user text can reach them). _Acceptance_: no unescaped
-   template interpolation remains; browser check.
 4. **Consent records for face enrolment and voice capture** before any real-hardware use.
 5. **Licensing:** remove or replace the tracked InsightFace model and AGPL dependencies before any
    commercial build (counsel review); the repository is public.
@@ -43,8 +45,7 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-20._
 7. **Real face enrolment flow** with explicit consent and deletion, verified with consenting subjects.
 8. **Person profile persistence** (beyond preferred name): caregiver contacts and emergency number
    used in urgent guidance (currently generic "local emergency number").
-9. **Broader phrasing coverage** for conversational memory (measured against a phrase corpus,
-   reporting precision/recall rather than anecdotes).
+9. **Grow the phrasing corpus** from real (consented) usage logs; track coverage over time.
 
 ### P2 — operations and quality
 10. Versioned schema migrations (additive tables work today via `create_all`; column changes would not).

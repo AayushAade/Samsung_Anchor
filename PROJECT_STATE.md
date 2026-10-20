@@ -18,6 +18,11 @@ Commits on the work branch (newest first):
 
 | Commit | Summary |
 | :--- | :--- |
+| `cdd1465` | Phrasing corpus (40 cases via pipeline): 32/40 → 40/40 |
+| `44f385f` | Configurable emergency number and trusted contact in urgent guidance |
+| `839ea7b` | Fictional people/prescriptions/habits removed from all real-use components (object-graph sweep test) |
+| `1abc9ed` | Dashboard escaping verified in browser; no invented routine, escalation, consent, confidence |
+| `8777df7` | Docs refresh |
 | `17ba5ed` | Runtime soak harness + before/after evidence (`docs/evidence/`) |
 | `4bd4968` | Logging with rotation (0600 log); per-cycle diagnostics off the console; `--verbose` |
 | `609d2e8` | Bounded per-track face-embedding history (unbounded growth found by soak) |
@@ -61,7 +66,8 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | Chat care commands (`/add-medication`, `/appointments`, …) | Verified across restart; `tests/test_care_schedules.py` |
 | `python deployment/benchmarks/soak_runtime.py SECONDS` | 20 min and 10 min simulated soaks run; see `docs/evidence/RUNTIME_SOAK_20261020.md` |
 | `docker build -f deployment/docker/Dockerfile .` + `docker run -it -v memora-data:/data memora` | Built and run; `--check` passes with optional-capability warning; chat memory persisted across two container runs |
-| `python app.py` (no args), `--live-hardware`, `--vision-standalone`, `--dashboard` | **Not run** in this work (would open camera/microphone/browser) |
+| Dashboard (`experience/server.py`) | Run against synthetic events in the browser pane: escaping and honest fallbacks verified (`1abc9ed`) |
+| `python app.py` (no args), `--live-hardware`, `--vision-standalone` | **Not run** in this work (would open camera/microphone) |
 | `demo_mode.py`, `operate.py --demo` | Scripted presentation — output is labelled synthetic |
 | `demo.py`, `live_demo.py`, `demo_experience.py`, `identity_learning_demo.py` | Not reviewed or run |
 
@@ -71,7 +77,8 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | :--- | :--- | :--- |
 | Start of work (`5ebaa1e`) | `.venv` | 538 passed in 51 s — **but the suite modified the real user DB and wrote into the repo** |
 | `9f47497` | `.venv` | 641 passed in 58 s; real DB checksum unchanged; no repo files modified |
-| Latest (`17ba5ed`) | `.venv` | 658 passed in ~60 s; `ruff check .` (E9/F63/F7/F82) clean |
+| `17ba5ed` | `.venv` | 658 passed in ~60 s; `ruff check .` (E9/F63/F7/F82) clean |
+| Latest (`cdd1465`) | `.venv` | 666 passed in ~64 s; ruff gate clean |
 | `823a85e`-era | Fresh clone + clean venv, `requirements-dev.txt` only | 634 passed, 2 skipped (cloud SDK not installed) |
 | Before `90eab3c` | Fresh clone | **Import failure**: `src/runtime/runtime_engine.py` had never been committed |
 
