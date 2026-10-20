@@ -62,3 +62,11 @@ def test_audit_outcome_reflects_speech_result():
     coord, _ = _runtime()
     coord.pipeline.process(user_speech="Hello")
     assert coord.pipeline.last_speech_delivered is True
+
+
+def test_audit_final_action_is_what_was_actually_done():
+    coord, _ = _runtime()
+    coord.pipeline.process(user_speech="Hello")
+    assert coord.pipeline.latest_audit_record.final_action == "SPEAK"
+    coord.pipeline.process(user_speech="I can't breathe")
+    assert coord.pipeline.latest_audit_record.final_action == "ESCALATE"

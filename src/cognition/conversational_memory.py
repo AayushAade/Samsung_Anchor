@@ -136,13 +136,15 @@ class ConversationalMemory:
     """Answers recall questions and records user-provided facts."""
 
     def __init__(self, database: Any, clock: Callable[[], datetime] = datetime.now,
-                 visual_memory: Any = None, appointments: Any = None) -> None:
+                 visual_memory: Any = None, appointments: Any = None, medications: Any = None) -> None:
         self.db = database
         self.clock = clock
         # Optional VisualEpisodicMemoryEngine holding richer in-session sightings.
         self.visual_memory = visual_memory
         # Optional AppointmentManager; appointments must be entered by the person or a carer.
         self.appointments = appointments
+        # Optional MedicationManager; doses are only ever *reported* taken.
+        self.medications = medications
         self.search_history: list[dict] = []
 
     # ------------------------------------------------------------------
@@ -159,7 +161,8 @@ class ConversationalMemory:
         t = _norm(speech)
         for handler in (self._name_introduction, self._orientation, self._fact_correction_or_statement,
                         self._fact_question, self._timeline, self._visitors, self._last_search,
-                        self._appointment, self._object_location, self._feelings, self._small_talk):
+                        self._medication_report, self._medication_question, self._appointment,
+                        self._object_location, self._feelings, self._small_talk):
             reply = handler(speech, t, face_id=face_id, patient_name=patient_name)
             if reply:
                 return reply
@@ -457,6 +460,54 @@ class ConversationalMemory:
             return "I haven't recorded any visitors today."
         names = visitors[0] if len(visitors) == 1 else ", ".join(visitors[:-1]) + " and " + visitors[-1]
         return f"I recorded {names} today."
+
+    _MED_WORDS = r"(pills?|medicines?|medications?|tablets?|meds|dose)"
+
+    def _match_medications(self, t: str) -> list:
+        if self.medications is None:
+            return []
+        schedules = self.medications.get_all_schedules()
+        words = _words(t)
+        named = [m for m in schedules if words & (_words(m.medication_name) - {"mg", "the", "my"})]
+        if named:
+            return named
+        if re.search(rf"\b{self._MED_WORDS}\b", t):
+            due = self.medications.get_missed_medications(now=self.clock())
+            return due or (schedules if len(schedules) == 1 else [])
+        return []
+
+    def _medication_report(self, raw: str, t: str, **_) -> Optional[str]:
+        if not re.search(r"^(?:yes,? )?i(?:'ve| have)? (?:just )?(?:took|taken|had) (?:my |the )?", t) or "?" in t:
+            return None
+        if not (re.search(rf"\b{self._MED_WORDS}\b", t) or self._match_medications(t)):
+            return None
+        meds = self._match_medications(t)
+        if not meds:
+            return ("Thank you for telling me. I don't have a schedule that matches, so I haven't "
+                    "recorded it. A carer can add your schedule.")
+        now = self.clock()
+        for m in meds:
+            self.medications.report_taken(m.med_id, source="user statement", when=now)
+        names = " and ".join(m.medication_name for m in meds)
+        return f"Thank you. I've noted that you told me you took your {names} at {now.strftime('%I:%M %p').lstrip('0')}."
+
+    def _medication_question(self, raw: str, t: str, **_) -> Optional[str]:
+        if not re.search(rf"\b(did|have) i (?:already )?(?:take|taken|had|have)\b.*\b{self._MED_WORDS}\b|"
+                         rf"\bdid i take my\b", t):
+            return None
+        if self.medications is None or not self.medications.get_all_schedules():
+            return "I don't have any medication schedule recorded, so I can't say. Please check with someone who helps you."
+        meds = self._match_medications(t) or self.medications.get_all_schedules()
+        now = self.clock()
+        replies = []
+        for m in meds:
+            if self.medications.reported_taken_today(m.med_id, now):
+                replies.append(f"you told me today that you took your {m.medication_name}")
+            else:
+                replies.append(f"I don't have a report that you took your {m.medication_name} today")
+        return (replies[0][0].upper() + "; ".join(replies)[1:] +
+                ". I can only go by what you tell me, so if you're unsure, check your pill organiser "
+                "or ask someone who helps you.")
 
     def _appointment(self, raw: str, t: str, **_) -> Optional[str]:
         if not re.search(r"\b(appointment|appointments|doctor's visit|checkup|check-up)\b", t) or not re.search(r"\b(when|what|is|do i|have i|any)\b", t):

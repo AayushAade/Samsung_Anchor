@@ -127,3 +127,31 @@ class FeedbackEventModel(Base):
     feedback_type = Column(String, nullable=False) # e.g., 'CORRECTION', 'CONFIRMATION'
     content = Column(String, nullable=True) # The actual correction text
     processed = Column(Integer, default=0) # 0 = No, 1 = Yes
+
+
+class CareItemModel(Base):
+    """
+    Person- or caregiver-entered care items: medication schedules and appointments.
+    Added as a new table (additive; created on existing databases by create_all).
+    """
+    __tablename__ = 'care_items'
+
+    item_id = Column(String, primary_key=True)
+    kind = Column(String, nullable=False)          # 'medication' | 'appointment'
+    title = Column(String, nullable=False)         # medication name or appointment title
+    detail = Column(String, nullable=True)         # dose / location
+    scheduled_time = Column(String, nullable=True) # 'HH:MM' daily (medication) or ISO datetime (appointment)
+    entered_by = Column(String, nullable=False)    # provenance, e.g. 'user (chat)'
+    created_at = Column(String, nullable=False)
+    active = Column(Integer, default=1)
+
+
+class CareEventModel(Base):
+    """Things that happened to a care item, e.g. a reminder given or a dose *reported* taken."""
+    __tablename__ = 'care_events'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    item_id = Column(String, ForeignKey('care_items.item_id'), nullable=False)
+    event_type = Column(String, nullable=False)    # 'REMINDED' | 'REPORTED_TAKEN'
+    timestamp = Column(String, nullable=False)
+    source = Column(String, nullable=False)        # e.g. 'user statement'

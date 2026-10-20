@@ -13,12 +13,12 @@ from datetime import datetime
 from typing import Any
 
 from src.cognition.conversational_memory import ConversationalMemory, PREFERRED_NAME_KEY
-from src.memory.models import (EpisodeModel, FeedbackEventModel, Identity, IdentityEvidence,
+from src.memory.models import (CareEventModel, CareItemModel, EpisodeModel, FeedbackEventModel, Identity, IdentityEvidence,
                                InteractionRecordModel, Object, ObjectHistory, RelevantMemoryModel,
                                SemanticNodeModel, SystemState)
 
 # Child tables first so foreign keys are never left dangling.
-PERSONAL_TABLES = (FeedbackEventModel, InteractionRecordModel, RelevantMemoryModel, EpisodeModel,
+PERSONAL_TABLES = (CareEventModel, CareItemModel, FeedbackEventModel, InteractionRecordModel, RelevantMemoryModel, EpisodeModel,
                    ObjectHistory, Object, SemanticNodeModel, IdentityEvidence, Identity)
 
 EXPORT_FORMAT_VERSION = 1
@@ -65,6 +65,11 @@ def export_user_data(db: Any) -> dict[str, Any]:
         history = [{"object": h.object_name, "timestamp": h.timestamp, "room": h.room}
                    for h in s.query(ObjectHistory).all()]
         preferred = s.query(SystemState).filter_by(key=PREFERRED_NAME_KEY).first()
+        care_items = [{"id": c.item_id, "kind": c.kind, "title": c.title, "detail": c.detail,
+                       "scheduled_time": c.scheduled_time, "entered_by": c.entered_by, "created_at": c.created_at}
+                      for c in s.query(CareItemModel).all()]
+        care_events = [{"item_id": e.item_id, "event": e.event_type, "timestamp": e.timestamp, "source": e.source}
+                       for e in s.query(CareEventModel).all()]
     return {
         "format": "memora-user-export",
         "version": EXPORT_FORMAT_VERSION,
@@ -75,6 +80,8 @@ def export_user_data(db: Any) -> dict[str, Any]:
         "objects": list_objects(db),
         "object_history": history,
         "episodes": episodes,
+        "care_items": care_items,
+        "care_events": care_events,
         "note": "Face embeddings are not exported; they are biometric data used only for recognition.",
     }
 

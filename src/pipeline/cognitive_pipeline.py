@@ -117,8 +117,13 @@ class CognitivePipeline:
         # Setup Clinical Ecosystem Layer
         self.patient_profile_mgr = PatientProfileManager()
         self.caregiver_mgr = CaregiverManager()
-        self.medication_mgr = MedicationManager(seed_demo_data=demo_data)
-        self.appointment_mgr = AppointmentManager(seed_demo_data=demo_data)
+        # Person/caregiver-entered schedules persist in the user's database; demo
+        # data is never written there.
+        from src.clinical.care_store import CareStore
+        from src.memory.database import MemoraDatabase as _MemoraDatabase
+        care_store = CareStore(database) if (not demo_data and isinstance(database, _MemoraDatabase)) else None
+        self.medication_mgr = MedicationManager(seed_demo_data=demo_data, store=care_store)
+        self.appointment_mgr = AppointmentManager(seed_demo_data=demo_data, store=care_store)
         self.consent_mgr = ConsentManager()
         self.audit_logger = AuditLogger()
         self.explainability_engine = ExplainabilityEngine()
@@ -155,7 +160,8 @@ class CognitivePipeline:
         self.clinical_trace_logger = ClinicalDecisionTraceLogger()
         self.visual_memory_engine = VisualEpisodicMemoryEngine(database, seed_demo_data=demo_data)
         self.conversational_memory = ConversationalMemory(database, visual_memory=self.visual_memory_engine,
-                                                          appointments=self.appointment_mgr)
+                                                          appointments=self.appointment_mgr,
+                                                          medications=self.medication_mgr)
         self.cognitive_kernel = CognitiveKernel()
         
         # Phase 22 — Trust, Safety, Reliability & Data Lifecycle Infrastructure
@@ -424,15 +430,8 @@ class CognitivePipeline:
             elif care_decision.principle == CarePrinciple.ONE_STEP_GUIDANCE and \
                     self.current_patient_state.mode == PatientStateMode.AWAITING_REMINDER:
                 # Proactive scheduled reminder, at most once per reminder interval per dose.
-                due = self.current_patient_state.details.get("medications", [])
-                now_ts = time.time()
-                fresh = [m for m in due if now_ts - self._last_reminder_at.get(m, 0.0) >= self.reminder_interval_s]
-                if fresh:
-                    for m in fresh:
-                        self._last_reminder_at[m] = now_ts
-                    action = _speak(care_decision.message_override)
-                else:
-                    action = None
+                msg = self.due_reminder_message(patient_name)
+                action = _speak(msg) if msg else None
             elif action is not None and care_decision.message_override:
                 action = InteractionAction(type=action.type, message=care_decision.message_override)
 
@@ -569,13 +568,16 @@ class CognitivePipeline:
                 active_context_summary=f"Identity: {event.name or 'Unknown'}, Time: {c_time}, Room: {loc_val}",
                 working_memory_keys=list(self.cognitive_kernel.working_memory.snapshot().get("slots", {}).keys()),
                 selected_care_policy=care_decision.principle.value,
-                evidence_summary=f"Safety: {safety_eval.status.value}, Passed: {sum(1 for c in safety_eval.check_results if c.passed)}/{len(safety_eval.check_results)}",
+                evidence_summary=f"Advisory COS safety: {safety_eval.status.value}, Passed: {sum(1 for c in safety_eval.check_results if c.passed)}/{len(safety_eval.check_results)}",
                 safety_status=safety_eval.status.value,
                 safety_checks_passed=sum(1 for c in safety_eval.check_results if c.passed),
                 safety_checks_failed=[c.check_name for c in safety_eval.check_results if not c.passed],
                 proposed_action=cos_action.action_type.value,
-                final_action=safety_eval.final_action.action_type.value,
-                explanation=safety_eval.evaluation_reason,
+                # What MEMORA actually did this cycle. The COS safety evaluation applies to
+                # the kernel's proposed action and is advisory; it does not gate replies.
+                final_action=("ESCALATE" if care_decision.principle == CarePrinciple.EMERGENCY_ESCALATION
+                              else "SPEAK" if actions else "SILENCE"),
+                explanation=f"Advisory COS safety evaluation (not applied to the reply): {safety_eval.evaluation_reason}",
                 patient_name=patient_name or "Patient",
             )
 
@@ -708,6 +710,23 @@ class CognitivePipeline:
             return None
         return self.conversational_memory.respond(u_speech, face_id=face_id,
                                                   patient_name=self._patient_name())
+
+    def due_reminder_message(self, patient_name: Optional[str] = None) -> Optional[str]:
+        """
+        Gentle reminder for overdue scheduled doses not reported taken today, at most
+        once per reminder interval per dose. Returns None when nothing is due.
+        """
+        due = [m.medication_name for m in self.medication_mgr.get_missed_medications()]
+        now_ts = time.time()
+        fresh = [m for m in due if now_ts - self._last_reminder_at.get(m, 0.0) >= self.reminder_interval_s]
+        if not fresh:
+            return None
+        for m in fresh:
+            self._last_reminder_at[m] = now_ts
+        from src.clinical.patient_state import PatientState
+        state = PatientState(mode=PatientStateMode.AWAITING_REMINDER, confidence=0.95,
+                             primary_need="Scheduled medication reminder", details={"medications": fresh})
+        return self.care_policy_framework.evaluate_policy(state, patient_name=patient_name or "").message_override
 
     def _is_known_visitor_arrival(self, event: Any) -> bool:
         from src.interaction.events import PresenceEventType

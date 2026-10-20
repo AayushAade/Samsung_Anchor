@@ -24,6 +24,12 @@ from src.memory import user_data
 HELP_TEXT = """Commands:
   /memories        Show what you have told me (numbered)
   /forget N        Permanently delete memory number N
+  /medications                         List medication schedules
+  /add-medication NAME at HH:MM [, DOSE]  e.g. /add-medication Aspirin at 08:00, 75 mg
+  /remove-medication N
+  /appointments                        List upcoming appointments
+  /add-appointment TITLE on YYYY-MM-DD HH:MM [at PLACE]
+  /remove-appointment N
   /people          Show people I know
   /objects         Show where I last saw things
   /export [file]   Save a copy of everything I store about you (JSON)
@@ -82,7 +88,8 @@ class ChatSession:
     def opening(self) -> str:
         name = self.pipeline.conversational_memory.get_preferred_name()
         if name:
-            return f"Welcome back, {name}. How can I help?"
+            reminder = self._quietly(self.pipeline.due_reminder_message, name)
+            return f"Welcome back, {name}. How can I help?" + (f"\n{reminder}" if reminder else "")
         return ("Hello, I'm MEMORA, a memory assistant. What would you like me to call you? "
                 "You can say: My name is ...")
 
@@ -99,7 +106,12 @@ class ChatSession:
         if getattr(self.pipeline, "last_cycle_error", None):
             return ("Sorry, something went wrong on my side, so I may not have saved or understood that. "
                     f"Details were written to {self.log_path}.")
-        return result.get("speech_response") or "I'm here."
+        reply = result.get("speech_response") or "I'm here."
+        if self.pipeline.current_patient_state.mode.name != "EMERGENCY":
+            reminder = self._quietly(self.pipeline.due_reminder_message, self.pipeline._patient_name())
+            if reminder:
+                reply += "\n" + reminder
+        return reply
 
     def _command(self, text: str) -> Optional[str]:
         cmd, _, arg = text.partition(" ")
@@ -130,6 +142,9 @@ class ChatSession:
             self._numbered_facts = []
             return (f"Deleted: \"{fact['statement']}\"." if ok
                     else "I couldn't delete that memory. Nothing was changed.")
+        if cmd in ("/medications", "/add-medication", "/remove-medication",
+                   "/appointments", "/add-appointment", "/remove-appointment"):
+            return self._care_command(cmd, arg)
         if cmd == "/people":
             people = user_data.list_people(self.db)
             if not people:
@@ -160,6 +175,58 @@ class ChatSession:
             return ("All your data has been deleted." if report["ok"]
                     else f"Deletion was incomplete. Remaining records: {report['remaining']}")
         return f"I don't know the command {cmd}. Type /help to see the commands."
+
+    def _care_command(self, cmd: str, arg: str) -> str:
+        import re
+        meds = self.pipeline.medication_mgr
+        appts = self.pipeline.appointment_mgr
+        if cmd == "/medications":
+            items = meds.get_all_schedules()
+            if not items:
+                return "No medication schedules recorded. Add one with /add-medication NAME at HH:MM"
+            return "\n".join(f"  {i}. {m.medication_name}{' (' + m.dose + ')' if m.dose else ''} daily at "
+                             f"{m.scheduled_time}{' - you told me you took it today' if meds.reported_taken_today(m.med_id) else ''}"
+                             for i, m in enumerate(items, 1))
+        if cmd == "/add-medication":
+            m = re.match(r"^(.+?)\s+at\s+(\d{1,2}:\d{2}(?:\s*[ap]m)?)\s*(?:,\s*(.+))?$", arg, re.IGNORECASE)
+            if not m:
+                return "Please use: /add-medication NAME at HH:MM [, DOSE]"
+            time_str = m.group(2).upper().replace("AM", " AM").replace("PM", " PM").replace("  ", " ")
+            try:
+                sched = meds.add_scheduled(m.group(1).strip(), time_str.strip(), (m.group(3) or "").strip())
+            except ValueError as e:
+                return str(e)
+            return (f"Saved: {sched.medication_name} daily at {sched.scheduled_time}. I'll give a gentle reminder "
+                    "if it's past that time and you haven't told me you took it.")
+        if cmd == "/remove-medication":
+            items = meds.get_all_schedules()
+            if not arg.isdigit() or not 1 <= int(arg) <= len(items):
+                return "Please give the number shown by /medications."
+            target = items[int(arg) - 1]
+            return f"Removed {target.medication_name}." if meds.remove_medication(target.med_id) else "Nothing was removed."
+        if cmd == "/appointments":
+            items = appts.get_upcoming_appointments()
+            if not items:
+                return "No upcoming appointments recorded."
+            return "\n".join(f"  {i}. {a.title} {a.scheduled_time}{' at ' + a.location if a.location else ''}"
+                             for i, a in enumerate(items, 1))
+        if cmd == "/add-appointment":
+            m = re.match(r"^(.+?)\s+on\s+(\d{4}-\d{2}-\d{2}[ T]\d{1,2}:\d{2})(?:\s+at\s+(.+))?$", arg)
+            if not m:
+                return "Please use: /add-appointment TITLE on YYYY-MM-DD HH:MM [at PLACE]"
+            try:
+                when = datetime.fromisoformat(m.group(2).replace(" ", "T"))
+            except ValueError:
+                return "That date or time isn't valid. Example: 2026-11-03 10:30"
+            appt = appts.add_scheduled(m.group(1).strip(), when, (m.group(3) or "").strip())
+            return f"Saved: {appt.title} {appt.scheduled_time}{' at ' + appt.location if appt.location else ''}."
+        if cmd == "/remove-appointment":
+            items = appts.get_upcoming_appointments()
+            if not arg.isdigit() or not 1 <= int(arg) <= len(items):
+                return "Please give the number shown by /appointments."
+            target = items[int(arg) - 1]
+            return f"Removed {target.title}." if appts.remove_appointment(target.appt_id) else "Nothing was removed."
+        return ""
 
     # ------------------------------------------------------------------
 
