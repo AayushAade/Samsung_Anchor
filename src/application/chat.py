@@ -36,6 +36,7 @@ HELP_TEXT = """Commands:
   /objects         Show where I last saw things
   /export [file]   Save a copy of everything I store about you (JSON)
   /delete-all      Permanently delete everything I store about you
+  /consent [memory|faces on|off]  Show or change what you allow me to save
   /status          Show what is on, off, and where data is saved
   /quit            Exit
 Anything else is treated as something you are saying to me."""
@@ -55,6 +56,9 @@ class ChatSession:
         os.chmod(self.log_path, 0o600)
         self.confirm = confirm or input
         self._numbered_facts: list[dict] = []
+        self._awaiting_consent = False
+
+    MAX_INPUT_CHARS = 2000
 
     # ------------------------------------------------------------------
 
@@ -78,7 +82,7 @@ class ChatSession:
             "Camera: off    Microphone: off (you type)    Voice output: off",
             "Cloud AI: not used in this mode. Replies come from rules on this computer.",
             f"Memory store: {mem}",
-        ]
+        ] + self._consent_lines()
         if integrity["identities_without_embeddings"]:
             lines.append(f"  {len(integrity['identities_without_embeddings'])} stored people have no face data "
                          "and cannot be recognised until re-enrolled.")
@@ -87,7 +91,19 @@ class ChatSession:
                 lines.append(f"  {integrity[key]}")
         return lines
 
+    CONSENT_QUESTION = ("Before we start: may I save what you tell me, on this computer only, so I can "
+                        "remind you later? Nothing is sent anywhere. You can change this at any time with "
+                        "/consent. Please answer yes or no.")
+
+    def _consent(self, feature_name: str):
+        from src.clinical.clinical_models import ConsentFeature
+        return ConsentFeature[feature_name]
+
     def opening(self) -> str:
+        mgr = self.pipeline.consent_mgr
+        if not mgr.has_decided(self._consent("CONVERSATION_STORAGE")):
+            self._awaiting_consent = True
+            return "Hello, I'm MEMORA, a memory assistant. " + self.CONSENT_QUESTION
         name = self.pipeline.conversational_memory.get_preferred_name()
         if name:
             reminder = self._quietly(self.pipeline.due_reminder_message, name)
@@ -102,8 +118,24 @@ class ChatSession:
         text = (line or "").strip()
         if not text:
             return ""
+        if len(text) > self.MAX_INPUT_CHARS:
+            return (f"That's more than I can take in at once ({len(text)} characters). "
+                    f"Please say it in shorter parts, under {self.MAX_INPUT_CHARS} characters.")
         if text.startswith("/"):
             return self._command(text)
+        if self._awaiting_consent:
+            answer = text.lower().strip(" .!")
+            if answer in ("yes", "y", "yes please", "ok", "okay", "sure"):
+                self.pipeline.consent_mgr.update_consent(self._consent("CONVERSATION_STORAGE"), True)
+                self._awaiting_consent = False
+                return ("Thank you. I'll save what you tell me on this computer. "
+                        "What would you like me to call you? You can say: My name is ...")
+            if answer in ("no", "n", "no thanks", "no thank you"):
+                self.pipeline.consent_mgr.update_consent(self._consent("CONVERSATION_STORAGE"), False)
+                self._awaiting_consent = False
+                return ("That's fine. I won't save anything you tell me, so I won't be able to remind you "
+                        "of it later. You can still ask me the time or date. Use /consent memory on to change this.")
+            return "Please answer yes or no first. " + self.CONSENT_QUESTION
         result = self._quietly(self.pipeline.process, user_speech=text, return_dict=True)
         if getattr(self.pipeline, "last_cycle_error", None):
             return ("Sorry, something went wrong on my side, so I may not have saved or understood that. "
@@ -124,6 +156,8 @@ class ChatSession:
             return HELP_TEXT
         if cmd == "/status":
             return "\n".join(self.status_lines())
+        if cmd == "/consent":
+            return self._consent_command(arg)
         if cmd in ("/memories", "/facts"):
             self._numbered_facts = user_data.list_facts(self.db)
             if not self._numbered_facts:
@@ -180,6 +214,33 @@ class ChatSession:
             return ("All your data has been deleted." if report["ok"]
                     else f"Deletion was incomplete. Remaining records: {report['remaining']}")
         return f"I don't know the command {cmd}. Type /help to see the commands."
+
+    def _consent_command(self, arg: str) -> str:
+        mgr = self.pipeline.consent_mgr
+        features = {"memory": "CONVERSATION_STORAGE", "faces": "FACE_RECOGNITION"}
+        parts = arg.lower().split()
+        if len(parts) == 2 and parts[0] in features and parts[1] in ("on", "off"):
+            on = parts[1] == "on"
+            mgr.update_consent(self._consent(features[parts[0]]), on)
+            self._awaiting_consent = False
+            if parts[0] == "memory":
+                return ("Memory saving is on." if on else
+                        "Memory saving is off. Nothing new will be saved. Things already saved are kept; "
+                        "use /delete-all to remove them.")
+            return ("Face recognition is allowed. It only works with a camera and is not verified on real hardware."
+                    if on else "Face recognition is off: faces will not be matched or stored.")
+        return "\n".join(self._consent_lines()) + "\nChange with: /consent memory on|off, /consent faces on|off"
+
+    def _consent_lines(self) -> list[str]:
+        mgr = self.pipeline.consent_mgr
+
+        def state(name: str) -> str:
+            f = self._consent(name)
+            if not mgr.has_decided(f):
+                return "not asked yet (off)"
+            return "on" if mgr.is_consent_granted(f) else "off"
+        return [f"Saving what you tell me: {state('CONVERSATION_STORAGE')}",
+                f"Face recognition: {state('FACE_RECOGNITION')}"]
 
     def _safety_setting(self, cmd: str, arg: str) -> str:
         import re

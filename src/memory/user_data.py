@@ -117,6 +117,8 @@ def delete_all_user_data(db: Any) -> dict[str, Any]:
             s.query(model).delete()
         s.query(SystemState).filter(SystemState.key.in_(
             [PREFERRED_NAME_KEY, EMERGENCY_NUMBER_KEY, TRUSTED_CONTACT_KEY])).delete(synchronize_session=False)
+        # Consent decisions are reset so the next session asks again.
+        s.query(SystemState).filter(SystemState.key.like("consent:%")).delete(synchronize_session=False)
 
     with db.SessionFactory() as s:
         remaining = {m.__tablename__: s.query(m).count() for m in PERSONAL_TABLES}

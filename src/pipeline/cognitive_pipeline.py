@@ -129,7 +129,8 @@ class CognitivePipeline:
         care_store = CareStore(database) if (not demo_data and isinstance(database, _MemoraDatabase)) else None
         self.medication_mgr = MedicationManager(seed_demo_data=demo_data, store=care_store)
         self.appointment_mgr = AppointmentManager(seed_demo_data=demo_data, store=care_store)
-        self.consent_mgr = ConsentManager()
+        # Consent decisions persist in the user's database (never in demo/fake stores).
+        self.consent_mgr = ConsentManager(database if isinstance(database, _MemoraDatabase) else None)
         self.audit_logger = AuditLogger()
         self.explainability_engine = ExplainabilityEngine()
         self.emergency_mgr = EmergencyManager()
@@ -167,6 +168,9 @@ class CognitivePipeline:
         self.conversational_memory = ConversationalMemory(database, visual_memory=self.visual_memory_engine,
                                                           appointments=self.appointment_mgr,
                                                           medications=self.medication_mgr)
+        # Saving what the person says requires their consent to conversation storage.
+        self.conversational_memory.storage_allowed = self.memory_storage_allowed
+        self.perception_manager.storage_allowed = self.memory_storage_allowed
         self.cognitive_kernel = CognitiveKernel()
         
         # Phase 22 — Trust, Safety, Reliability & Data Lifecycle Infrastructure
@@ -488,7 +492,8 @@ class CognitivePipeline:
                     if det_objs:
                         ep_summary += f" (Observed objects: {', '.join(det_objs[:3])})"
 
-                if ep_summary and self.database and hasattr(self.database, "episode_repo") and self.database.episode_repo:
+                if ep_summary and self.memory_storage_allowed() and self.database \
+                        and hasattr(self.database, "episode_repo") and self.database.episode_repo:
                     ep = Episode(
                         person=p_name,
                         summary=ep_summary,
@@ -726,6 +731,11 @@ class CognitivePipeline:
             return None
         return self.conversational_memory.respond(u_speech, face_id=face_id,
                                                   patient_name=self._patient_name())
+
+    def memory_storage_allowed(self) -> bool:
+        """Facts, names, episodes and observations are stored only with consent."""
+        from src.clinical.clinical_models import ConsentFeature
+        return self.consent_mgr.is_consent_granted(ConsentFeature.CONVERSATION_STORAGE)
 
     def due_reminder_message(self, patient_name: Optional[str] = None) -> Optional[str]:
         """

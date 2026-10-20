@@ -83,6 +83,7 @@ class ConsentFeature(Enum):
     DOCTOR_ACCESS = "Doctor Access"
     MEMORY_RETENTION = "Memory Retention"
     ANALYTICS = "Analytics"
+    FACE_RECOGNITION = "Face Recognition"
 
 
 @dataclass

@@ -154,6 +154,8 @@ class ConversationalMemory:
         self.appointments = appointments
         # Optional MedicationManager; doses are only ever *reported* taken.
         self.medications = medications
+        # Optional consent check for saving facts/names; None = no check (library use).
+        self.storage_allowed: Optional[Callable[[], bool]] = None
         self.search_history: list[dict] = []
 
     # ------------------------------------------------------------------
@@ -235,6 +237,12 @@ class ConversationalMemory:
                     "If you feel unwell, please contact your doctor, or call your emergency number if it feels serious.")
         return None
 
+    STORAGE_OFF = ("I'm not saving what you tell me right now, because memory is turned off. "
+                   "You can turn it on with /consent memory on.")
+
+    def _may_store(self) -> bool:
+        return self.storage_allowed is None or bool(self.storage_allowed())
+
     def fallback_reply(self, patient_name: Optional[str] = None) -> str:
         return ("I'm not sure I understood. You can tell me something to remember, "
                 "ask me what you've told me, or ask where I last saw something.")
@@ -273,6 +281,8 @@ class ConversationalMemory:
             if not original or not original.group(1)[0].isupper():
                 return None
         name = candidate[0].upper() + candidate[1:]
+        if not self._may_store():
+            return f"Nice to meet you, {name}. " + self.STORAGE_OFF
 
         if face_id and hasattr(self.db, "get_identity") and self.db.get_identity(face_id):
             # The speaker is a recognised face: label that identity, relationship unknown.
@@ -344,6 +354,8 @@ class ConversationalMemory:
         if not parsed:
             return None
         key, value, polarity, single_valued = parsed
+        if not self._may_store():
+            return self.STORAGE_OFF
         if value.strip().lower() in PRONOUNS:
             return (f"What do you mean by '{value.strip()}'? Tell me what it is, for example "
                     "'I like jasmine tea', and I'll remember it.")
@@ -401,7 +413,7 @@ class ConversationalMemory:
             self._retract(f, "corrected by person")
         reply = (f"Thank you for correcting me. I won't say your {relation} is {wrong.title()} any more."
                  if matches else f"I didn't have your {relation} noted as {wrong.title()}.")
-        if replace_with:
+        if replace_with and self._may_store():
             statement = f"My {relation} is {replace_with.title()}"
             if not any(f.key == f"relation:{relation}" and f.value.lower() == replace_with.lower() for f in self.active_facts()):
                 self._save_fact(f"fact_{uuid.uuid4().hex}", f"relation:{relation}", replace_with.lower(), "positive", statement)
@@ -416,6 +428,8 @@ class ConversationalMemory:
         if not m:
             return None
         relation = m.group(2)
+        if not self._may_store():
+            return self.STORAGE_OFF
         names = [n.strip() for n in re.split(r",| and ", m.group(3)) if n.strip()]
         if not names or len(names) > 5 or any(n in PRONOUNS for n in names):
             return None

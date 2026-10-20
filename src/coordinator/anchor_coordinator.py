@@ -90,6 +90,11 @@ class AnchorCoordinator:
         # ------------------------------------------------------
 
         self.pipeline = CognitivePipeline(self.database)
+        # Biometric consent gates face matching/enrolment in the live runtime.
+        from src.clinical.clinical_models import ConsentFeature
+        if hasattr(self.recognizer, "consent_check"):
+            self.recognizer.consent_check = lambda: self.pipeline.consent_mgr.is_consent_granted(
+                ConsentFeature.FACE_RECOGNITION)
         self.memory_manager = CognitiveMemoryManager(self.database.SessionFactory, MockReasoningClient())
 
         self._cognitive_thread = None

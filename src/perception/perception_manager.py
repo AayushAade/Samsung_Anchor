@@ -25,6 +25,8 @@ class PerceptionManager:
         self.audio_pipeline = AudioPipeline()
         self.fusion_engine = MultimodalFusionEngine()
         self.last_objects_provenance = "NONE"
+        # Set by the pipeline: object sightings are personal data stored only with consent.
+        self.storage_allowed = None
 
     def set_database(self, database: Any) -> None:
         self.database = database
@@ -52,7 +54,8 @@ class PerceptionManager:
         self.last_objects_provenance = self._frame_provenance(frame)
 
         # Log detected objects into persistent database ObjectRepository
-        if (self.last_objects_provenance == "REAL_CAMERA" and self.database
+        if (self.last_objects_provenance == "REAL_CAMERA"
+                and (self.storage_allowed is None or self.storage_allowed()) and self.database
                 and hasattr(self.database, "object_repo") and self.database.object_repo):
             room_str = room.value if hasattr(room, "value") else str(room)
             for obj in objects:

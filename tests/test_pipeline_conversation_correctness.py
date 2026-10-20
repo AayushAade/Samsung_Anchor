@@ -11,11 +11,12 @@ import pytest
 
 from src.memory.database import MemoraDatabase
 from src.pipeline.cognitive_pipeline import CognitivePipeline
+from tests.consent_helpers import allow_memory
 
 
 @pytest.fixture
 def pipeline():
-    p = CognitivePipeline(MemoraDatabase(":memory:"))
+    p = allow_memory(CognitivePipeline(MemoraDatabase(":memory:")))
     yield p
     p.shutdown()
 

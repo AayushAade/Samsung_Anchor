@@ -5,6 +5,7 @@ from datetime import datetime
 from src.application.factory import build_application
 from src.runtime.runtime import AnchorRuntime
 from src.memory.database import MemoraDatabase
+from tests.consent_helpers import allow_memory
 from src.memory.models import EpisodeModel
 from src.cognition.episode import Episode
 from src.interaction.events import PresenceEvent, PresenceEventType
@@ -213,6 +214,7 @@ def test_conversation_preference_memory_extraction_and_recall():
     runtime.initialize()
 
     # Step 1: User states preference
+    allow_memory(coord.pipeline)  # storing facts requires consent
     act1 = coord.pipeline.process({"user_speech": "My favorite tea is green tea."})
     assert len(act1) > 0
     assert "remember" in act1[0].message.lower()
@@ -233,6 +235,7 @@ def test_conversation_relationship_fact_memory_extraction_and_recall():
     runtime.initialize()
 
     # Step 1: User states fact
+    allow_memory(coord.pipeline)  # storing facts requires consent
     act1 = coord.pipeline.process({"user_speech": "My daughter is Riya."})
     assert len(act1) > 0
     assert "remember" in act1[0].message.lower()

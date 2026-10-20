@@ -15,10 +15,13 @@ from src.application.chat import ChatSession
 from src.application.factory import build_application
 from src.memory import user_data
 from src.memory.database import MemoraDatabase
+from tests.consent_helpers import allow_memory
 
 
-def _session(path, confirm=lambda prompt: "DELETE", tmp_log=None):
+def _session(path, confirm=lambda prompt: "DELETE", tmp_log=None, consent=True):
     coord = build_application(live_hardware=False, database=MemoraDatabase(path))
+    if consent:
+        allow_memory(coord.pipeline)
     return ChatSession(coord, log_path=tmp_log, confirm=confirm)
 
 
@@ -33,16 +36,49 @@ def log_path(tmp_path):
 
 
 def test_onboarding_conversation_and_restart(db_path, log_path):
-    s = _session(db_path, tmp_log=log_path)
-    assert "What would you like me to call you" in s.opening()
+    s = _session(db_path, tmp_log=log_path, consent=False)
+    assert "may I save what you tell me" in s.opening()
+    assert s.handle("My name is Sid").startswith("Please answer yes or no first")
+    assert "What would you like me to call you" in s.handle("yes")
     assert s.handle("My name is Sid").startswith("Nice to meet you, Sid")
     assert "remember" in s.handle("My daughter is Riya")
     s.close()
 
-    s2 = _session(db_path, tmp_log=log_path)
+    s2 = _session(db_path, tmp_log=log_path, consent=False)  # decision persisted: not asked again
     assert s2.opening() == "Welcome back, Sid. How can I help?"
     assert "Riya" in s2.handle("Who is my daughter?")
     s2.close()
+
+
+def test_declining_consent_stores_nothing(db_path, log_path):
+    s = _session(db_path, tmp_log=log_path, consent=False)
+    s.opening()
+    assert "won't save anything" in s.handle("no")
+    assert "memory is turned off" in s.handle("My daughter is Riya")
+    assert "memory is turned off" in s.handle("My name is Sid")
+    s.handle("What time is it?")
+    s.close()
+    db = MemoraDatabase(db_path)
+    assert user_data.list_facts(db) == [] and db.episode_repo.count() == 0
+    assert not db._get_system_state("user_preferred_name")
+
+
+def test_consent_command_and_status(db_path, log_path):
+    s = _session(db_path, tmp_log=log_path, consent=False)
+    assert "Saving what you tell me: not asked yet (off)" in s.handle("/status")
+    assert s.handle("/consent memory on") == "Memory saving is on."
+    assert "remember" in s.handle("I like tea")
+    assert "use /delete-all" in s.handle("/consent memory off")
+    assert "memory is turned off" in s.handle("I like coffee")
+    assert [f["statement"] for f in user_data.list_facts(s.db)] == ["I like tea"]
+    assert "faces will not be matched or stored" in s.handle("/consent faces off")
+    assert "Face recognition: off" in s.handle("/consent")
+
+
+def test_overlong_input_is_refused_without_processing(db_path, log_path):
+    s = _session(db_path, tmp_log=log_path)
+    assert "shorter parts" in s.handle("I like " + "tea " * 1000)
+    assert user_data.list_facts(s.db) == []
 
 
 def test_pipeline_diagnostics_go_to_log_not_conversation(db_path, log_path, capsys):

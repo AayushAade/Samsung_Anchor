@@ -76,6 +76,8 @@ class MemoraFaceRecognizer:
         self._lock = threading.Lock()
         self.tolerance = tolerance
         self.mock_mode = mock_mode
+        # Callable returning whether biometric (face recognition) consent is granted.
+        self.consent_check = None
         self.required_consensus_frames = required_consensus_frames
         self.face_mesh = None
         self.face_recognition_active = False
@@ -335,6 +337,15 @@ class MemoraFaceRecognizer:
         if not detected_faces:
             self._update_missed_tracks(now_time, database)
             return results
+
+        # Biometric consent: without it, faces are neither matched against stored
+        # identities nor enrolled, and no embeddings are written. The runtime
+        # assembly (AnchorCoordinator) sets consent_check; standalone library use
+        # leaves it unset.
+        if self.consent_check is not None and not self.consent_check():
+            return [{"box": d["box"], "face_id": None, "name": None, "relationship": None,
+                     "is_new": False, "label": "Face recognition is off (no consent)"}
+                    for d in detected_faces]
 
         # Frame counter increment
         if not hasattr(self, "frame_counter"):
