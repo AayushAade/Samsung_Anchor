@@ -25,7 +25,7 @@ from src.memory.repositories.episode_repository import DatabaseEpisodeRepository
 from src.memory.repositories.identity_repository import IdentityRepository
 from src.memory.repositories.memory_repository import DatabaseMemoryRepository
 from src.memory.repositories.object_repository import ObjectRepository
-from src.memory.vector_store import FaissVectorStore
+from src.memory.vector_store import FaissVectorStore, VectorStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -71,19 +71,48 @@ def resolve_db_url(db_path: str | None = None) -> tuple[str, str | None]:
     if "://" in raw_path:
         prefix = "sqlite:///"
         if raw_path.startswith(prefix):
-            fs_target = raw_path[len(prefix):]
-            if not fs_target.endswith(DB_MIGRATION_SUFFIX):
-                fs_target = fs_target.replace(".sqlite", DB_MIGRATION_SUFFIX) if ".sqlite" in fs_target else f"{fs_target}{DB_MIGRATION_SUFFIX}"
+            fs_target = _v2_filesystem_target(raw_path[len(prefix):])
             return f"{prefix}{fs_target}", fs_target
         return raw_path, None
 
-    # Treat as filesystem path
-    if not raw_path.endswith(DB_MIGRATION_SUFFIX):
-        fs_target = raw_path.replace(".sqlite", DB_MIGRATION_SUFFIX) if ".sqlite" in raw_path else f"{raw_path}{DB_MIGRATION_SUFFIX}"
-    else:
-        fs_target = raw_path
-
+    fs_target = _v2_filesystem_target(raw_path)
     return f"sqlite:///{fs_target}", fs_target
+
+
+def _v2_filesystem_target(path: str) -> str:
+    """
+    Map a database path onto the schema-v2 file name.
+
+    "memora_db.sqlite" historically maps to "memora_db_v2.sqlite". That mapping
+    is applied only when the requested file does not already exist on its own;
+    an existing database file passed explicitly is opened as-is rather than
+    being silently replaced by a new, empty "_v2" sibling.
+    """
+    if path.endswith(DB_MIGRATION_SUFFIX):
+        return path
+    v2 = path.replace(".sqlite", DB_MIGRATION_SUFFIX) if ".sqlite" in path else f"{path}{DB_MIGRATION_SUFFIX}"
+    if os.path.exists(path) and not os.path.exists(v2):
+        return path
+    return v2
+
+
+def vector_store_paths(db_path: str) -> tuple[str, str]:
+    """Face-embedding files that belong to the database file at db_path."""
+    base = os.path.splitext(os.path.abspath(db_path))[0]
+    return f"{base}.faces.index", f"{base}.faces.json"
+
+
+def _legacy_vector_store_paths(db_path: str) -> tuple[str, str] | None:
+    """
+    Older releases stored embeddings as face_embeddings.index / face_mapping.json
+    next to the default database. They are adopted (read-only) only when the
+    default database itself is opened.
+    """
+    default_fs = resolve_db_url(settings.DB_PATH)[1]
+    if default_fs is None or os.path.abspath(db_path) != os.path.abspath(default_fs):
+        return None
+    directory = os.path.dirname(os.path.abspath(db_path))
+    return os.path.join(directory, "face_embeddings.index"), os.path.join(directory, "face_mapping.json")
 
 
 def _build_engine(url: str) -> Engine:
@@ -146,7 +175,14 @@ class MemoraDatabase:
         self.lock = threading.Lock()
 
         # Initialize Sub-Repositories
-        self.vector_store = FaissVectorStore()
+        if self.db_path is not None:
+            index_path, mapping_path = vector_store_paths(self.db_path)
+            self.vector_store = FaissVectorStore(
+                index_path, mapping_path, legacy_paths=_legacy_vector_store_paths(self.db_path)
+            )
+        else:
+            # In-memory databases get an in-memory vector store: no filesystem access.
+            self.vector_store = FaissVectorStore()
         self.identity_repo = IdentityRepository(self.SessionFactory)
         self.object_repo = ObjectRepository(self.SessionFactory)
         self.episode_repo = DatabaseEpisodeRepository(self.SessionFactory)
@@ -284,7 +320,12 @@ class MemoraDatabase:
 
             self._set_system_state(KEY_NEXT_ANON_INDEX, str(anon_index + 1))
             self.identity_repo.register_anonymous(anon_id)
-            self.vector_store.add_embedding(anon_id, embedding)
+            try:
+                self.vector_store.add_embedding(anon_id, embedding)
+            except VectorStoreError:
+                # Never leave an identity row without the embedding that defines it.
+                self._delete_identity_rows(anon_id)
+                raise
             logger.info("Registered new anonymous identity: %s", anon_id)
 
             return anon_id
@@ -334,6 +375,46 @@ class MemoraDatabase:
                 identity.confidence = 1.0
                 logger.info("Bound name '%s' (relationship: %s) to identity %s", name, relationship, identity_id)
             return True
+
+    def _delete_identity_rows(self, identity_id: str) -> bool:
+        with self._session_scope() as session:
+            session.query(IdentityEvidence).filter_by(identity_id=identity_id).delete()
+            deleted = session.query(Identity).filter_by(identity_id=identity_id).delete()
+        return bool(deleted)
+
+    def delete_identity(self, identity_id: str) -> dict[str, Any]:
+        """
+        Permanently delete an identity, its name evidence, and its face embeddings.
+
+        Returns a report of what was removed so callers can confirm deletion.
+        """
+        with self.lock:
+            embeddings_removed = self.vector_store.remove_identity(identity_id)
+            row_removed = self._delete_identity_rows(identity_id)
+        return {"identity_id": identity_id, "record_deleted": row_removed,
+                "embeddings_deleted": embeddings_removed}
+
+    def check_integrity(self) -> dict[str, Any]:
+        """
+        Cross-check SQLite identities against the face-embedding store.
+
+        Returns a dict with ``ok`` plus the specific inconsistencies found.
+        """
+        identity_ids = {i["identity_id"] for i in self.identity_repo.get_all()}
+        embedded_ids = self.vector_store.identity_ids()
+        report = {
+            "identities": len(identity_ids),
+            "embeddings": len(self.vector_store),
+            "vector_store_persistent": self.vector_store.persistent,
+            "vector_store_path": self.vector_store.mapping_path,
+            "identities_without_embeddings": sorted(identity_ids - embedded_ids),
+            "orphan_embedding_identities": sorted(embedded_ids - identity_ids),
+            "vector_store_load_error": self.vector_store.load_error,
+            "vector_store_save_error": self.vector_store.last_save_error,
+        }
+        report["ok"] = not (report["identities_without_embeddings"] or report["orphan_embedding_identities"]
+                            or report["vector_store_load_error"] or report["vector_store_save_error"])
+        return report
 
     def get_identity(self, identity_id: str) -> dict[str, Any] | None:
         """

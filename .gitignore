@@ -66,6 +66,9 @@ logs/
 # Runtime-generated database files
 face_embeddings.index
 face_mapping.json
+*.faces.index
+*.faces.json
+*.corrupt-*
 
 # Temporary JSON data
 *.old_json

@@ -248,7 +248,7 @@ def show_memory_timeline() -> None:
     Prints today's timeline, recent visitors, conversations, objects, facts, and DB stats.
     """
     from inspect_database import inspect_database
-    inspect_database("memora_db_v2.sqlite")
+    inspect_database(None)  # configured default: settings.DB_PATH / MEMORA_DB_PATH
 
 
 def cli():

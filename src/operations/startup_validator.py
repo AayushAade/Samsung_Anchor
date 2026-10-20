@@ -101,6 +101,7 @@ class StartupValidator:
         try:
             from src.memory.vector_store import FaissVectorStore
             import numpy as np
+            # In-memory store only: a health check must never write to user data.
             vs = FaissVectorStore()
             vs.add_embedding("Test_ID", np.zeros(128, dtype=np.float32))
             return HealthCheckItem(

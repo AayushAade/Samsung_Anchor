@@ -37,11 +37,11 @@ def test_operational_event_bus():
     assert latest.payload["name"] == "Eleanor"
 
 
-def test_session_recorder_export():
+def test_session_recorder_export(tmp_path):
     """Verify SessionRecorder captures events and exports JSON/MD artifacts."""
     recorder = SessionRecorder(session_name="Test_Session")
     recorder.record_event("Test", "Init Test Event", {"status": "OK"})
-    json_path, md_path = recorder.export_session(output_dir="validation/artifacts")
+    json_path, md_path = recorder.export_session(output_dir=str(tmp_path))
 
     assert os.path.exists(json_path)
     assert os.path.exists(md_path)

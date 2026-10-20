@@ -26,7 +26,8 @@ def validate_database(db_path: str | None = None) -> bool:
     import time
     import numpy as np
 
-    target_path = db_path or "memora_db_v2.sqlite"
+    # None resolves to the configured default (settings.DB_PATH / MEMORA_DB_PATH).
+    target_path = db_path
     url, fs_path = resolve_db_url(target_path)
     file_bytes = os.path.getsize(fs_path) if fs_path and os.path.exists(fs_path) else 0
     file_mb = round(file_bytes / (1024 * 1024), 3)
@@ -44,7 +45,7 @@ def validate_database(db_path: str | None = None) -> bool:
         identities = session.query(Identity).all()
         for idx in identities:
             if not idx.identity_id:
-                issues.append(f"Orphan identity without identity_id found (ID: {idx.id})")
+                issues.append("Identity row without identity_id found")
 
         # 2. Duplicate Objects & Memory Check
         objects = session.query(Object).all()
@@ -69,9 +70,20 @@ def validate_database(db_path: str | None = None) -> bool:
         memories = session.query(RelevantMemoryModel).all()
         for m in memories:
             if not m.title or not m.summary:
-                issues.append(f"Invalid RelevantMemory (id={m.id}): missing title or summary")
+                issues.append(f"Invalid RelevantMemory (id={m.memory_id}): missing title or summary")
 
-    # 6. FAISS Embedding & Query Latency Audit
+    # 6. SQLite <-> face-embedding store consistency
+    integrity = db.check_integrity()
+    if integrity["identities_without_embeddings"]:
+        issues.append(f"{len(integrity['identities_without_embeddings'])} identities have no face embedding "
+                      "(cannot be recognized until re-enrolled)")
+    if integrity["orphan_embedding_identities"]:
+        issues.append(f"Embeddings reference unknown identities: {integrity['orphan_embedding_identities']}")
+    for key in ("vector_store_load_error", "vector_store_save_error"):
+        if integrity[key]:
+            issues.append(integrity[key])
+
+    # 7. FAISS Embedding & Query Latency Audit
     faiss_cnt = db.vector_store.index.ntotal if hasattr(db, "vector_store") and db.vector_store else 0
     faiss_dim = db.vector_store.index.d if hasattr(db, "vector_store") and db.vector_store else 128
     query_latency_ms = 0.0
@@ -104,7 +116,7 @@ def validate_database(db_path: str | None = None) -> bool:
 
 
 def inspect_database(db_path: str | None = None) -> None:
-    target_path = db_path or "memora_db_v2.sqlite"
+    target_path = db_path
     url, fs_path = resolve_db_url(target_path)
 
     print("=" * 60)
@@ -143,8 +155,19 @@ def inspect_database(db_path: str | None = None) -> None:
     faiss_index_file = db.vector_store.index_path if hasattr(db, "vector_store") else "N/A"
     faiss_map_file = db.vector_store.mapping_path if hasattr(db, "vector_store") else "N/A"
     print(f"  FAISS Index Vector Count: {faiss_ntotal} (Dimensionality: 128D)")
-    print(f"  FAISS Index File        : {faiss_index_file} ({'EXISTS' if os.path.exists(faiss_index_file) else 'NOT FOUND'})")
-    print(f"  FAISS Mapping File      : {faiss_map_file} ({'EXISTS' if os.path.exists(faiss_map_file) else 'NOT FOUND'})")
+    print(f"  FAISS Index File        : {faiss_index_file} ({'EXISTS' if faiss_index_file and os.path.exists(faiss_index_file) else 'NOT FOUND'})")
+    print(f"  FAISS Mapping File      : {faiss_map_file} ({'EXISTS' if faiss_map_file and os.path.exists(faiss_map_file) else 'NOT FOUND'})")
+    integrity = db.check_integrity()
+    if not integrity["ok"]:
+        print("  ⚠️  Identity/embedding store is inconsistent:")
+        if integrity["identities_without_embeddings"]:
+            print(f"     {len(integrity['identities_without_embeddings'])} identities have no stored face embedding "
+                  "(they cannot be recognized until re-enrolled).")
+        if integrity["orphan_embedding_identities"]:
+            print(f"     Embeddings exist for unknown identities: {integrity['orphan_embedding_identities']}")
+        for key in ("vector_store_load_error", "vector_store_save_error"):
+            if integrity[key]:
+                print(f"     {integrity[key]}")
 
     all_identities = db.get_all_identities()
     if not all_identities:

@@ -32,7 +32,9 @@ DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1")
 # Database
 # ==========================================================
 
-DB_PATH = str(DATABASE_PATH)
+# MEMORA_DB_PATH lets operators (and the test suite) point MEMORA at a
+# database other than the repository-root default.
+DB_PATH = os.environ.get("MEMORA_DB_PATH") or str(DATABASE_PATH)
 
 # ==========================================================
 # Vision
