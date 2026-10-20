@@ -269,6 +269,10 @@ class AnchorCoordinator:
         if not face_id:
             return False
 
+        # Identity learning stores a transcript and name evidence: storage consent is required.
+        if not self.pipeline.memory_storage_allowed():
+            return False
+
         # Listening to a real microphone requires voice-recording consent.
         from src.clinical.clinical_models import ConsentFeature
         if not getattr(self.listener, "mock_mode", True) and not self.pipeline.consent_mgr.is_consent_granted(

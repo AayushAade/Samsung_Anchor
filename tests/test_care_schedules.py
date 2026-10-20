@@ -15,10 +15,12 @@ from src.application.factory import build_application
 from src.clinical.patient_state import PatientStateMode
 from src.memory import user_data
 from src.memory.database import MemoraDatabase
+from tests.consent_helpers import allow_memory
 
 
 def _session(path, tmp_path, confirm=lambda p: "DELETE"):
     coord = build_application(live_hardware=False, database=MemoraDatabase(path))
+    allow_memory(coord.pipeline)  # care records are personal data: storage consent required
     return ChatSession(coord, log_path=str(tmp_path / "log.txt"), confirm=confirm)
 
 

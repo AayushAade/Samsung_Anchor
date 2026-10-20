@@ -6,6 +6,10 @@ from src.clinical.clinical_models import ConsentFeature, ConsentRecord
 _KEY_PREFIX = "consent:"
 
 
+class ConsentRequiredError(PermissionError):
+    """Raised by storage layers when a write is attempted without the required consent."""
+
+
 class ConsentManager:
     """
     Privacy-first consent enforcement engine.

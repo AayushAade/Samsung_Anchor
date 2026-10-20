@@ -52,6 +52,8 @@ class AppointmentManager:
 
     def add_scheduled(self, title: str, when: datetime, location: str = "",
                       entered_by: str = "user (chat)") -> Appointment:
+        if self.store is not None:
+            self.store._require_consent()
         appt_id = (self.store.add_item("appointment", title, when.isoformat(), location, entered_by)
                    if self.store is not None else f"appt_{len(self._appointments) + 1}")
         return self._register(appt_id, title, when, location)

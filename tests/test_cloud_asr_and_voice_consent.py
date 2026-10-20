@@ -37,8 +37,9 @@ def test_listener_works_without_speech_recognition_package(monkeypatch):
 
 def test_identity_learning_requires_voice_consent_for_real_microphone():
     coord = build_application(live_hardware=False, database=MemoraDatabase(":memory:"))
+    coord.pipeline.consent_mgr.update_consent(ConsentFeature.CONVERSATION_STORAGE, True)
     coord.listener.mock_mode = False              # pretend a real microphone is in use
-    assert coord.start_identity_learning("face_1") is False
+    assert coord.start_identity_learning("face_1") is False  # voice consent still missing
     coord.pipeline.consent_mgr.update_consent(ConsentFeature.VOICE_RECORDING, True)
     coord.listener.mock_mode = True               # keep the test from listening at all
     assert coord.start_identity_learning("face_1") is True

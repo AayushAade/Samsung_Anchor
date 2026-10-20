@@ -208,6 +208,20 @@ def run_journey(journey: Journey) -> JourneyResult:
 # Journey catalogue
 # ----------------------------------------------------------------------------
 
+def _nothing_personal_stored(ctx) -> Optional[str]:
+    import sqlite3
+    con = sqlite3.connect(ctx.db.db_path)
+    try:
+        tables = ["relevant_memories", "episodes", "objects", "identities", "care_items", "care_events",
+                  "semantic_nodes", "identity_evidence"]
+        stored = {t: n for t in tables if (n := con.execute(f'select count(*) from "{t}"').fetchone()[0])}
+        keys = {r[0] for r in con.execute("select key from system_state")}
+    finally:
+        con.close()
+    extra = keys - {"current_room", "next_anon_index", "schema_version", "consent:CONVERSATION_STORAGE"}
+    return None if not stored and not extra else f"stored {stored} keys {extra}"
+
+
 def _facts(ctx):
     from src.memory import user_data
     return user_data.list_facts(ctx.db)
@@ -228,8 +242,11 @@ def all_journeys() -> list[Journey]:
             Step("opening"),
             say("no", expect="won't save anything"),
             say("My daughter is Riya", expect="memory is turned off", forbid="I'll remember"),
+            say("/add-medication Aspirin at 08:00", expect="memory is turned off", forbid="Saved"),
+            say("/set-trusted-contact Riya 555-0100", expect="memory is turned off", forbid="Saved"),
+            say("I took my pills", expect="haven't recorded it", forbid="noted"),
             say("What day is it?", expect="Tuesday, March 10"),
-            check(lambda c: None if not _facts(c) and c.db.episode_repo.count() == 0 else "data was stored", "nothing stored"),
+            check(lambda c: _nothing_personal_stored(c), "nothing stored"),
         ]),
         J("facts_create_correct_recall_delete", "Fact lifecycle with history", steps=[
             say("I like green tea", expect="I'll remember that you like green tea"),

@@ -547,6 +547,9 @@ class ConversationalMemory:
         return getattr(self.db, "memory_repo", None)
 
     def _save_fact(self, memory_id: str, key: str, value: str, polarity: str, statement: str) -> None:
+        if not self._may_store():
+            from src.clinical.consent_manager import ConsentRequiredError
+            raise ConsentRequiredError("Saving facts requires storage consent.")
         repo = self._repo()
         if repo is None:
             raise RuntimeError("No memory repository available to store facts.")
@@ -652,6 +655,9 @@ class ConversationalMemory:
             return None
         if not (re.search(rf"\b{self._MED_WORDS}\b", t) or self._match_medications(t)):
             return None
+        if not self._may_store():
+            return ("Thank you for telling me. I haven't recorded it, because memory is turned off. "
+                    "You can turn it on with /consent memory on.")
         meds = self._match_medications(t)
         if not meds:
             return ("Thank you for telling me. I don't have a schedule that matches, so I haven't "

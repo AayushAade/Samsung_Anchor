@@ -94,6 +94,8 @@ def test_configured_number_and_trusted_contact_used_without_claiming_a_call(tmp_
     from src.application.chat import ChatSession
     from src.application.factory import build_application
     coord = build_application(live_hardware=False, database=MemoraDatabase(str(tmp_path / "s.sqlite")))
+    from tests.consent_helpers import allow_memory
+    allow_memory(coord.pipeline)  # saving contacts requires storage consent
     chat = ChatSession(coord, log_path=str(tmp_path / "log"))
     assert chat.handle("/set-emergency-number 112").startswith("Saved.")
     assert chat.handle("/set-trusted-contact Riya 555-0100").startswith("Saved.")

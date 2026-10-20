@@ -176,6 +176,8 @@ class CognitivePipeline:
                                                           medications=self.medication_mgr)
         # Saving what the person says requires their consent to conversation storage.
         self.conversational_memory.storage_allowed = self.memory_storage_allowed
+        if self.medication_mgr.store is not None:
+            self.medication_mgr.store.storage_allowed = self.memory_storage_allowed
         self.perception_manager.storage_allowed = self.memory_storage_allowed
         self.cognitive_kernel = CognitiveKernel()
         

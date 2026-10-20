@@ -40,6 +40,8 @@ class MedicationManager:
     def add_scheduled(self, name: str, scheduled_time: str, dose: str = "",
                       entered_by: str = "user (chat)") -> MedicationSchedule:
         """Add a daily schedule entered by the person or a caregiver (persisted when a store is set)."""
+        if self.store is not None:
+            self.store._require_consent()
         if _scheduled_today(scheduled_time, datetime.now()) is None:
             raise ValueError(f"Unrecognised time '{scheduled_time}'. Use HH:MM, e.g. 08:30 or 20:00.")
         if self.store is not None:
@@ -58,6 +60,8 @@ class MedicationManager:
         """
         if med_id not in self._schedules:
             return False
+        if self.store is not None:
+            self.store._require_consent()
         when = when or datetime.now()
         self._reported_on[med_id] = when.date()
         if self.store is not None:

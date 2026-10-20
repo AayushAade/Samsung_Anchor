@@ -68,7 +68,8 @@ class ChatSession:
                 return fn(*args, **kwargs)
         finally:
             text = buf.getvalue()
-            if text:
+            # Diagnostic output can echo what the person said; keep it only with storage consent.
+            if text and self.pipeline.memory_storage_allowed():
                 with open(self.log_path, "a") as f:
                     f.write(f"\n--- {datetime.now().isoformat()} ---\n{text}")
 
@@ -266,8 +267,13 @@ class ChatSession:
                 f"Face recognition: {state('FACE_RECOGNITION')}",
                 f"Microphone listening: {state('VOICE_RECORDING')}"]
 
+    STORAGE_OFF_COMMAND = ("I can't save that because memory is turned off. "
+                           "Turn it on with /consent memory on if you'd like me to keep it.")
+
     def _safety_setting(self, cmd: str, arg: str) -> str:
         import re
+        if not self.pipeline.memory_storage_allowed():
+            return self.STORAGE_OFF_COMMAND
         from src.cognition.conversational_memory import EMERGENCY_NUMBER_KEY, TRUSTED_CONTACT_KEY
         if cmd == "/set-emergency-number":
             if not re.fullmatch(r"\+?[0-9][0-9 \-]{1,19}", arg):
@@ -292,6 +298,8 @@ class ChatSession:
             return "\n".join(f"  {i}. {m.medication_name}{' (' + m.dose + ')' if m.dose else ''} daily at "
                              f"{m.scheduled_time}{' - you told me you took it today' if meds.reported_taken_today(m.med_id) else ''}"
                              for i, m in enumerate(items, 1))
+        if cmd in ("/add-medication", "/add-appointment") and not self.pipeline.memory_storage_allowed():
+            return self.STORAGE_OFF_COMMAND
         if cmd == "/add-medication":
             m = re.match(r"^(.+?)\s+at\s+(\d{1,2}:\d{2}(?:\s*[ap]m)?)\s*(?:,\s*(.+))?$", arg, re.IGNORECASE)
             if not m:
