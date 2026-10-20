@@ -23,6 +23,26 @@ from src.audio.audio_listener import MemoraAudioListener
 from src.reasoning.context_binder import MemoraContextBinder
 
 
+HARDWARE_MODES = {"LAPTOP", "RASPBERRY_PI", "JETSON", "PRODUCTION"}
+
+
+def hardware_config_for(live_hardware: Optional[bool]):
+    """
+    The one place that decides whether real devices may be used.
+
+    Only an explicit live_hardware=True (the --live-hardware flag) selects a hardware
+    runtime; MEMORA_PROFILE then chooses which hardware profile. Text chat, simulation
+    and the default runtime are always simulated, whatever the environment says.
+    """
+    from src.runtime.runtime_models import HardwareConfig, RuntimeMode
+    if live_hardware is not True:
+        return HardwareConfig(mode=RuntimeMode.SIMULATION)
+    import os
+    requested = os.environ.get("MEMORA_PROFILE", "").upper()
+    mode = RuntimeMode[requested] if requested in HARDWARE_MODES else RuntimeMode.LAPTOP
+    return HardwareConfig(mode=mode)
+
+
 def build_application(
     *,
     live_hardware: Optional[bool] = None,
@@ -37,7 +57,8 @@ def build_application(
     """
 
     # If live_hardware is None or True, attempt live hardware with simulation fallbacks
-    use_mock = (live_hardware is False)
+    # Anything other than an explicit hardware request uses simulated perception and typed input.
+    use_mock = live_hardware is not True
 
     db = database if database is not None else MemoraDatabase()
     rec = recognizer if recognizer is not None else MemoraFaceRecognizer(mock_mode=use_mock)
@@ -51,6 +72,7 @@ def build_application(
         listener=listn,
         binder=bind,
         speaker=spk,
+        hardware_config=hardware_config_for(live_hardware),
     )
 
     coordinator.initialize()

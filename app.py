@@ -156,14 +156,14 @@ def main(
     # only used to extract names during identity learning.
     llm_mode_str = ("Local rules for replies; Gemini (key set, unverified) for identity-learning name extraction"
                     if llm_active else "Local rules only (no cloud model configured)")
-    if live_hardware is False:
-        print("🤖 OPERATIONAL MODE: SIMULATION DEMONSTRATION ACTIVE")
+    if live_hardware is not True:
+        print("🤖 OPERATIONAL MODE: SIMULATION (real devices are used only with --live-hardware)")
         print("   • Video Feed : Simulated Frame Generator")
         print("   • Audio Feed : Simulated Audio Listener")
         print("   • Speaker    : Console log only (no audio)")
         print(f"   • LLM Mode   : {llm_mode_str}")
     else:
-        print("🎥 OPERATIONAL MODE: LIVE HARDWARE (AUTO-DETECT / FALLBACK ACTIVE)")
+        print("🎥 OPERATIONAL MODE: LIVE HARDWARE requested (--live-hardware); unavailable devices are reported below")
         print("   • Video Feed : OpenCV Camera Adapter (Index 0 / Fallback)")
         print("   • Audio Feed : PyAudio Microphone Adapter (Native / Fallback)")
         print("   • Speaker    : Text-to-Speech Engine (Native / Console Fallback)")
@@ -173,7 +173,7 @@ def main(
     # Synthetic sensors and scripted scenarios write synthetic faces/episodes.
     # Keep them out of the person's real memory database unless the operator
     # explicitly chose a database with MEMORA_DB_PATH.
-    if (live_hardware is False or run_scenarios) and not os.environ.get("MEMORA_DB_PATH"):
+    if (live_hardware is not True or run_scenarios) and not os.environ.get("MEMORA_DB_PATH"):
         from config import settings
         from config.paths import DATA_DIR
         settings.DB_PATH = str(DATA_DIR / "simulation" / "memora_simulation.sqlite")
@@ -417,7 +417,7 @@ def cli():
     parser.add_argument("--validate-runtime", action="store_true", help="Run runtime stability monitoring and output measured Runtime Report")
 
     mode_group = parser.add_mutually_exclusive_group()
-    mode_group.add_argument("--live-hardware", action="store_true", help="Enforce physical camera, microphone, and TTS HAL")
+    mode_group.add_argument("--live-hardware", action="store_true", help="Use the physical camera, microphone and speaker (the only way to enable real devices; MEMORA_PROFILE selects the hardware profile)")
     mode_group.add_argument("--simulation", action="store_true", help="Run in simulated mode with synthetic perception")
 
     args = parser.parse_args()

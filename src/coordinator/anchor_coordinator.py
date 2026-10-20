@@ -57,6 +57,7 @@ class AnchorCoordinator:
         listener: "MemoraAudioListener",
         binder: "MemoraContextBinder",
         speaker: Any,
+        hardware_config: Any = None,
     ) -> None:
         """
         Initialize the coordinator with subsystem instances.
@@ -89,7 +90,12 @@ class AnchorCoordinator:
         # Cognitive Pipeline & Memory Manager
         # ------------------------------------------------------
 
-        self.pipeline = CognitivePipeline(self.database)
+        # Hardware selection is injected by the application factory; the default here is
+        # simulated so that no other construction path can reach real devices.
+        if hardware_config is None:
+            from src.runtime.runtime_models import HardwareConfig, RuntimeMode
+            hardware_config = HardwareConfig(mode=RuntimeMode.SIMULATION)
+        self.pipeline = CognitivePipeline(self.database, hardware_config=hardware_config)
         # Biometric consent gates face matching/enrolment in the live runtime.
         from src.clinical.clinical_models import ConsentFeature
         if hasattr(self.recognizer, "consent_check"):

@@ -152,8 +152,10 @@ class CognitivePipeline:
 
         # Setup Hardware Runtime Layer with Explicit HardwareConfig Injection
         if hardware_config is None:
-            active_mode = self.config_mgr.get_runtime_mode()
-            hw_config = HardwareConfig(mode=active_mode)
+            # Never inferred from the environment: real devices require an explicit
+            # HardwareConfig from the application factory (--live-hardware).
+            from src.runtime.runtime_models import RuntimeMode
+            hw_config = HardwareConfig(mode=RuntimeMode.SIMULATION)
         else:
             hw_config = hardware_config
 
