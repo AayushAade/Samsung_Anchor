@@ -280,17 +280,24 @@ function renderConversation(event) {
     setTimeout(() => panel.classList.remove('active'), 2000);
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+}
+
 function renderClinical(event) {
     const container = document.getElementById('clinical-content');
     const panel = document.getElementById('clinical-panel');
 
     if (!container || !panel) return;
 
-    const patient = event.patient_name || 'Eleanor';
-    const caregiver = event.primary_caregiver || 'Sarah Jenkins';
-    const meds = (event.pending_medications || []).join(', ') || 'All morning meds confirmed';
-    const appts = (event.upcoming_appointments || []).join(', ') || 'No immediate appointments';
-    const explanation = event.explanation_reason || 'System evaluating routine observation status.';
+    // No placeholder people, and "nothing pending" is never shown as "confirmed".
+    const patient = escapeHtml(event.patient_name || 'Name not set');
+    const caregiver = escapeHtml(event.primary_caregiver || 'Not set');
+    const meds = escapeHtml((event.pending_medications || []).join(', ') || 'No overdue doses (based on what MEMORA was told)');
+    const appts = escapeHtml((event.upcoming_appointments || []).join(', ') || 'No appointments recorded');
+    const explanation = escapeHtml(event.explanation_reason || 'System evaluating routine observation status.');
     const consent = event.consent_granted ? 'Granted ✓' : 'Revoked ❌';
 
     container.innerHTML = `

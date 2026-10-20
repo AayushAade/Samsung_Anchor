@@ -539,8 +539,9 @@ class CognitivePipeline:
 
             from src.clinical.clinical_models import ConsentFeature
             clinical_context = {
-                "patient_name": self.patient_profile_mgr.get_profile().preferred_name,
-                "primary_caregiver": self.patient_profile_mgr.get_profile().primary_caregiver,
+                # Fictional profile defaults are only shown in demo mode.
+                "patient_name": patient_name or None,
+                "primary_caregiver": self.patient_profile_mgr.get_profile().primary_caregiver if self.demo_data else None,
                 "pending_medications": [m.medication_name for m in self.medication_mgr.get_missed_medications()],
                 "upcoming_appointments": [a.title for a in self.appointment_mgr.get_upcoming_appointments()],
                 "consent_granted": self.consent_mgr.is_consent_granted(ConsentFeature.VOICE_RECORDING),

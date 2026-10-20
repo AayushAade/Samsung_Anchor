@@ -352,7 +352,7 @@ class CognitiveStream:
 
         # Clinical Ecosystem Context
         if clinical_context:
-            event.patient_name = clinical_context.get("patient_name", "Eleanor")
+            event.patient_name = clinical_context.get("patient_name")
             event.primary_caregiver = clinical_context.get("primary_caregiver", "Sarah Jenkins")
             event.pending_medications = clinical_context.get("pending_medications", [])
             event.upcoming_appointments = clinical_context.get("upcoming_appointments", [])
