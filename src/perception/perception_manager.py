@@ -24,6 +24,7 @@ class PerceptionManager:
         self.activity_detector = ActivityDetector()
         self.audio_pipeline = AudioPipeline()
         self.fusion_engine = MultimodalFusionEngine()
+        self.last_objects_provenance = "NONE"
 
     def set_database(self, database: Any) -> None:
         self.database = database
@@ -45,8 +46,14 @@ class PerceptionManager:
             frame_id=frame.frame_id,
         )
 
+        # Provenance: only detections computed from a real camera frame are persisted.
+        # Simulated/fallback detections are fictional and must never become
+        # "I last saw your ..." memories in the user's database.
+        self.last_objects_provenance = self._frame_provenance(frame)
+
         # Log detected objects into persistent database ObjectRepository
-        if self.database and hasattr(self.database, "object_repo") and self.database.object_repo:
+        if (self.last_objects_provenance == "REAL_CAMERA" and self.database
+                and hasattr(self.database, "object_repo") and self.database.object_repo):
             room_str = room.value if hasattr(room, "value") else str(room)
             for obj in objects:
                 bbox = obj.bounding_box or [0, 0, 0, 0]
@@ -84,6 +91,14 @@ class PerceptionManager:
             fps=frame.fps,
             raw_frame=frame.raw_frame,
         )
+
+    def _frame_provenance(self, frame: Any) -> str:
+        from src.runtime.camera_adapter import SimulatedCameraAdapter
+        adapter = getattr(self.camera_pipeline, "camera_adapter", None)
+        raw = getattr(frame, "raw_frame", None)
+        if adapter is None or isinstance(adapter, SimulatedCameraAdapter) or raw is None or not hasattr(raw, "shape"):
+            return "SIMULATED_CAMERA"
+        return "REAL_CAMERA"
 
     def set_room(self, room: RoomLocation) -> None:
         self.room_tracker.set_room(room)

@@ -215,12 +215,12 @@ def test_conversation_preference_memory_extraction_and_recall():
     # Step 1: User states preference
     act1 = coord.pipeline.process({"user_speech": "My favorite tea is green tea."})
     assert len(act1) > 0
-    assert "noted" in act1[0].message.lower() or "preference" in act1[0].message.lower()
+    assert "remember" in act1[0].message.lower()
 
     # Step 2: User asks for preference recall
     act2 = coord.pipeline.process({"user_speech": "What tea do I like?"})
     assert len(act2) > 0
-    assert "green tea" in act2[0].message.lower() or "favorite tea" in act2[0].message.lower()
+    assert "green tea" in act2[0].message.lower()
 
 
 def test_conversation_relationship_fact_memory_extraction_and_recall():
@@ -235,12 +235,12 @@ def test_conversation_relationship_fact_memory_extraction_and_recall():
     # Step 1: User states fact
     act1 = coord.pipeline.process({"user_speech": "My daughter is Riya."})
     assert len(act1) > 0
-    assert "noted" in act1[0].message.lower()
+    assert "remember" in act1[0].message.lower()
 
     # Step 2: User asks for fact recall
     act2 = coord.pipeline.process({"user_speech": "Who is my daughter?"})
     assert len(act2) > 0
-    assert "riya" in act2[0].message.lower() or "daughter" in act2[0].message.lower()
+    assert "riya" in act2[0].message.lower()
 
 
 def test_llm_mode_diagnostic_reporting():

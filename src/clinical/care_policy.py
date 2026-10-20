@@ -20,6 +20,11 @@ from src.clinical.patient_state import PatientState, PatientStateMode
 from src.clinical.urgent_safety import UrgentConcern, UrgentConcernType, urgent_guidance
 
 
+def _addr(name: Optional[str]) -> str:
+    """", Name" when a name is known, else nothing (never a placeholder name)."""
+    return f", {name}" if name else ""
+
+
 class CarePrinciple(Enum):
     VALIDATION_THERAPY = "Validation Therapy"
     REALITY_ORIENTATION = "Reality Orientation"
@@ -68,7 +73,7 @@ class CarePolicyFramework:
                 concern = UrgentConcern(UrgentConcernType(concern_value), patient_state.details.get("matched_text", ""))
                 message = urgent_guidance(concern, name=patient_name)
             else:
-                message = (f"{patient_name}, if you need help, please call your local emergency number "
+                message = (f"{patient_name + ', ' if patient_name else ''}if you need help, please call your local emergency number "
                            "or press your help button, or call out to someone nearby. "
                            "I can't contact anyone myself.")
             return CareDecision(
@@ -86,7 +91,7 @@ class CarePolicyFramework:
             return CareDecision(
                 principle=CarePrinciple.REPETITIVE_REDIRECTION,
                 action_type="SPEAK",
-                message_override=f"That's alright, {patient_name}, it's fine to ask again. I'm right here with you.",
+                message_override=f"That's alright{_addr(patient_name)}, it's fine to ask again. I'm right here with you.",
                 dignity_preserved=True,
                 caregiver_notified=False,
                 reasoning="Validation therapy for repeated query: warm, consistent reassurance without correcting.",
@@ -98,7 +103,7 @@ class CarePolicyFramework:
             return CareDecision(
                 principle=CarePrinciple.VALIDATION_THERAPY,
                 action_type="SPEAK",
-                message_override=(f"I'm here with you, {patient_name}. It's okay to feel worried. "
+                message_override=(f"I'm here with you{_addr(patient_name)}. It's okay to feel worried. "
                                   "Let's take a slow breath together. If something is wrong, "
                                   "please tell someone you trust."),
                 dignity_preserved=True,
@@ -114,7 +119,7 @@ class CarePolicyFramework:
                 principle=CarePrinciple.GENTLE_ORIENTATION,
                 action_type="SPEAK",
                 message_override=(f"It's {now.strftime('%A')}, {now.strftime('%B')} {now.day}, "
-                                  f"around {now.strftime('%I:%M %p').lstrip('0')}. Take your time, {patient_name}."),
+                                  f"around {now.strftime('%I:%M %p').lstrip('0')}. Take your time{_addr(patient_name)}."),
                 dignity_preserved=True,
                 caregiver_notified=False,
                 reasoning="Gentle orientation: soft time grounding from the system clock.",
@@ -126,7 +131,7 @@ class CarePolicyFramework:
             return CareDecision(
                 principle=CarePrinciple.ONE_STEP_GUIDANCE,
                 action_type="SPEAK",
-                message_override=f"Here is a gentle reminder, {patient_name}: {need_desc}.",
+                message_override=f"Here is a gentle reminder{_addr(patient_name)}: {need_desc}.",
                 dignity_preserved=True,
                 caregiver_notified=False,
                 reasoning="One-step guidance: single clear prompt.",

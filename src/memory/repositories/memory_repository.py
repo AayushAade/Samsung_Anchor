@@ -149,6 +149,25 @@ class DatabaseMemoryRepository:
 
         return results
 
+    def find_explicit(self, tags: Optional[list[str]] = None) -> list[RelevantMemory]:
+        """
+        Explicitly stored memories only (no episodes or knowledge-graph nodes),
+        optionally filtered to those carrying any of the given tags.
+        """
+        with self.session_factory() as session:
+            rows = session.query(RelevantMemoryModel).all()
+            out = [self._to_domain(m) for m in rows]
+        if tags:
+            out = [m for m in out if any(t in (m.tags or []) for t in tags)]
+        return sorted(out, key=lambda m: m.timestamp or datetime.min)
+
+    def delete(self, memory_id: str) -> bool:
+        """Permanently delete one explicitly stored memory. Returns True if it existed."""
+        with self.session_factory() as session:
+            deleted = session.query(RelevantMemoryModel).filter_by(memory_id=memory_id).delete()
+            session.commit()
+        return bool(deleted)
+
     def clear(self) -> None:
         with self.session_factory() as session:
             session.query(RelevantMemoryModel).delete()

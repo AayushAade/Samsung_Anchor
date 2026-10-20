@@ -1,0 +1,530 @@
+"""
+Conversational memory: deterministic handling of what a person tells MEMORA
+and what they ask it to recall.
+
+Principles
+----------
+- Every stored fact records its provenance (who said it, when) and is
+  restated with that attribution ("You told me today that ...").
+- Questions are answered only from records that match the topic asked about.
+  When nothing matches, MEMORA says so instead of offering an unrelated memory.
+- Conflicting statements supersede older ones without deleting them, and the
+  person is told what changed.
+- Object answers come only from real observations, phrased as "last seen"
+  with their age; MEMORA never states a current location as fact.
+- Names are only learned from explicit introductions ("my name is ...").
+- Urgent statements are left to the safety layer (this module returns None).
+
+Facts are stored in the existing relevant_memories table. Structured fields
+live in tags (``fact_key:``, ``fact_value:``, ``polarity:``, ``status:``,
+``source:``) so no schema migration is required.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import re
+import time
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Callable, Optional
+
+from src.clinical.urgent_safety import detect_urgent_concern
+from src.cognition.memory_models import MemoryImportance, MemoryType, RelevantMemory
+
+FACT_TAG = "user_fact"
+PREFERENCE_TAG = "user_preference"
+PREFERRED_NAME_KEY = "user_preferred_name"
+
+RELATIONS = ("daughter", "son", "wife", "husband", "partner", "doctor", "caregiver", "nurse", "brother",
+             "sister", "mother", "father", "grandson", "granddaughter", "friend", "neighbor", "neighbour")
+
+CATEGORIES = {
+    "drink": {"tea", "coffee", "juice", "water", "milk", "lemonade", "soda", "cocoa", "chai", "wine", "beer"},
+    "sport": {"cricket", "football", "soccer", "tennis", "golf", "badminton", "hockey", "basketball",
+              "baseball", "swimming", "chess", "rugby", "volleyball"},
+    "food": {"rice", "bread", "pasta", "soup", "curry", "fish", "chicken", "salad", "cake", "biscuits",
+             "cookies", "fruit", "apples", "bananas", "chocolate", "pizza", "eggs", "cheese"},
+    "music": {"music", "jazz", "songs", "singing", "classical", "piano", "guitar", "radio"},
+}
+CATEGORY_WORDS = {"drink": {"drink", "drinks", "beverage"}, "sport": {"sport", "sports", "game", "games"},
+                  "food": {"food", "eat", "meal", "dish"}, "music": {"music", "song", "songs"}}
+
+KNOWN_OBJECTS = ("reading glasses", "glasses", "spectacles", "keys", "wallet", "purse", "remote", "phone",
+                 "cell phone", "mobile", "bottle", "water bottle", "medication", "medicine", "pills",
+                 "cane", "walking cane", "hearing aid", "watch", "book", "bag", "handbag", "shoes",
+                 "slippers", "cup", "mug", "laptop", "charger", "umbrella", "coat", "jacket", "hat")
+
+NAME_STOPWORDS = {
+    "tired", "fine", "good", "ok", "okay", "here", "there", "ready", "sorry", "sure", "not", "so", "very",
+    "happy", "sad", "hungry", "thirsty", "cold", "hot", "warm", "busy", "lost", "confused", "scared",
+    "worried", "afraid", "home", "back", "done", "well", "unwell", "sick", "better", "great", "alright",
+    "today", "now", "going", "looking", "trying", "feeling", "just", "still", "bored", "lonely", "awake",
+    "sleepy", "late", "early", "alone", "old", "new", "glad", "angry", "upset", "fed", "afraid",
+}
+
+_FIRST_TO_SECOND = [(r"\bi am\b", "you are"), (r"\bi'm\b", "you're"), (r"\bi was\b", "you were"),
+                    (r"\bi\b", "you"), (r"\bmy\b", "your"), (r"\bme\b", "you"), (r"\bmine\b", "yours"),
+                    (r"\bmyself\b", "yourself")]
+
+
+def _to_second_person(text: str) -> str:
+    out = text.strip().rstrip(".!")
+    out = re.sub(r"\s+(now|these days|nowadays|anymore|any more)$", "", out, flags=re.IGNORECASE)
+    for pat, rep in _FIRST_TO_SECOND:
+        out = re.sub(pat, rep, out, flags=re.IGNORECASE)
+    return out
+
+
+def _when(ts: Optional[datetime], now: datetime) -> str:
+    if ts is None:
+        return "earlier"
+    if ts.date() == now.date():
+        return "today"
+    if ts.date() == (now - timedelta(days=1)).date():
+        return "yesterday"
+    return f"on {ts.strftime('%B')} {ts.day}"
+
+
+def _age_phrase(ts: datetime, now: datetime) -> str:
+    secs = max(0.0, (now - ts).total_seconds())
+    if secs < 90:
+        return "just now"
+    if secs < 3600:
+        return f"about {int(round(secs / 60))} minutes ago"
+    if ts.date() == now.date():
+        hours = int(secs // 3600)
+        return f"about {hours} hour{'s' if hours != 1 else ''} ago"
+    if ts.date() == (now - timedelta(days=1)).date():
+        return f"yesterday at {ts.strftime('%I:%M %p').lstrip('0')}"
+    return f"on {ts.strftime('%B')} {ts.day}"
+
+
+def _norm(text: str) -> str:
+    t = text.lower().replace("’", "'").strip()
+    t = re.sub(r"\bfavourite\b", "favorite", t)
+    return re.sub(r"\s+", " ", t)
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]+", text.lower()))
+
+
+def _category_of(text: str) -> Optional[str]:
+    w = _words(text)
+    for cat, vocab in CATEGORIES.items():
+        if w & vocab:
+            return cat
+    return None
+
+
+@dataclass
+class StoredFact:
+    memory_id: str
+    key: str
+    value: str
+    polarity: str  # "positive" | "negative"
+    statement: str
+    timestamp: Optional[datetime]
+    status: str
+    source: str
+    category: Optional[str]
+
+
+class ConversationalMemory:
+    """Answers recall questions and records user-provided facts."""
+
+    def __init__(self, database: Any, clock: Callable[[], datetime] = datetime.now,
+                 visual_memory: Any = None) -> None:
+        self.db = database
+        self.clock = clock
+        # Optional VisualEpisodicMemoryEngine holding richer in-session sightings.
+        self.visual_memory = visual_memory
+        self.search_history: list[dict] = []
+
+    # ------------------------------------------------------------------
+    # Public entry point
+    # ------------------------------------------------------------------
+
+    def respond(self, speech: Optional[str], face_id: Optional[str] = None,
+                patient_name: Optional[str] = None) -> Optional[str]:
+        """Return a direct answer for speech, or None if another layer should reply."""
+        if not speech or not speech.strip():
+            return None
+        if detect_urgent_concern(speech) is not None:
+            return None  # the safety layer owns this turn
+        t = _norm(speech)
+        for handler in (self._name_introduction, self._orientation, self._fact_correction_or_statement,
+                        self._fact_question, self._timeline, self._visitors, self._last_search,
+                        self._object_location, self._feelings, self._small_talk):
+            reply = handler(speech, t, face_id=face_id, patient_name=patient_name)
+            if reply:
+                return reply
+        return None
+
+    _FEELINGS = {
+        "tired": "I'm sorry you're feeling tired. It might help to sit and rest for a little while.",
+        "sleepy": "It sounds like you could use some rest. Take it easy.",
+        "sad": "I'm sorry you're feeling sad. I'm here with you. Would you like to talk about it?",
+        "lonely": "I'm sorry you're feeling lonely. Maybe it's a good moment to call someone you like talking to.",
+        "bored": "Maybe we could find something you enjoy doing. You can tell me what you like.",
+        "hungry": "It might be a good time for something to eat.",
+        "thirsty": "A glass of water might help.",
+        "cold": "Maybe a warm layer or a blanket would help.",
+        "happy": "I'm glad to hear that.",
+        "good": "I'm glad to hear that.",
+        "fine": "I'm glad to hear that.",
+    }
+
+    def _feelings(self, raw: str, t: str, **_) -> Optional[str]:
+        m = re.match(r"^(?:i am|i'm|i feel|i'm feeling|i am feeling) (?:a bit |a little |very |so |really |quite )?([a-z]+)\b", t)
+        if m and m.group(1) in self._FEELINGS:
+            return self._FEELINGS[m.group(1)]
+        return None
+
+    def _small_talk(self, raw: str, t: str, patient_name=None, **_) -> Optional[str]:
+        if re.match(r"^(hi|hello|hey|good (morning|afternoon|evening))\b[\w ,!.]{0,20}$", t):
+            return self.greeting(patient_name)
+        if re.match(r"^(thanks|thank you)\b", t):
+            return "You're welcome."
+        return None
+
+    def fallback_reply(self, patient_name: Optional[str] = None) -> str:
+        return ("I'm not sure I understood. You can tell me something to remember, "
+                "ask me what you've told me, or ask where I last saw something.")
+
+    def greeting(self, patient_name: Optional[str] = None) -> str:
+        hour = self.clock().hour
+        part = "morning" if hour < 12 else "afternoon" if hour < 18 else "evening"
+        return f"Good {part}{', ' + patient_name if patient_name else ''}. How can I help?"
+
+    # ------------------------------------------------------------------
+    # Preferred name (user-provided, persisted)
+    # ------------------------------------------------------------------
+
+    def get_preferred_name(self) -> Optional[str]:
+        getter = getattr(self.db, "_get_system_state", None)
+        return getter(PREFERRED_NAME_KEY) if getter else None
+
+    def _name_introduction(self, raw: str, t: str, face_id=None, **_) -> Optional[str]:
+        m = re.match(r"^(?:hi|hello|hey)?[, ]*(?:my name is|my name's|call me|you can call me)\s+([a-z][a-z'\-]{1,30})[.!]?$", t)
+        explicit = bool(m)
+        if not m:
+            m = re.match(r"^(?:hi|hello|hey)?[, ]*(?:i am|i'm|this is|it's|it is)\s+([a-z][a-z'\-]{1,30})[.!]?$", t)
+        if not m:
+            return None
+        candidate = m.group(1)
+        if candidate in NAME_STOPWORDS:
+            return None
+        if not explicit:
+            # "I'm Sid" is accepted only when the name was written/transcribed with a
+            # capital letter, so "i'm tired" style statements are never taken as names.
+            original = re.search(rf"\b({re.escape(candidate)})\b", raw, flags=re.IGNORECASE)
+            if not original or not original.group(1)[0].isupper():
+                return None
+        name = candidate[0].upper() + candidate[1:]
+
+        if face_id and hasattr(self.db, "get_identity") and self.db.get_identity(face_id):
+            # The speaker is a recognised face: label that identity, relationship unknown.
+            self.db.bind_name(face_id, name, relationship=None)
+            return f"Nice to meet you, {name}. I'll remember your name."
+
+        setter = getattr(self.db, "_set_system_state", None)
+        if setter:
+            setter(PREFERRED_NAME_KEY, name)
+        return f"Nice to meet you, {name}. I'll call you {name}."
+
+    # ------------------------------------------------------------------
+    # Orientation (system clock is the only verified source)
+    # ------------------------------------------------------------------
+
+    def _orientation(self, raw: str, t: str, **_) -> Optional[str]:
+        now = self.clock()
+        time_str = now.strftime("%I:%M %p").lstrip("0")
+        date_str = f"{now.strftime('%A')}, {now.strftime('%B')} {now.day}, {now.year}"
+        if re.search(r"\bwhat(?:'s| is)? the time\b|\bwhat time is it\b|\bwhat time it is\b", t):
+            return f"It's {time_str}."
+        if re.search(r"\bwhat(?:'s| is)? (?:the )?(?:day|date)(?: today)?\b|\bwhat day is it\b|\bwhat is today\b|\bwhat's today\b|\bwhich day\b", t):
+            return f"Today is {date_str}."
+        if re.search(r"\bwhat (?:month|year) is it\b", t):
+            return f"It's {now.strftime('%B')} {now.year}."
+        if re.search(r"\b(who|what) are you\b", t):
+            return ("I'm MEMORA, a memory assistant. I can remember things you tell me, "
+                    "and tell you where I last saw your things.")
+        if re.search(r"\bwhere am i\b", t):
+            return ("I can't tell exactly where you are from here. Take your time and look around "
+                    "for something familiar. If you feel unsure, call someone you trust.")
+        return None
+
+    # ------------------------------------------------------------------
+    # Facts
+    # ------------------------------------------------------------------
+
+    def _parse_statement(self, t: str) -> Optional[tuple[str, str, str, bool]]:
+        """Return (key, value, polarity, single_valued) for a fact statement."""
+        if "?" in t or re.match(r"^(what|who|where|when|how|do|does|did|is|are|can|could|which)\b", t):
+            return None
+        t = t.rstrip(".! ")
+        rel = "|".join(RELATIONS)
+        m = re.match(rf"^(?:and )?my ({rel})(?:'s name)? is (?:called |named )?([a-z][a-z '\-]{{0,40}})$", t)
+        if m:
+            return f"relation:{m.group(1)}", m.group(2).strip(), "positive", True
+        m = re.match(r"^(?:and )?my favorite ([a-z ]{2,30}?) is ([a-z0-9][a-z0-9 '\-]{0,40})$", t)
+        if m:
+            return f"favorite:{m.group(1).strip()}", m.group(2).strip(), "positive", True
+        m = re.match(r"^i (?:really |also )?(?:do not|don't|dont) (?:like|enjoy|want) ([a-z0-9][a-z0-9 '\-]{0,50})$", t) \
+            or re.match(r"^i (?:hate|dislike|can't stand|cannot stand) ([a-z0-9][a-z0-9 '\-]{0,50})$", t)
+        if m:
+            value = re.sub(r"\b(anymore|any more|now)\b", "", m.group(1)).strip()
+            return f"likes:{value}", value, "negative", False
+        m = re.match(r"^i (?:really |also |usually )?prefer ([a-z0-9][a-z0-9 '\-]{0,50})$", t)
+        if m:
+            value = re.sub(r"\b(now|these days|nowadays)\b", "", m.group(1)).strip()
+            cat = _category_of(value) or value
+            return f"prefers:{cat}", value, "positive", True
+        m = re.match(r"^i (?:really |also |usually )?(?:like|love|enjoy) ([a-z0-9][a-z0-9 '\-]{0,50})$", t)
+        if m:
+            value = m.group(1).strip()
+            return f"likes:{value}", value, "positive", False
+        return None
+
+    def _fact_correction_or_statement(self, raw: str, t: str, face_id=None, **_) -> Optional[str]:
+        parsed = self._parse_statement(t)
+        if not parsed:
+            return None
+        key, value, polarity, single_valued = parsed
+        statement = raw.strip().rstrip(".!")
+        superseded = []
+        for f in self.active_facts():
+            same_key_conflict = single_valued and f.key == key and f.value != value
+            polarity_flip = (f.value == value and f.polarity != polarity
+                             and f.key.split(":")[0] in ("likes", "prefers") and key.split(":")[0] in ("likes", "prefers"))
+            if same_key_conflict or polarity_flip:
+                superseded.append(f)
+            elif f.key == key and f.value == value and f.polarity == polarity:
+                return f"I already have that noted: {_to_second_person(f.statement)}."
+
+        new_id = f"fact_{uuid.uuid4().hex}"
+        self._save_fact(new_id, key, value, polarity, statement)
+        for f in superseded:
+            self._mark_superseded(f, new_id)
+        if superseded:
+            old = "; ".join(_to_second_person(f.statement) for f in superseded)
+            return f"Thank you, I've updated that. Earlier you told me: {old}. Now I have: {_to_second_person(statement)}."
+        return f"I'll remember that {_to_second_person(statement)}."
+
+    def _fact_question(self, raw: str, t: str, **_) -> Optional[str]:
+        now = self.clock()
+        rel = "|".join(RELATIONS)
+        facts = self.active_facts()
+
+        m = re.search(rf"\b(?:who is|who's) my ({rel})\b|\bwhat(?:'s| is) my ({rel})(?:'s)? name\b", t)
+        if m:
+            relation = m.group(1) or m.group(2)
+            hits = [f for f in facts if f.key == f"relation:{relation}"]
+            return self._answer(hits, now) or f"I don't know who your {relation} is yet. You can tell me, and I'll remember."
+
+        m = re.search(r"\bwhat(?:'s| is) my favorite ([a-z ]{2,30}?)\??$", t)
+        if m:
+            topic = m.group(1).strip()
+            hits = [f for f in facts if f.key == f"favorite:{topic}"]
+            return self._answer(hits, now) or f"You haven't told me your favorite {topic} yet."
+
+        m = re.match(r"^do i (?:like|enjoy|love|prefer) ([a-z0-9][a-z0-9 '\-]{0,40}?)\??$", t)
+        if m:
+            topic_words = _words(m.group(1))
+            hits = [f for f in facts if f.key.split(":")[0] in ("likes", "prefers") and topic_words & _words(f.value)]
+            return self._answer(hits, now) or f"You haven't told me whether you like {m.group(1)}."
+
+        if re.search(r"\bwhat (?:\w+ )?(?:do|did) i (?:usually )?(?:like|enjoy|love|prefer|drink|eat|play)\b|"
+                     r"\bwhat (?:\w+ )?am i (?:fond|into)\b|\bwhat did i (?:tell|say)\b", t):
+            asked = _words(t) - {"what", "do", "did", "i", "usually", "like", "enjoy", "love", "prefer", "drink",
+                                 "eat", "play", "am", "fond", "of", "into", "tell", "say", "you", "the", "a"}
+            cat = next((c for c, words in CATEGORY_WORDS.items() if asked & words), None)
+            if cat is None and re.search(r"\bdrink\b", t):
+                cat = "drink"
+            if cat is None and re.search(r"\b(eat)\b", t):
+                cat = "food"
+            if cat is None and re.search(r"\bplay\b", t):
+                cat = "sport"
+            likes = [f for f in facts if f.key.split(":")[0] in ("likes", "prefers", "favorite")]
+            if cat:
+                hits = [f for f in likes if f.category == cat]
+            elif asked:
+                hits = [f for f in likes if asked & _words(f.value)]
+            else:
+                hits = likes
+            return self._answer(hits, now) or "I don't have a record of that yet. You can tell me, and I'll remember."
+        return None
+
+    def _answer(self, hits: list[StoredFact], now: datetime) -> Optional[str]:
+        if not hits:
+            return None
+        hits = sorted(hits, key=lambda f: f.timestamp or datetime.min, reverse=True)[:3]
+        parts = [f"{_when(f.timestamp, now)} that {_to_second_person(f.statement)}" for f in hits]
+        return "You told me " + "; and ".join(parts) + "."
+
+    # ------------------------------------------------------------------
+    # Fact persistence
+    # ------------------------------------------------------------------
+
+    def _repo(self):
+        return getattr(self.db, "memory_repo", None)
+
+    def _save_fact(self, memory_id: str, key: str, value: str, polarity: str, statement: str) -> None:
+        repo = self._repo()
+        if repo is None:
+            raise RuntimeError("No memory repository available to store facts.")
+        category = _category_of(value) or ""
+        repo.save(RelevantMemory(
+            memory_id=memory_id,
+            memory_type=MemoryType.SEMANTIC,
+            importance=MemoryImportance.HIGH,
+            title=f"User fact: {key}",
+            summary=statement,
+            timestamp=self.clock(),
+            tags=[FACT_TAG, PREFERENCE_TAG, f"fact_key:{key}", f"fact_value:{value}", f"polarity:{polarity}",
+                  "status:active", "source:user_provided", f"category:{category}"],
+        ))
+
+    def _mark_superseded(self, fact: StoredFact, by_id: str) -> None:
+        repo = self._repo()
+        mem = next((m for m in self._raw_fact_memories() if m.memory_id == fact.memory_id), None)
+        if mem is None:
+            return
+        tags = [tg for tg in mem.tags if not tg.startswith("status:")] + ["status:superseded", f"superseded_by:{by_id}"]
+        repo.save(dataclasses.replace(mem, tags=tags))
+
+    def _raw_fact_memories(self) -> list[RelevantMemory]:
+        repo = self._repo()
+        if repo is None:
+            return []
+        if hasattr(repo, "find_explicit"):
+            mems = repo.find_explicit(tags=[FACT_TAG])
+        else:
+            mems = [m for m in repo.find(tags=[FACT_TAG]) if not m.memory_id.startswith(("ep_", "sem_"))]
+        return mems
+
+    def all_facts(self) -> list[StoredFact]:
+        facts = []
+        for m in self._raw_fact_memories():
+            tags = {tg.split(":", 1)[0]: tg.split(":", 1)[1] for tg in (m.tags or []) if ":" in tg}
+            if "fact_key" not in tags:
+                # Facts stored by older versions: free text, treated as an unkeyed positive statement.
+                parsed = self._parse_statement(_norm(m.summary or ""))
+                key, value, polarity = (parsed[0], parsed[1], parsed[2]) if parsed else (f"note:{m.memory_id}", m.summary or "", "positive")
+                tags.update({"fact_key": key, "fact_value": value, "polarity": polarity})
+            facts.append(StoredFact(
+                memory_id=m.memory_id, key=tags["fact_key"], value=tags.get("fact_value", ""),
+                polarity=tags.get("polarity", "positive"), statement=m.summary or "", timestamp=m.timestamp,
+                status=tags.get("status", "active"), source=tags.get("source", "user_provided"),
+                category=tags.get("category") or _category_of(tags.get("fact_value", "")),
+            ))
+        return facts
+
+    def active_facts(self) -> list[StoredFact]:
+        return [f for f in self.all_facts() if f.status == "active"]
+
+    # ------------------------------------------------------------------
+    # Episodes, visitors, searches, objects
+    # ------------------------------------------------------------------
+
+    def _timeline(self, raw: str, t: str, **_) -> Optional[str]:
+        if not re.search(r"\bwhat did i do( today)?\b|\bmy timeline\b|\bwhat happened today\b|\bsummary of (my )?day\b", t):
+            return None
+        repo = getattr(self.db, "episode_repo", None)
+        episodes = repo.get_episodes_for_today() if repo else []
+        lines = []
+        for ep in episodes[-5:]:
+            said = re.search(r"User said: '([^']*)'", ep.summary or "")
+            what = f"you said \"{said.group(1)}\"" if said else (ep.summary or "")
+            if what and not what.startswith("System:"):
+                stamp = ep.timestamp.strftime("%I:%M %p").lstrip("0") if isinstance(ep.timestamp, datetime) else ""
+                lines.append(f"{stamp} {what}".strip())
+        if not lines:
+            return "I haven't recorded anything for today yet."
+        return "Here's what I noted today: " + "; ".join(lines) + "."
+
+    def _visitors(self, raw: str, t: str, **_) -> Optional[str]:
+        if not re.search(r"\bwho (visited|came by|came today|has visited|was here)\b", t):
+            return None
+        repo = getattr(self.db, "episode_repo", None)
+        visitors = [v for v in (repo.get_visitors_for_today() if repo else []) if v]
+        if not visitors:
+            return "I haven't recorded any visitors today."
+        names = visitors[0] if len(visitors) == 1 else ", ".join(visitors[:-1]) + " and " + visitors[-1]
+        return f"I recorded {names} today."
+
+    def _last_search(self, raw: str, t: str, **_) -> Optional[str]:
+        if not re.search(r"\bwhat (was|am) i (looking|searching) for\b", t):
+            return None
+        if self.search_history:
+            return f"Earlier you were looking for your {self.search_history[-1]['object']}."
+        return "I don't remember you looking for anything recently."
+
+    def _object_location(self, raw: str, t: str, **_) -> Optional[str]:
+        patterns = [
+            r"\bwhere (?:is|are|'s|did i (?:leave|put)|have i (?:left|put)|could) (?:my |the |your )?([a-z ]{2,40}?)(?: go| be)?\??$",
+            r"\b(?:have you seen|did you see|do you know where) (?:my |the )?([a-z ]{2,40}?)(?: is| are)?\??$",
+            r"\b(?:i lost|i've lost|i have lost|i can't find|i cannot find|i can not find|find|looking for) (?:my |the )?([a-z ]{2,40}?)[.!?]?$",
+        ]
+        target = None
+        for pat in patterns:
+            m = re.search(pat, t)
+            if m:
+                target = re.sub(r"\b(again|now|please|today|anywhere)\b", "", m.group(1)).strip()
+                break
+        if not target and not any(obj in t for obj in KNOWN_OBJECTS):
+            return None
+        if not target:
+            target = next(obj for obj in sorted(KNOWN_OBJECTS, key=len, reverse=True) if obj in t)
+        if target in ("i", "you", "we", "it", "that", "this"):
+            return None
+
+        self.search_history.append({"object": target, "timestamp": time.time()})
+        now = self.clock()
+        visual = self._visual_observation(target)
+        obs = self._latest_observation(target)
+        if visual is not None and (obs is None or visual[2] >= obs[2]):
+            name, room, seen_at, spatial, confidence = visual
+            where = f"{spatial} in the {room}" if spatial else f"in the {room}"
+            if confidence < 0.5:
+                return f"I'm not certain where your {name} is right now."
+            if confidence < 0.8:
+                return f"I think your {name} may still be {where}, but I'm not certain."
+            reply = f"I last saw your {name} {where} {_age_phrase(seen_at, now)}."
+        elif obs is not None:
+            name, room, seen_at = obs
+            reply = f"I last saw your {name} in the {room} {_age_phrase(seen_at, now)}."
+        else:
+            plural = target.endswith("s") and not target.endswith("ss")
+            it, they = ("them", "they are") if plural else ("it", "it is")
+            return f"I haven't seen your {target}, so I can't say where {they}. Where do you usually keep {it}?"
+        if now - seen_at > timedelta(hours=6):
+            reply += " It may have been moved since then."
+        return reply
+
+    def _visual_observation(self, target: str):
+        if self.visual_memory is None:
+            return None
+        res = self.visual_memory.recall_object_location(target)
+        entry = res.get("entry") if res.get("found") else None
+        if entry is None:
+            return None
+        try:
+            seen_at = datetime.fromisoformat(entry.timestamp)
+        except (TypeError, ValueError):
+            return None
+        return entry.object_category, entry.room, seen_at, entry.spatial_description, entry.confidence
+
+    def _latest_observation(self, target: str) -> Optional[tuple[str, str, datetime]]:
+        repo = getattr(self.db, "object_repo", None)
+        info = repo.search_object(target) if repo else None
+        if not info or not info.get("last_seen"):
+            return None
+        try:
+            seen_at = datetime.fromisoformat(info["last_seen"])
+        except (TypeError, ValueError):
+            return None
+        return str(info.get("name", target)).replace("_", " ").lower(), info.get("room") or "an unknown room", seen_at
