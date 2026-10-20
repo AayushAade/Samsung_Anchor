@@ -1,14 +1,35 @@
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from src.clinical.clinical_models import MedicationSchedule
+
+
+def _scheduled_today(scheduled_time: str, now: datetime) -> Optional[datetime]:
+    for fmt in ("%I:%M %p", "%H:%M"):
+        try:
+            t = datetime.strptime(scheduled_time.strip(), fmt)
+            return now.replace(hour=t.hour, minute=t.minute, second=0, microsecond=0)
+        except ValueError:
+            continue
+    return None
 
 
 class MedicationManager:
     """
     Manages medication scheduling, dosages, missed dose policies, and reminder windows.
+
+    Schedules must come from the person or their caregiver. MEMORA never infers
+    that a dose was taken: only an explicit mark_taken() confirmation clears it.
+    The two example schedules are fictional demo data and are loaded only when
+    seed_demo_data=True.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False, grace_minutes: int = 30) -> None:
         self._schedules: Dict[str, MedicationSchedule] = {}
+        self.grace = timedelta(minutes=grace_minutes)
+        if seed_demo_data:
+            self._seed_demo_schedules()
+
+    def _seed_demo_schedules(self) -> None:
 
         # Seed morning medication
         morning_med = MedicationSchedule(
@@ -26,7 +47,7 @@ class MedicationManager:
         # Seed evening medication
         evening_med = MedicationSchedule(
             med_id="MED-002",
-            medication_name="Blood Pressure (Lisnopril)",
+            medication_name="Blood Pressure (Lisinopril)",
             dose="5 mg",
             scheduled_time="06:00 PM",
             instructions="Take 1 tablet before dinner",
@@ -49,5 +70,18 @@ class MedicationManager:
             return True
         return False
 
-    def get_missed_medications(self) -> List[MedicationSchedule]:
-        return [m for m in self._schedules.values() if not m.is_taken]
+    def get_missed_medications(self, now: Optional[datetime] = None) -> List[MedicationSchedule]:
+        """
+        Doses whose scheduled time (plus a grace period) has passed today without
+        an explicit taken confirmation. Doses scheduled later today are not missed.
+        Schedules with an unparseable time are reported conservatively as missed.
+        """
+        now = now or datetime.now()
+        missed = []
+        for m in self._schedules.values():
+            if m.is_taken:
+                continue
+            due = _scheduled_today(m.scheduled_time, now)
+            if due is None or now >= due + self.grace:
+                missed.append(m)
+        return missed

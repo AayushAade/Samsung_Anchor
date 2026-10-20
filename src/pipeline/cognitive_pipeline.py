@@ -78,9 +78,13 @@ class CognitivePipeline:
         database: "MemoraDatabase",
         config_mgr: Optional[ConfigManager] = None,
         hardware_config: Optional[HardwareConfig] = None,
+        demo_data: bool = False,
     ) -> None:
         
         self.database = database
+        # demo_data loads fictional medication schedules and object sightings for
+        # scripted demonstrations. It must stay off for real use.
+        self.demo_data = demo_data
         self.presence_engine = PresenceEngine()
 
         # Inject the real SQLAlchemy-backed memory repository
@@ -112,7 +116,7 @@ class CognitivePipeline:
         # Setup Clinical Ecosystem Layer
         self.patient_profile_mgr = PatientProfileManager()
         self.caregiver_mgr = CaregiverManager()
-        self.medication_mgr = MedicationManager()
+        self.medication_mgr = MedicationManager(seed_demo_data=demo_data)
         self.appointment_mgr = AppointmentManager()
         self.consent_mgr = ConsentManager()
         self.audit_logger = AuditLogger()
@@ -148,7 +152,7 @@ class CognitivePipeline:
         self.patient_state_evaluator = PatientStateEvaluator()
         self.care_policy_framework = CarePolicyFramework()
         self.clinical_trace_logger = ClinicalDecisionTraceLogger()
-        self.visual_memory_engine = VisualEpisodicMemoryEngine(database)
+        self.visual_memory_engine = VisualEpisodicMemoryEngine(database, seed_demo_data=demo_data)
         self.cognitive_kernel = CognitiveKernel()
         
         # Phase 22 — Trust, Safety, Reliability & Data Lifecycle Infrastructure
@@ -229,6 +233,8 @@ class CognitivePipeline:
             recognition_result["location"] = location
 
         actions = []
+        executive_summary = None
+        event = None
         stream = CognitiveStream.instance()
         cycle_id = stream.next_cycle_id()
         cycle_start = time.perf_counter()
@@ -377,8 +383,19 @@ class CognitivePipeline:
             loc_val = p_room.value if hasattr(p_room, "value") else str(p_room)
             c_time = cognitive_context.temporal.time_of_day if cognitive_context and cognitive_context.temporal else "Day"
 
+            from src.clinical.care_policy import CarePrinciple
+            if care_decision.principle == CarePrinciple.EMERGENCY_ESCALATION and care_decision.message_override:
+                # Safety guidance is always spoken, even when no other subsystem
+                # proposed an action this cycle.
+                from src.interaction.actions import InteractionAction, InteractionActionType
+                action = InteractionAction(type=InteractionActionType.SPEAK, message=care_decision.message_override)
+            elif action is None and u_speech and care_decision.action_type == "SPEAK" and care_decision.message_override:
+                # The person spoke and the care policy chose a reply: deliver it
+                # rather than leaving them without any response.
+                from src.interaction.actions import InteractionAction, InteractionActionType
+                action = InteractionAction(type=InteractionActionType.SPEAK, message=care_decision.message_override)
+
             if action is not None:
-                from src.clinical.care_policy import CarePrinciple
                 if care_decision.message_override and (recall_msg is None and not u_speech or care_decision.principle == CarePrinciple.EMERGENCY_ESCALATION):
                     from src.interaction.actions import InteractionAction
                     action = InteractionAction(type=action.type, message=care_decision.message_override)
@@ -640,9 +657,9 @@ class CognitivePipeline:
             pass
 
         if return_dict:
-            u_sp = recognition_result.get("user_speech") if recognition_result else None
-            context_ans = self._handle_contextual_recall(u_sp, event, self.patient_profile_mgr.get_profile())
-            final_speech = context_ans or (actions[0].message if actions else "I am here with you.")
+            # Report what this cycle actually decided. Re-running recall here used to
+            # override safety guidance and store user facts a second time.
+            final_speech = actions[0].message if actions and getattr(actions[0], "message", None) else None
             return {
                 "speech_response": final_speech,
                 "executive_summary": executive_summary,

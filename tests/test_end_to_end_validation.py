@@ -55,7 +55,7 @@ def test_end_to_end_10_clinical_scenarios():
 
 def test_visual_episodic_memory_recall():
     """Verify visual episodic memory engine stores and recalls item locations accurately."""
-    engine = VisualEpisodicMemoryEngine()
+    engine = VisualEpisodicMemoryEngine(seed_demo_data=True)
 
     # Query reading glasses
     res_glasses = engine.recall_object_location("Where are my reading glasses?", "Eleanor")

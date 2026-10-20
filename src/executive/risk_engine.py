@@ -13,6 +13,7 @@ Classifies risk level into LOW, MEDIUM, HIGH, CRITICAL with explicit justificati
 from __future__ import annotations
 
 from typing import Any, List, Optional
+from src.clinical.urgent_safety import detect_urgent_concern
 from src.executive.executive_models import RiskAssessment, RiskLevel, Situation
 
 
@@ -67,13 +68,26 @@ class ExecutiveRiskEngine:
             score += 0.30
             justifications.append("Searching repeatedly for medicine creates potential overdose risk requiring supervision.")
 
-        # 5. Symptom Mentions in User Speech (Dizziness, Fall, Pain)
-        if user_speech:
-            u_lower = user_speech.lower()
-            if any(sym in u_lower for sym in ("dizzy", "faint", "fell", "headache", "chest pain", "can't breathe")):
-                factors.append("Clinical Symptom Utterance")
-                score += 0.45
-                justifications.append(f"Patient reported clinical symptom: '{user_speech}'. Immediate clinical evaluation warranted.")
+        # 5. Urgent concern in user speech (fall, chest pain, breathing, overdose...)
+        # An urgent concern is CRITICAL on its own; it is never averaged down by
+        # other low-risk factors. Scores here are rule weights, not probabilities.
+        concern = detect_urgent_concern(user_speech)
+        if concern is not None:
+            factors.append(f"Urgent concern reported: {concern.concern_type.value}")
+            justifications.append(f"User reported a possible {concern.concern_type.value} "
+                                  f"(\"{concern.matched_text}\"); direct to human help immediately.")
+            return RiskAssessment(
+                level=RiskLevel.CRITICAL,
+                score=1.0,
+                factors=factors,
+                justification=" ".join(justifications),
+            )
+
+        # 6. Other symptom mentions that warrant attention but are not urgent on their own
+        if user_speech and any(sym in user_speech.lower() for sym in ("dizzy", "headache", "unwell", "feel sick", "nauseous")):
+            factors.append("Clinical Symptom Utterance")
+            score += 0.45
+            justifications.append(f"Patient reported a symptom: '{user_speech}'. Human follow-up is advisable.")
 
         # Determine Risk Level
         score = round(min(1.0, score), 3)

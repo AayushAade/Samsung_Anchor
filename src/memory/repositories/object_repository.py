@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from sqlalchemy.orm import Session
 from src.memory.models import Object, ObjectHistory
@@ -80,18 +81,27 @@ class ObjectRepository:
                 objects_dict[obj.name] = self.get_last_known_location(obj.name)
         return objects_dict
 
+    _QUERY_STOPWORDS = {"where", "what", "have", "seen", "find", "looking", "with", "your", "mine",
+                        "there", "that", "this", "they", "them", "were", "they're", "it's", "left"}
+
     def search_object(self, query: str):
         """
-        Searches for object by query string (case-insensitive substring match).
-        Returns dict with last known location details or None.
+        Find the observed object named in a free-text query.
+
+        Matches whole words (punctuation stripped) so "where are my glasses?"
+        finds "Reading Glasses". Returns the last-known-location dict or None.
         """
         if not query:
             return None
         q_lower = query.lower().strip()
+        words = {w for w in re.findall(r"[a-z]+", q_lower) if len(w) > 2 and w not in self._QUERY_STOPWORDS}
         with self.session_factory() as session:
-            objs = session.query(Object).all()
-            for obj in objs:
-                if q_lower in obj.name.lower() or obj.name.lower() in q_lower or any(word in obj.name.lower() for word in q_lower.split() if len(word) > 3):
-                    return self.get_last_known_location(obj.name)
-        return None
-
+            names = [obj.name for obj in session.query(Object).all()]
+        best, best_score = None, 0
+        for name in names:
+            n_lower = name.lower().replace("_", " ")
+            name_words = set(re.findall(r"[a-z]+", n_lower))
+            score = 3 if n_lower in q_lower else len(words & name_words | {w for w in words if w.rstrip("s") in {nw.rstrip("s") for nw in name_words}})
+            if score > best_score:
+                best, best_score = name, score
+        return self.get_last_known_location(best) if best else None

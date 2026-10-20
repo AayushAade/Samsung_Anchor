@@ -29,7 +29,8 @@ class EmergencyManager:
             trigger_reason=reason,
             priority=priority,
             immediate_action=immediate_action,
-            caregiver_notified=True,
+            # No notification channel exists; never report a notification that did not happen.
+            caregiver_notified=False,
             workflow_name=workflow_name,
         )
         return self._state
