@@ -18,6 +18,9 @@ Commits on the work branch (newest first):
 
 | Commit | Summary |
 | :--- | :--- |
+| `6bd49a9`, `5adcb76`, `175f3c3` | Soak evidence; release gates; architecture/roadmap/ledger refresh |
+| `e4dc941` | Dashboard WebSocket origin allow-list (cross-site hijacking) |
+| `ac87a0f`, `592ddab` | No silent cloud transcription; voice consent; Python 3.12/3.13 core verified |
 | `466be66` | Suite can never touch physical devices or make sound; honest speaker fallback; licensing + safety docs |
 | `8c671ec` | GitHub Actions CI (tests, ruff, journeys, diagnostics, Docker) — **4/4 checks passing** |
 | `0666d05` | Simulation: clock, battery, sensor failures, 20 journeys; fixed restore-on-corrupt and thread leak |
@@ -88,7 +91,10 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | `17ba5ed` | `.venv` | 658 passed in ~60 s; `ruff check .` (E9/F63/F7/F82) clean |
 | `cdd1465` | `.venv` | 666 passed in ~64 s; ruff gate clean |
 | `8ccf2bd` | fresh clone, clean venv (core+dev) | 664 passed, 2 skipped (cloud SDK not installed), 21 s |
-| Latest (`466be66`) | `.venv` (macOS arm64) | 749 passed in ~73 s; ruff clean; `app.py --simulate` 20/20 |
+| `466be66` | `.venv` (macOS arm64) | 749 passed in ~73 s; ruff clean; `app.py --simulate` 20/20 |
+| `ac87a0f` | clean `python:3.12-slim` and `python:3.13-slim` containers | 747 passed, 6 skipped (reasons stated); journeys 20/20 |
+| **Latest (`6bd49a9`)** | fresh clone, clean Python 3.11 venv, core+dev deps | **752 passed, 4 skipped** (reasons stated), 23 s; ruff clean; journeys 20/20; `--check` pass; chat verified |
+| `6bd49a9` | GitHub Actions (ubuntu, Python 3.11) | core and Docker jobs passing on push and PR |
 | Latest (`466be66`) | GitHub Actions, ubuntu-latest, Python 3.11 | core job (ruff, pytest, journeys, --check) and Docker job passing |
 | `823a85e`-era | Fresh clone + clean venv, `requirements-dev.txt` only | 634 passed, 2 skipped (cloud SDK not installed) |
 | Before `90eab3c` | Fresh clone | **Import failure**: `src/runtime/runtime_engine.py` had never been committed |
