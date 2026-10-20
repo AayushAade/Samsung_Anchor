@@ -269,6 +269,12 @@ class AnchorCoordinator:
         if not face_id:
             return False
 
+        # Listening to a real microphone requires voice-recording consent.
+        from src.clinical.clinical_models import ConsentFeature
+        if not getattr(self.listener, "mock_mode", True) and not self.pipeline.consent_mgr.is_consent_granted(
+                ConsentFeature.VOICE_RECORDING):
+            return False
+
         if face_id in self._learning_faces:
             return False
 

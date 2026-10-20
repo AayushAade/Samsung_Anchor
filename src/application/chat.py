@@ -36,7 +36,7 @@ HELP_TEXT = """Commands:
   /objects         Show where I last saw things
   /export [file]   Save a copy of everything I store about you (JSON)
   /delete-all      Permanently delete everything I store about you
-  /consent [memory|faces on|off]  Show or change what you allow me to save
+  /consent [memory|faces|voice on|off]  Show or change what you allow
   /status          Show what is on, off, and where data is saved
   /quit            Exit
 Anything else is treated as something you are saying to me."""
@@ -236,7 +236,7 @@ class ChatSession:
 
     def _consent_command(self, arg: str) -> str:
         mgr = self.pipeline.consent_mgr
-        features = {"memory": "CONVERSATION_STORAGE", "faces": "FACE_RECOGNITION"}
+        features = {"memory": "CONVERSATION_STORAGE", "faces": "FACE_RECOGNITION", "voice": "VOICE_RECORDING"}
         parts = arg.lower().split()
         if len(parts) == 2 and parts[0] in features and parts[1] in ("on", "off"):
             on = parts[1] == "on"
@@ -246,9 +246,13 @@ class ChatSession:
                 return ("Memory saving is on." if on else
                         "Memory saving is off. Nothing new will be saved. Things already saved are kept; "
                         "use /delete-all to remove them.")
+            if parts[0] == "voice":
+                return ("Listening with the microphone is allowed. Note: transcription uses Google's online "
+                        "service and stays off unless MEMORA_ALLOW_CLOUD_ASR=1 is also set."
+                        if on else "Listening with the microphone is off.")
             return ("Face recognition is allowed. It only works with a camera and is not verified on real hardware."
                     if on else "Face recognition is off: faces will not be matched or stored.")
-        return "\n".join(self._consent_lines()) + "\nChange with: /consent memory on|off, /consent faces on|off"
+        return "\n".join(self._consent_lines()) + "\nChange with: /consent memory|faces|voice on|off"
 
     def _consent_lines(self) -> list[str]:
         mgr = self.pipeline.consent_mgr
@@ -259,7 +263,8 @@ class ChatSession:
                 return "not asked yet (off)"
             return "on" if mgr.is_consent_granted(f) else "off"
         return [f"Saving what you tell me: {state('CONVERSATION_STORAGE')}",
-                f"Face recognition: {state('FACE_RECOGNITION')}"]
+                f"Face recognition: {state('FACE_RECOGNITION')}",
+                f"Microphone listening: {state('VOICE_RECORDING')}"]
 
     def _safety_setting(self, cmd: str, arg: str) -> str:
         import re

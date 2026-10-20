@@ -4,6 +4,7 @@
 # before any commercial use (see docs/LICENSING_REVIEW.md).
 -r requirements.txt
 PyAudio==0.2.14
+SpeechRecognition==3.17.0
 pyttsx3==2.99
 faster-whisper==1.2.1
 insightface==1.0.1

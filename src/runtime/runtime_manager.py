@@ -180,6 +180,10 @@ class RuntimeManager:
 
         lines.append(f"\nSpeech Recognition")
         lines.append(f"  Status     : {'SIMULATED (typed/scripted input)' if sim_mic else 'NOT VERIFIED (no test transcription run)'}")
+        from src.audio.audio_listener import cloud_asr_allowed
+        lines.append("  Identity-learning transcription: "
+                     + ("Google online service (audio leaves this device) - ENABLED by MEMORA_ALLOW_CLOUD_ASR"
+                        if cloud_asr_allowed() else "online service disabled; typed input only"))
 
         from config import settings
         lines.append(f"\nMemory Database")

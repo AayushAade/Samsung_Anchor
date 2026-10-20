@@ -192,7 +192,8 @@ class StartupValidator:
     def check_optional_capabilities(self) -> HealthCheckItem:
         """Report which optional sensor/model/cloud packages are installed (not whether they work)."""
         import importlib.util
-        optional = {"faster_whisper": "speech-to-text", "pyaudio": "microphone", "pyttsx3": "voice output",
+        optional = {"faster_whisper": "speech-to-text", "speech_recognition": "microphone capture",
+                    "pyaudio": "microphone", "pyttsx3": "voice output",
                     "insightface": "face recognition", "mediapipe": "face landmarks", "google.genai": "Gemini"}
         missing = []
         for mod, label in optional.items():
