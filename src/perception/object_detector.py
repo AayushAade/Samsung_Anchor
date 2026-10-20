@@ -82,13 +82,13 @@ class ObjectDetector:
 
         if not use_live:
             if self.mode in ["SIMULATION", "AUTO"]:
-                print("[ObjectDetector] SIMULATION DETECTOR active (Fallback Simulation Profile)")
+                logger.debug("[ObjectDetector] SIMULATION DETECTOR active (Fallback Simulation Profile)")
                 return [obj for obj in self._seeded_objects.values() if obj.location == room]
             else:
-                print("[ObjectDetector] LIVE DETECTOR: No valid live camera frame available (returning empty detection list).")
+                logger.debug("[ObjectDetector] LIVE DETECTOR: No valid live camera frame available (returning empty detection list).")
                 return []
 
-        print(f"[ObjectDetector] LIVE DETECTOR active for frame_id={frame_id}")
+        logger.debug(f"[ObjectDetector] LIVE DETECTOR active for frame_id={frame_id}")
         now_str = datetime.now().strftime("%H:%M:%S")
         detected_items: List[DetectedObject] = []
 
@@ -170,10 +170,10 @@ class ObjectDetector:
             return self.detect_objects_from_frame(raw_frame=raw_frame, room=room, frame_id=frame_id)
 
         if self.mode in ["SIMULATION", "AUTO"]:
-            print("[ObjectDetector] SIMULATION DETECTOR active")
+            logger.debug("[ObjectDetector] SIMULATION DETECTOR active")
             return [obj for obj in self._seeded_objects.values() if obj.location == room]
         
-        print("[ObjectDetector] LIVE DETECTOR: No camera frame provided (returning empty detection list).")
+        logger.debug("[ObjectDetector] LIVE DETECTOR: No camera frame provided (returning empty detection list).")
         return []
 
     def add_object(self, obj: DetectedObject) -> None:

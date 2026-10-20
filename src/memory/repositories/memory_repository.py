@@ -6,6 +6,9 @@ from src.cognition.memory_query import MemoryQuery
 from datetime import datetime
 import uuid
 
+import logging
+logger = logging.getLogger(__name__)
+
 class DatabaseMemoryRepository:
     """
     SQLAlchemy backed repository for retrieving all relevant memories.
@@ -136,16 +139,16 @@ class DatabaseMemoryRepository:
         results.sort(key=lambda m: compute_metrics(m)[0], reverse=True)
 
         if results:
-            print(f"\n🧠 [Memory Ranking & Retrieval] Evaluated {len(results)} candidate memories:")
+            logger.debug(f"\n🧠 [Memory Ranking & Retrieval] Evaluated {len(results)} candidate memories:")
             for idx, m in enumerate(results[:5]):
                 f_score, r_sc, c_sc, i_sc, u_sc = compute_metrics(m)
                 lbl = m.title or (m.summary[:35] if m.summary else m.memory_id)
-                print(f"   Candidate #{idx+1}: [{m.memory_id}] {lbl}")
-                print(f"     • Recency={r_sc:.2f} | Confidence={c_sc:.2f} | Importance={i_sc:.2f} | Usefulness={u_sc:.2f} => Score={f_score:.3f}")
+                logger.debug(f"   Candidate #{idx+1}: [{m.memory_id}] {lbl}")
+                logger.debug(f"     • Recency={r_sc:.2f} | Confidence={c_sc:.2f} | Importance={i_sc:.2f} | Usefulness={u_sc:.2f} => Score={f_score:.3f}")
             winner = results[0]
             w_score = compute_metrics(winner)[0]
             w_lbl = winner.title or (winner.summary[:35] if winner.summary else winner.memory_id)
-            print(f"   🏆 Selected Winner: [{winner.memory_id}] {w_lbl} (Final Weighted Score: {w_score:.3f})\n")
+            logger.debug(f"   🏆 Selected Winner: [{winner.memory_id}] {w_lbl} (Final Weighted Score: {w_score:.3f})\n")
 
         return results
 

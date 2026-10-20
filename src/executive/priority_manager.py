@@ -15,6 +15,9 @@ from typing import Any, List, Optional
 
 from src.executive.executive_models import Goal, GoalType
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class PriorityManager:
     """
@@ -136,6 +139,6 @@ class PriorityManager:
             g.priority = compute_utility(g)
 
         goals.sort(key=lambda g: g.priority, reverse=True)
-        print(f"🎯 [Goal Arbitration] Arbitrated {len(goals)} goals. Top Executive Goal: '{goals[0].title}' (Utility Score: {goals[0].priority})")
+        logger.debug(f"🎯 [Goal Arbitration] Arbitrated {len(goals)} goals. Top Executive Goal: '{goals[0].title}' (Utility Score: {goals[0].priority})")
         return goals[0]
 

@@ -25,6 +25,9 @@ from src.executive.recovery_manager import RecoveryManager
 from src.executive.plan_validator import PlanValidator
 from src.executive.plan_explainer import PlanExplainer
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class ExecutiveEngine(ICognitiveSubsystem):
     """
@@ -210,7 +213,7 @@ class ExecutiveEngine(ICognitiveSubsystem):
             f"  • Action Plan     : Plan ID {plan.plan_id[:8]} with {len(plan.tasks)} task steps (Confidence: {plan.confidence:.2f})\n"
             f"  • Self-Reflection : Success={reflection.was_successful}, ConfSufficient={reflection.confidence_sufficient}\n"
         )
-        print(trace_output)
+        logger.debug(trace_output)
 
         return {
             "cycle": self._cycle_counter,

@@ -12,6 +12,9 @@ TRACK_EMBEDDING_WINDOW = 30
 from config import settings
 from src.utils.event_logger import log_event
 
+import logging
+logger = logging.getLogger(__name__)
+
 # Try dlib-based face_recognition
 try:
     import face_recognition
@@ -41,8 +44,7 @@ try:
 except ImportError:
     MEDIAPIPE_AVAILABLE = False
     if settings.DEBUG:
-        print("[Face Recognizer Warning] 'mediapipe' library not available.")
-
+        logger.warning("[Face Recognizer Warning] 'mediapipe' library not available.")
 def compute_iou(boxA, boxB):
     """Computes Intersection-over-Union (IoU) of two bounding boxes (top, right, bottom, left)."""
     tA, rA, bA, lA = boxA
@@ -104,16 +106,16 @@ class MemoraFaceRecognizer:
         if self.mock_mode:
             self.backend = "mock"
             if settings.DEBUG:
-                print("[Face Recognizer] Initialized mock simulator backend.")
+                logger.debug("[Face Recognizer] Initialized mock simulator backend.")
         elif FACE_RECOGNITION_AVAILABLE:
             self.backend = "face_recognition"
             self.face_recognition_active = True
             if settings.DEBUG:
-                print("[Face Recognizer] Initialized dlib-based 'face_recognition' backend.")
+                logger.debug("[Face Recognizer] Initialized dlib-based 'face_recognition' backend.")
         elif INSIGHTFACE_AVAILABLE:
             self.backend = "insightface"
             if settings.DEBUG:
-                print("[Face Recognizer] Initialized InsightFace backend.")
+                logger.debug("[Face Recognizer] Initialized InsightFace backend.")
         elif MEDIAPIPE_AVAILABLE:
             self.backend = "mediapipe"
             try:
@@ -125,15 +127,15 @@ class MemoraFaceRecognizer:
                     min_tracking_confidence=0.5
                 )
                 if settings.DEBUG:
-                    print("[Face Recognizer] Initialized MediaPipe FaceMesh fallback backend.")
+                    logger.debug("[Face Recognizer] Initialized MediaPipe FaceMesh fallback backend.")
             except Exception as e:
                 if settings.DEBUG:
-                    print(f"[Face Recognizer Warning] Failed to initialize MediaPipe: {e}. Enabling mock fallback.")
+                    logger.warning(f"[Face Recognizer Warning] Failed to initialize MediaPipe: {e}. Enabling mock fallback.")
                 self.mock_mode = True
                 self.backend = "mock"
         else:
             if settings.DEBUG:
-                print("[Face Recognizer Warning] No computer vision backends available. Forcing mock fallback mode.")
+                logger.warning("[Face Recognizer Warning] No computer vision backends available. Forcing mock fallback mode.")
             self.mock_mode = True
             self.backend = "mock"
 
@@ -146,11 +148,10 @@ class MemoraFaceRecognizer:
                     self.scrfd_detector = SCRFD(model_file=model_path)
                     self.scrfd_detector.prepare(ctx_id=-1) # -1 is CPU inference
                     if settings.DEBUG:
-                        print("[Face Recognizer] Loaded SCRFD face detection model.")
+                        logger.debug("[Face Recognizer] Loaded SCRFD face detection model.")
                 except Exception as e:
                     if settings.DEBUG:
-                        print(f"[Face Recognizer Warning] Failed to initialize SCRFD model: {e}")
-
+                        logger.warning(f"[Face Recognizer Warning] Failed to initialize SCRFD model: {e}")
     def get_diagnostics(self) -> dict:
         return {
             "backend": self.backend,
@@ -202,7 +203,7 @@ class MemoraFaceRecognizer:
         
         embedding = np.concatenate([distances, np.array(extra_distances)])
         if settings.DEBUG:
-            print(f"[Debug Embedding] First 5 values: {embedding[:5]}")
+            logger.debug(f"[Debug Embedding] First 5 values: {embedding[:5]}")
         return embedding
 
     def _update_missed_tracks(self, now_time, database, associated_tracks=set()):
@@ -215,11 +216,11 @@ class MemoraFaceRecognizer:
                 last_seen_diff = now_time - track.get("last_seen_time", now_time)
                 if mf <= 30 and last_seen_diff <= 60.0:
                     if settings.DEBUG:
-                        print(f"Keeping [{track_id}] alive: missed_frames = {mf}/30")
+                        logger.debug(f"Keeping [{track_id}] alive: missed_frames = {mf}/30")
                 else:
                     info_t = database.get_identity(track_id)
                     disp_t = info_t["display_name"] if (info_t and info_t.get("status") == "confirmed") else track_id
-                    print(f"Removing [{track_id}] because: missed_frames = {mf} - timeout exceeded")
+                    logger.debug(f"Removing [{track_id}] because: missed_frames = {mf} - timeout exceeded")
                     log_event("face_leave", f"Face leaves scene: [{disp_t}]")
                     stale_keys.append(track_id)
         for k in stale_keys:
@@ -294,7 +295,7 @@ class MemoraFaceRecognizer:
                             face_locations.append((top, right, bottom, left))
                 except Exception as e:
                     if settings.DEBUG:
-                        print(f"[Face Recognizer Warning] SCRFD detection failed: {e}. Falling back to dlib.")
+                        logger.warning(f"[Face Recognizer Warning] SCRFD detection failed: {e}. Falling back to dlib.")
                     face_locations = face_recognition.face_locations(rgb_frame)
             else:
                 face_locations = face_recognition.face_locations(rgb_frame)
@@ -353,7 +354,7 @@ class MemoraFaceRecognizer:
             best_det_score = -1.0
             
             if settings.DEBUG:
-                print(f"\n--- Association Check for Track [{track_id}] (Frame {self.frame_counter}) ---")
+                logger.debug(f"\n--- Association Check for Track [{track_id}] (Frame {self.frame_counter}) ---")
             
             for idx, det in enumerate(unassociated_detections):
                 iou = compute_iou(det["box"], track_box)
@@ -375,11 +376,11 @@ class MemoraFaceRecognizer:
                     score = 1.0 / (dist + 1)
                 
                 if settings.DEBUG:
-                    print(f"Detection {idx}:")
-                    print(f"  IoU = {iou:.3f}")
-                    print(f"  Center Distance = {dist:.1f}px")
-                    print(f"  Embedding Distance = {emb_dist:.3f}")
-                    print(f"  Spatial Match = {is_match} (score = {score:.3f})")
+                    logger.debug(f"Detection {idx}:")
+                    logger.debug(f"  IoU = {iou:.3f}")
+                    logger.debug(f"  Center Distance = {dist:.1f}px")
+                    logger.debug(f"  Embedding Distance = {emb_dist:.3f}")
+                    logger.debug(f"  Spatial Match = {is_match} (score = {score:.3f})")
                     
                 if is_match and score > best_det_score:
                     best_det_score = score
@@ -405,15 +406,15 @@ class MemoraFaceRecognizer:
 
                 # Print exact requested format
                 if settings.DEBUG:
-                    print(f"\nFrame {self.frame_counter}")
-                    print(f"Detection {best_det_idx}")
-                    print(f"\nAssociated with:")
-                    print(f"{track_id}")
-                    print(f"\nIoU = {compute_iou(det['box'], track_box):.3f}")
-                    print(f"\nCenter Distance = {np.hypot(det['center'][0] - track_center[0], det['center'][1] - track_center[1]):.1f}")
-                    print(f"\nEmbedding Distance = {emb_dist:.3f}")
-                    print(f"\nmatched = True")
-                    print(f"\nReset missed_frames = 0\n")
+                    logger.debug(f"\nFrame {self.frame_counter}")
+                    logger.debug(f"Detection {best_det_idx}")
+                    logger.debug(f"\nAssociated with:")
+                    logger.debug(f"{track_id}")
+                    logger.debug(f"\nIoU = {compute_iou(det['box'], track_box):.3f}")
+                    logger.debug(f"\nCenter Distance = {np.hypot(det['center'][0] - track_center[0], det['center'][1] - track_center[1]):.1f}")
+                    logger.debug(f"\nEmbedding Distance = {emb_dist:.3f}")
+                    logger.debug(f"\nmatched = True")
+                    logger.debug(f"\nReset missed_frames = 0\n")
                 
                 # State transitions
                 if track["state"] == "STABILIZING" or track["state"] == "UNKNOWN":
@@ -593,9 +594,9 @@ class MemoraFaceRecognizer:
                     
                     # Print exact requested format
                     if settings.DEBUG:
-                        print(f"\nFrame {self.frame_counter}")
-                        print("No existing track matched.")
-                        print("\nCreating Temp_Candidate.\n")
+                        logger.debug(f"\nFrame {self.frame_counter}")
+                        logger.debug("No existing track matched.")
+                        logger.debug("\nCreating Temp_Candidate.\n")
                     
                     results.append({
                         "box": det["box"],

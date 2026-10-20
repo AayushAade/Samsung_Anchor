@@ -69,6 +69,9 @@ from src.core.cognitive_stream import CognitiveStream
 import traceback
 from src.interaction.presence_engine import PresenceEngine
 
+import logging
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from src.memory.database import MemoraDatabase
 
@@ -268,7 +271,7 @@ class CognitivePipeline:
             if raw_u_speech:
                 resolution = self.cognitive_kernel.working_memory.resolve_reference(raw_u_speech)
                 if resolution.get("has_reference") and resolution.get("resolved_query"):
-                    print(f"🗣️ [Working Memory Anaphora] Resolved '{raw_u_speech}' -> '{resolution['resolved_query']}' (Referent: {resolution.get('resolved_referent')})")
+                    logger.debug(f"🗣️ [Working Memory Anaphora] Resolved '{raw_u_speech}' -> '{resolution['resolved_query']}' (Referent: {resolution.get('resolved_referent')})")
                     recognition_result["user_speech"] = resolution["resolved_query"]
 
             # --------------------------------------------------
@@ -306,7 +309,7 @@ class CognitivePipeline:
             
             # Optional Debugging output:
             mem_count = len(cognitive_context.memory.memories) if cognitive_context.memory else 0
-            print(f"[DEBUG] Context Gathered. Memories: {mem_count}, Time: {cognitive_context.temporal.time_of_day if cognitive_context.temporal else 'Unknown'}")
+            logger.debug(f"[DEBUG] Context Gathered. Memories: {mem_count}, Time: {cognitive_context.temporal.time_of_day if cognitive_context.temporal else 'Unknown'}")
             
             # --------------------------------------------------
             # 3. Goal Inference
@@ -445,8 +448,7 @@ class CognitivePipeline:
                             self.last_speech_delivered = bool(self.runtime_manager.speaker.speak(action.message))
                         except Exception as speak_err:
                             self.last_speech_delivered = False
-                            print(f"⚠️ [Speaker] Speech output failed: {speak_err}")
-
+                            logger.warning(f"⚠️ [Speaker] Speech output failed: {speak_err}")
                 # MEMORA's own replies are not stored as memories about the person (they
                 # could later be recalled as if they were facts); the exchange is
                 # recorded as an episode below.
@@ -485,10 +487,9 @@ class CognitivePipeline:
                     )
                     self.database.episode_repo.add_episode(ep)
                     episode_written = True
-                    print(f"📅 [Episode Logging] Persisted episode for {p_name}: '{ep_summary}' into database.")
+                    logger.debug(f"📅 [Episode Logging] Persisted episode for {p_name}: '{ep_summary}' into database.")
             except Exception as ep_err:
-                print(f"⚠️ [Episode Logging Error] Failed to persist episode: {ep_err}")
-
+                logger.warning(f"⚠️ [Episode Logging Error] Failed to persist episode: {ep_err}")
             total_latency = time.perf_counter() - cycle_start
             metrics.stop_timer("latency.cognition.total")
 
@@ -688,8 +689,7 @@ class CognitivePipeline:
             
         except Exception as e:
             self.last_cycle_error = repr(e)
-            print(f"[CognitivePipeline] FATAL ERROR: {e}")
-            traceback.print_exc()
+            logger.exception("[CognitivePipeline] Cycle failed: %s", e)
             # Graceful degradation: If anything fails, don't crash the background thread.
             # We can optionally issue a generic error interaction or just fail silently.
             pass

@@ -28,6 +28,37 @@ import warnings
 from typing import Optional
 
 logging.getLogger("onnxruntime").setLevel(logging.ERROR)
+
+
+def configure_logging(verbose: bool = False) -> str:
+    """
+    Console: warnings and errors only (debug with --verbose).
+    File: data/logs/memora.log, rotated at 5 MB x 3, owner-only because it can
+    contain what the person said.
+    """
+    from logging.handlers import RotatingFileHandler
+    from config.paths import DATA_DIR
+
+    log_dir = DATA_DIR / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "memora.log"
+    if not log_path.exists():
+        os.close(os.open(log_path, os.O_WRONLY | os.O_CREAT, 0o600))
+    os.chmod(log_path, 0o600)
+
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG if verbose else logging.INFO)
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG if verbose else logging.WARNING)
+    console.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    file_handler = RotatingFileHandler(log_path, maxBytes=5 * 1024 * 1024, backupCount=3)
+    file_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root.addHandler(console)
+    root.addHandler(file_handler)
+    return str(log_path)
 warnings.filterwarnings("ignore")
 
 from src.application.factory import build_application
@@ -368,6 +399,7 @@ def cli():
     parser.add_argument("--max-cycles", type=int, default=None, help="Maximum execution cycles (default: continuous)")
     parser.add_argument("--vision-standalone", action="store_true", help="Run standalone OpenCV vision detection and tracking loop")
     parser.add_argument("--show-memory", action="store_true", help="Print memory timeline, visitors, conversations, objects, facts, and DB stats")
+    parser.add_argument("--verbose", action="store_true", help="Show debug diagnostics on the console")
     parser.add_argument("--check", action="store_true", help="Run diagnostics (dependencies, user database integrity, optional capabilities) without opening the camera; exit 1 on failure")
     parser.add_argument("--backup", nargs="?", const="backups", metavar="DIR", help="Write a verified backup of the configured database (default dir: ./backups)")
     parser.add_argument("--restore", metavar="BACKUP_DIR", help="Restore the configured database from a backup directory (stop MEMORA first; asks for confirmation)")
@@ -380,6 +412,7 @@ def cli():
     mode_group.add_argument("--simulation", action="store_true", help="Run in simulated mode with synthetic perception")
 
     args = parser.parse_args()
+    configure_logging(verbose=args.verbose)
 
     if args.show_memory:
         show_memory_timeline()
@@ -423,4 +456,5 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         cli()
     else:
+        configure_logging()
         main(max_cycles=None)

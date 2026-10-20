@@ -1,6 +1,9 @@
 from typing import List, Dict, Optional
 from src.cognition.context.provider import ContextProvider
 
+import logging
+logger = logging.getLogger(__name__)
+
 class ContextProviderRegistry:
     """
     Service locator for Context Providers.
@@ -12,7 +15,7 @@ class ContextProviderRegistry:
         
     def register(self, provider: ContextProvider) -> None:
         self._providers[provider.name] = provider
-        print(f"[ContextRegistry] Registered Provider: {provider.name} ({provider.capability_domain})")
+        logger.debug(f"[ContextRegistry] Registered Provider: {provider.name} ({provider.capability_domain})")
         
     def disable(self, provider_name: str) -> None:
         self._disabled.add(provider_name)

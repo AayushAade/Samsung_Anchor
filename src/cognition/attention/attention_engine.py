@@ -13,6 +13,9 @@ from src.cognition.attention.scorers import (
     ConfidenceScorer,
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
 class CognitiveAttentionEngine:
     """
     The Executive Function of Samsung Anchor.
@@ -74,7 +77,7 @@ class CognitiveAttentionEngine:
         highest_score = scored_memories[0].attention_score
         if highest_score < self.GLOBAL_ATTENTION_THRESHOLD:
             # Silence: No memory reached the threshold to warrant interrupting the user
-            print(f"[AttentionEngine] Highest score {highest_score:.1f} < Threshold {self.GLOBAL_ATTENTION_THRESHOLD}. Choosing SILENCE.")
+            logger.debug(f"[AttentionEngine] Highest score {highest_score:.1f} < Threshold {self.GLOBAL_ATTENTION_THRESHOLD}. Choosing SILENCE.")
             return AttentionDecision(should_interrupt=False, selected_memories=[])
             
         # Select top N memories that passed
@@ -82,5 +85,5 @@ class CognitiveAttentionEngine:
         # but for now, if we interrupt, we'll give the LLM the top few items to formulate context.
         selected = [sm.memory for sm in scored_memories[:self.max_attention_items]]
         
-        print(f"[AttentionEngine] Highest score {highest_score:.1f} >= Threshold. Choosing INTERRUPT with {len(selected)} items.")
+        logger.debug(f"[AttentionEngine] Highest score {highest_score:.1f} >= Threshold. Choosing INTERRUPT with {len(selected)} items.")
         return AttentionDecision(should_interrupt=True, selected_memories=selected)
