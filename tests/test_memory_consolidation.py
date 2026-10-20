@@ -70,7 +70,7 @@ class TestMemoryModels:
 
 class TestMemoryRepository:
     def test_repository_active_and_archive(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         rec = MemoryRecord(content="Test Memory", category=MemoryCategory.OBSERVATION)
         repo.add_record(rec)
         assert len(repo.get_all_active()) >= 3  # Includes baseline records
@@ -106,7 +106,7 @@ class TestMemoryEncoder:
 
 class TestMemoryConsolidator:
     def test_consolidate_duplicate(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         consolidator = MemoryConsolidator(repo)
         rec1 = MemoryRecord(content="Duplicate Content", category=MemoryCategory.OBSERVATION, importance=0.50)
         consolidator.consolidate_new_record(rec1)
@@ -124,13 +124,13 @@ class TestMemoryConsolidator:
 
 class TestMemoryIndex:
     def test_query_by_entity(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         idx = MemoryIndex(repo)
         results = idx.query_by_entity("Margaret")
         assert len(results) >= 1
 
     def test_query_by_category(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         idx = MemoryIndex(repo)
         results = idx.query_by_category(MemoryCategory.KNOWLEDGE_FACT)
         assert len(results) >= 1
@@ -142,7 +142,7 @@ class TestMemoryIndex:
 
 class TestMemoryRecallEngine:
     def test_recall_by_keyword(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         idx = MemoryIndex(repo)
         mre = MemoryRecallEngine(repo, idx)
         results, explanation = mre.recall_by_keyword("Glasses")
@@ -156,7 +156,7 @@ class TestMemoryRecallEngine:
 
 class TestContextAndAssociative:
     def test_context_reconstructor(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         cr = ContextReconstructor(repo)
         rec = repo.get_all_active()[0]
         ctx = cr.reconstruct_context(rec)
@@ -178,7 +178,7 @@ class TestRetentionAndForgetting:
         assert RetentionManager.is_expired(rec_clinical) is False
 
     def test_forgetting_manager(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         fm = ForgettingManager(repo)
         archived, audit = fm.evaluate_and_archive_expired()
         assert isinstance(archived, list)
@@ -190,12 +190,12 @@ class TestRetentionAndForgetting:
 
 class TestValidatorAndExplainer:
     def test_memory_validator(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         val = MemoryValidator.validate_repository(repo)
         assert val["is_valid"] is True
 
     def test_memory_explainer(self):
-        repo = MemoryRepository()
+        repo = MemoryRepository(seed_demo_data=True)
         rec = repo.get_all_active()[0]
         exp = MemoryExplainer.generate_recall_explanation("Keyword", [rec], "Recall Rationale")
         assert "Long-Term Memory Recall Explanation" in exp
@@ -207,14 +207,14 @@ class TestValidatorAndExplainer:
 
 class TestMemoryEngine:
     def test_process_cycle(self):
-        me = MemoryEngine()
+        me = MemoryEngine(seed_demo_data=True)
         summary = me.process_cycle(user_speech="Where are my glasses?", location="Living Room")
         assert summary["cycle"] == 1
         assert summary["active_memories_count"] >= 3
         assert summary["memory_latency_ms"] >= 0.0
 
     def test_reset(self):
-        me = MemoryEngine()
+        me = MemoryEngine(seed_demo_data=True)
         me.process_cycle(location="Living Room")
         me.reset()
         assert me._cycle_counter == 0

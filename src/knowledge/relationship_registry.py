@@ -18,12 +18,15 @@ class RelationshipRegistry:
     Thread-safe registry for directional entity relationships.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False) -> None:
         self._relationships: Dict[str, Relationship] = {}
         self._outgoing_index: Dict[str, List[str]] = {}
         self._incoming_index: Dict[str, List[str]] = {}
         self._lock = threading.Lock()
-        self._seed_baseline_relationships()
+        # Fictional sample data: opt-in only (demos/tests), never in real use.
+        self.seed_demo_data = seed_demo_data
+        if seed_demo_data:
+            self._seed_baseline_relationships()
 
     def register_relationship(self, relationship: Relationship) -> Relationship:
         with self._lock:

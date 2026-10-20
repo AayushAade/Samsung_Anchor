@@ -23,11 +23,14 @@ class FactRepository:
 
     MAX_FACTS = 1000
 
-    def __init__(self, max_facts: int = 1000) -> None:
+    def __init__(self, max_facts: int = 1000, seed_demo_data: bool = False) -> None:
         self.max_facts = max_facts
         self._facts: List[SemanticFact] = []
         self._lock = threading.Lock()
-        self._seed_baseline_facts()
+        # Fictional sample data: opt-in only (demos/tests), never in real use.
+        self.seed_demo_data = seed_demo_data
+        if seed_demo_data:
+            self._seed_baseline_facts()
 
     def add_fact(self, fact: SemanticFact) -> SemanticFact:
         with self._lock:

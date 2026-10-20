@@ -7,9 +7,12 @@ class RelationshipManager:
     Manages relationship profiles and performs shared memory ranking for the patient.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False) -> None:
         self._profiles: Dict[str, RelationshipProfile] = {}
-        self._seed_default_profiles()
+        # Fictional sample data: opt-in only (demos/tests), never in real use.
+        self.seed_demo_data = seed_demo_data
+        if seed_demo_data:
+            self._seed_default_profiles()
 
     def _seed_default_profiles(self) -> None:
         """Seed default relationship profiles (e.g., Sarah)."""

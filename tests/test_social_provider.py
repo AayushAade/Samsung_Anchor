@@ -3,13 +3,13 @@ from src.interaction.events import PresenceEvent, PresenceEventType
 
 
 def test_social_provider_name_and_domain():
-    provider = SocialContextProvider()
+    provider = SocialContextProvider(demo_data=True)
     assert provider.name == "SocialContextProvider"
     assert provider.capability_domain == "social"
 
 
 def test_social_provider_fetch_context_known():
-    provider = SocialContextProvider()
+    provider = SocialContextProvider(demo_data=True)
     event = PresenceEvent(
         type=PresenceEventType.PERSON_ARRIVED,
         face_id="Face_1",
@@ -31,7 +31,7 @@ def test_social_provider_fetch_context_known():
 
 
 def test_social_provider_fetch_context_unknown():
-    provider = SocialContextProvider()
+    provider = SocialContextProvider(demo_data=True)
     event = PresenceEvent(
         type=PresenceEventType.PERSON_ARRIVED,
         face_id="Face_Unknown",

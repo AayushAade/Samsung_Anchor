@@ -7,9 +7,13 @@ class CaregiverManager:
     Manages multi-caregiver access, roles, and notification preferences.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False) -> None:
         self._caregivers: Dict[str, Caregiver] = {}
+        # Fictional caregivers (with phone numbers) are demo data only.
+        if seed_demo_data:
+            self._seed_demo_caregivers()
 
+    def _seed_demo_caregivers(self) -> None:
         # Seed primary caregiver
         primary = Caregiver(
             caregiver_id="CG-001",

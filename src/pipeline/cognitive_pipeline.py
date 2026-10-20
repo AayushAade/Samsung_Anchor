@@ -104,7 +104,7 @@ class CognitivePipeline:
         self.context_registry.register(MemoryContextProvider(self.memory_engine))
         self.context_registry.register(TemporalContextProvider())
         self.context_registry.register(ContinuityContextProvider(demo_data=demo_data))
-        self.context_registry.register(SocialContextProvider())
+        self.context_registry.register(SocialContextProvider(demo_data=demo_data))
         self.context_registry.register(AssistanceContextProvider(demo_data=demo_data))
         
         self.context_fusion_engine = ContextFusionEngine(self.context_registry)
@@ -119,7 +119,7 @@ class CognitivePipeline:
 
         # Setup Clinical Ecosystem Layer
         self.patient_profile_mgr = PatientProfileManager()
-        self.caregiver_mgr = CaregiverManager()
+        self.caregiver_mgr = CaregiverManager(seed_demo_data=demo_data)
         # Person/caregiver-entered schedules persist in the user's database; demo
         # data is never written there.
         from src.clinical.care_store import CareStore
@@ -195,10 +195,10 @@ class CognitivePipeline:
         self.experience_engine = ExperienceEngine()
 
         # Phase 28 — Semantic Knowledge Graph & World Model
-        self.knowledge_engine = KnowledgeEngine()
+        self.knowledge_engine = KnowledgeEngine(seed_demo_data=demo_data)
 
         # Phase 29 — Long-Term Memory Consolidation Framework
-        self.ltm_memory_engine = LTMMemoryEngine()
+        self.ltm_memory_engine = LTMMemoryEngine(seed_demo_data=demo_data)
 
         # Phase 30 — Clinical Runtime, Observability & Deployment Framework
         self.central_runtime = CentralRuntimeEngine()

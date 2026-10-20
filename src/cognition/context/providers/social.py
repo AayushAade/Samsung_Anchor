@@ -14,8 +14,8 @@ class SocialContextProvider(ContextProvider):
     Retrieves rich relationship profiles, visitor context, and shared memories.
     """
 
-    def __init__(self, relationship_manager: Optional[RelationshipManager] = None) -> None:
-        self.relationship_manager = relationship_manager or RelationshipManager()
+    def __init__(self, relationship_manager: Optional[RelationshipManager] = None, demo_data: bool = False) -> None:
+        self.relationship_manager = relationship_manager or RelationshipManager(seed_demo_data=demo_data)
 
     @property
     def name(self) -> str:

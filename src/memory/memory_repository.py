@@ -17,11 +17,14 @@ class MemoryRepository:
     Thread-safe repository for cognitive memory records.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False) -> None:
         self._active_memories: Dict[str, MemoryRecord] = {}
         self._archived_memories: Dict[str, MemoryRecord] = {}
         self._lock = threading.Lock()
-        self._seed_baseline_memories()
+        # Fictional sample data: opt-in only (demos/tests), never in real use.
+        self.seed_demo_data = seed_demo_data
+        if seed_demo_data:
+            self._seed_baseline_memories()
 
     def add_record(self, record: MemoryRecord) -> MemoryRecord:
         with self._lock:

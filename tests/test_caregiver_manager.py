@@ -3,7 +3,7 @@ from src.clinical.clinical_models import Caregiver, CaregiverPermission, Caregiv
 
 
 def test_caregiver_manager_permissions():
-    mgr = CaregiverManager()
+    mgr = CaregiverManager(seed_demo_data=True)
     primary = mgr.get_primary_caregiver()
     assert primary is not None
     assert primary.name == "Sarah Jenkins"

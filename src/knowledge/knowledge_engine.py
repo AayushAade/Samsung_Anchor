@@ -33,15 +33,16 @@ class KnowledgeEngine(ICognitiveSubsystem):
     Central Knowledge Subsystem Orchestrator.
     """
 
-    def __init__(self) -> None:
-        self.entity_registry = EntityRegistry()
-        self.relationship_registry = RelationshipRegistry()
+    def __init__(self, seed_demo_data: bool = False) -> None:
+        self.seed_demo_data = seed_demo_data
+        self.entity_registry = EntityRegistry(seed_demo_data=seed_demo_data)
+        self.relationship_registry = RelationshipRegistry(seed_demo_data=seed_demo_data)
         self.graph = KnowledgeGraph(self.entity_registry, self.relationship_registry)
         self.ontology_manager = OntologyManager()
-        self.fact_repository = FactRepository()
+        self.fact_repository = FactRepository(seed_demo_data=seed_demo_data)
         self.query_engine = KnowledgeQueryEngine(self.graph)
         self.traverser = GraphTraverser(self.graph)
-        self.temporal_manager = TemporalKnowledgeManager()
+        self.temporal_manager = TemporalKnowledgeManager(seed_demo_data=seed_demo_data)
         self._cycle_counter = 0
         self._status = "INITIALIZED"
         self._lock = threading.RLock()
@@ -136,6 +137,7 @@ class KnowledgeEngine(ICognitiveSubsystem):
             self.entity_registry.clear()
             self.relationship_registry.clear()
             self.fact_repository.clear()
-            self.entity_registry._seed_baseline_entities()
-            self.relationship_registry._seed_baseline_relationships()
-            self.fact_repository._seed_baseline_facts()
+            if self.seed_demo_data:
+                self.entity_registry._seed_baseline_entities()
+                self.relationship_registry._seed_baseline_relationships()
+                self.fact_repository._seed_baseline_facts()

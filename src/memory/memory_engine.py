@@ -33,8 +33,8 @@ class MemoryEngine(ICognitiveSubsystem):
     Central Long-Term Memory Subsystem Orchestrator.
     """
 
-    def __init__(self, repository: Optional[Any] = None) -> None:
-        self.repository = repository if isinstance(repository, MemoryRepository) else MemoryRepository()
+    def __init__(self, repository: Optional[Any] = None, seed_demo_data: bool = False) -> None:
+        self.repository = repository if isinstance(repository, MemoryRepository) else MemoryRepository(seed_demo_data=seed_demo_data)
         self.consolidator = MemoryConsolidator(self.repository)
         self.index = MemoryIndex(self.repository)
         self.recall_engine = MemoryRecallEngine(self.repository, self.index)

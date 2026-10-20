@@ -51,8 +51,8 @@ class ObjectDetector:
             is_moving=False,
             bounding_box=[400, 100, 60, 180],
         )
-        self._seeded_objects["Donepezil Medication Box"] = DetectedObject(
-            object_name="Donepezil Medication Box",
+        self._seeded_objects["Medication Box"] = DetectedObject(
+            object_name="Medication Box",
             location=RoomLocation.KITCHEN,
             confidence=0.98,
             last_seen=now_str,

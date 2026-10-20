@@ -67,7 +67,7 @@ class TestKnowledgeModels:
 
 class TestRegistries:
     def test_entity_registry(self):
-        reg = EntityRegistry()
+        reg = EntityRegistry(seed_demo_data=True)
         ent = reg.get_entity_by_name("Reading Glasses")
         assert ent is not None
         assert ent.entity_type == EntityType.OBJECT
@@ -76,7 +76,7 @@ class TestRegistries:
         assert len(meds) >= 1
 
     def test_relationship_registry(self):
-        reg = RelationshipRegistry()
+        reg = RelationshipRegistry(seed_demo_data=True)
         rels = reg.get_outgoing_relationships("ent-glasses")
         assert len(rels) >= 1
 
@@ -87,7 +87,7 @@ class TestRegistries:
 
 class TestGraphAndOntology:
     def test_knowledge_graph(self):
-        graph = KnowledgeGraph()
+        graph = KnowledgeGraph(seed_demo_data=True)
         neighbors = graph.get_neighbors("ent-glasses")
         assert len(neighbors) >= 1
 
@@ -102,7 +102,7 @@ class TestGraphAndOntology:
 
 class TestQueryAndTraverser:
     def test_query_engine(self):
-        graph = KnowledgeGraph()
+        graph = KnowledgeGraph(seed_demo_data=True)
         qe = KnowledgeQueryEngine(graph)
         objs = qe.find_objects_in_room("Living Room")
         assert len(objs) >= 1
@@ -115,7 +115,7 @@ class TestQueryAndTraverser:
         assert len(rooms) >= 1
 
     def test_graph_traverser_bfs(self):
-        graph = KnowledgeGraph()
+        graph = KnowledgeGraph(seed_demo_data=True)
         gt = GraphTraverser(graph)
         path, steps = gt.find_shortest_path("ent-glasses", "ent-margaret")
         assert len(path) >= 2
@@ -128,12 +128,12 @@ class TestQueryAndTraverser:
 
 class TestValidatorAndTemporal:
     def test_semantic_validator(self):
-        graph = KnowledgeGraph()
+        graph = KnowledgeGraph(seed_demo_data=True)
         val = SemanticValidator.validate_graph(graph)
         assert val["is_valid"] is True
 
     def test_temporal_knowledge(self):
-        tkm = TemporalKnowledgeManager()
+        tkm = TemporalKnowledgeManager(seed_demo_data=True)
         tkm.record_transition("ent-glasses", "Reading Glasses", "Living Room", "Kitchen")
         history = tkm.get_location_history("ent-glasses")
         assert len(history) >= 2
@@ -145,14 +145,14 @@ class TestValidatorAndTemporal:
 
 class TestKnowledgeEngine:
     def test_process_cycle(self):
-        ke = KnowledgeEngine()
+        ke = KnowledgeEngine(seed_demo_data=True)
         summary = ke.process_cycle(location="Living Room")
         assert summary["cycle"] == 1
         assert summary["entities_count"] >= 8
         assert summary["knowledge_latency_ms"] >= 0.0
 
     def test_reset(self):
-        ke = KnowledgeEngine()
+        ke = KnowledgeEngine(seed_demo_data=True)
         ke.process_cycle(location="Living Room")
         ke.reset()
         assert ke._cycle_counter == 0
