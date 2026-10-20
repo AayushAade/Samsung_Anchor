@@ -32,6 +32,7 @@ def test_backup_restore_round_trip(tmp_path):
 
     result = restore_backup(backup, MemoraDatabase(path).db_path)
     assert result["pre_restore_backup"] and os.path.isdir(result["pre_restore_backup"])
+    assert os.listdir(result["pre_restore_backup"])  # raw copies of the replaced files
     restored = MemoraDatabase(path)
     assert "Riya" in ConversationalMemory(restored).respond("Who is my daughter?")
     assert restored.check_integrity()["ok"] and len(restored.vector_store) == 1
@@ -57,3 +58,16 @@ def test_manifest_records_row_counts(tmp_path):
     manifest = json.load(open(os.path.join(backup, "manifest.json")))
     assert manifest["row_counts"]["identities"] == 1
     assert manifest["row_counts"]["relevant_memories"] == 1
+
+
+def test_restore_works_when_live_database_is_corrupt(tmp_path):
+    db = _db_with_data(str(tmp_path / "live.sqlite"))
+    backup = create_backup(db.db_path, str(tmp_path / "b"))
+    path = db.db_path
+    db.close()
+    with open(path, "wb") as f:
+        f.write(b"not a database")
+    result = restore_backup(backup, path)
+    pre = result["pre_restore_backup"]
+    assert open(os.path.join(pre, os.path.basename(path)), "rb").read() == b"not a database"
+    assert "Riya" in ConversationalMemory(MemoraDatabase(path)).respond("Who is my daughter?")

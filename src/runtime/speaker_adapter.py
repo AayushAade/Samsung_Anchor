@@ -50,8 +50,17 @@ class SimulatedSpeakerAdapter(SpeakerAdapter):
         self.volume = 80.0
 
     def speak(self, text: str) -> bool:
+        if self.status != DeviceStatus.HEALTHY:
+            return False  # injected failure: report it, never pretend speech was delivered
         print(f"[SimulatedSpeaker] Speaking: '{text}' (Vol: {self.volume}%)")
         return True
+
+    def inject_failure(self) -> None:
+        """Simulation only: make the speaker unavailable."""
+        self.status = DeviceStatus.FAULTED
+
+    def recover(self) -> None:
+        self.status = DeviceStatus.HEALTHY
 
     def play_chime(self) -> bool:
         print(f"[SimulatedSpeaker] Play Chime (Vol: {self.volume}%)")

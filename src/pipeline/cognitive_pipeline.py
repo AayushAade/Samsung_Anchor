@@ -7,6 +7,7 @@ Executes one complete cognitive cycle.
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 import time
+from datetime import datetime
 
 from src.cognition.memory_engine import MemoryEngine
 from src.cognition.context_restoration_engine import ContextRestorationEngine
@@ -91,6 +92,11 @@ class CognitivePipeline:
         # demo_data loads fictional medication schedules and object sightings for
         # scripted demonstrations. It must stay off for real use.
         self.demo_data = demo_data
+        # Injectable clock (simulation and tests); every time-dependent decision uses it.
+        self.clock = datetime.now
+        # Optional battery of a portable device (SimulatedBattery in simulation). None = no
+        # battery-powered device; the host computer's battery is deliberately not used.
+        self.battery = None
         self.presence_engine = PresenceEngine()
 
         # Inject the real SQLAlchemy-backed memory repository
@@ -239,6 +245,9 @@ class CognitivePipeline:
         Gracefully shutdown hardware adapters and clear runtime resources.
         """
         self.runtime_manager.shutdown_hardware()
+        # Each pipeline owns a context-fusion thread pool; without this, every
+        # restart (and /delete-all, which rebuilds the session) leaked its threads.
+        self.context_fusion_engine.close()
 
     def process(
         self,
@@ -357,7 +366,7 @@ class CognitivePipeline:
             runtime_engine_summary = self.central_runtime.process_cycle()
             
             u_speech = recognition_result.get("user_speech") or self._latest_transcript
-            missed_meds = [m.medication_name for m in self.medication_mgr.get_missed_medications()]
+            missed_meds = [m.medication_name for m in self.medication_mgr.get_missed_medications(now=self.clock())]
             is_emerg = self.emergency_mgr.get_current_state().active
 
             self.current_patient_state = self.patient_state_evaluator.evaluate(
@@ -447,6 +456,17 @@ class CognitivePipeline:
             elif action is not None and care_decision.message_override:
                 action = InteractionAction(type=action.type, message=care_decision.message_override)
 
+            # Battery notices (one per threshold crossing) never dilute urgent guidance.
+            device_notice = False
+            if self.battery is not None and care_decision.principle != CarePrinciple.EMERGENCY_ESCALATION:
+                notice = self.battery.notice()
+                if notice:
+                    if action is not None and getattr(action, "message", None):
+                        action = InteractionAction(type=action.type, message=f"{action.message} {notice}")
+                    else:
+                        action = _speak(notice)
+                    device_notice = True
+
             # Final deterministic safety check on the live output path: whatever
             # produced the message, unsupported claims are blocked before delivery.
             self.last_guard_result = None
@@ -457,7 +477,7 @@ class CognitivePipeline:
                     action = InteractionAction(type=action.type, message=guard.message)
 
             if action is not None:
-                if u_speech or care_decision.action_type != "SILENCE":
+                if u_speech or device_notice or care_decision.action_type != "SILENCE":
                     actions.append(action)
                     # Physical Audio Output via Speaker HAL; record whether it succeeded.
                     if hasattr(action, "message") and action.message:
@@ -497,7 +517,7 @@ class CognitivePipeline:
                     ep = Episode(
                         person=p_name,
                         summary=ep_summary,
-                        timestamp=datetime.now(),
+                        timestamp=self.clock(),
                         location=loc_val,
                         commitments=[],
                         tags=[f"room:{loc_val}", f"activity:{act_str}"] + [f"object:{o}" for o in det_objs[:3]]
@@ -563,8 +583,8 @@ class CognitivePipeline:
                 # Fictional profile defaults are only shown in demo mode.
                 "patient_name": patient_name or None,
                 "primary_caregiver": self.patient_profile_mgr.get_profile().primary_caregiver if self.demo_data else None,
-                "pending_medications": [m.medication_name for m in self.medication_mgr.get_missed_medications()],
-                "upcoming_appointments": [a.title for a in self.appointment_mgr.get_upcoming_appointments()],
+                "pending_medications": [m.medication_name for m in self.medication_mgr.get_missed_medications(now=self.clock())],
+                "upcoming_appointments": [a.title for a in self.appointment_mgr.get_upcoming_appointments(now=self.clock())],
                 "consent_granted": self.consent_mgr.is_consent_granted(ConsentFeature.VOICE_RECORDING),
                 "emergency_active": self.emergency_mgr.get_current_state().active,
                 "explanation_reason": explanation.reason,
@@ -732,6 +752,11 @@ class CognitivePipeline:
         return self.conversational_memory.respond(u_speech, face_id=face_id,
                                                   patient_name=self._patient_name())
 
+    def set_clock(self, clock) -> None:
+        """Use a controlled clock (e.g. SimulatedClock) for all time-dependent behaviour."""
+        self.clock = clock
+        self.conversational_memory.clock = clock
+
     def memory_storage_allowed(self) -> bool:
         """Facts, names, episodes and observations are stored only with consent."""
         from src.clinical.clinical_models import ConsentFeature
@@ -742,8 +767,8 @@ class CognitivePipeline:
         Gentle reminder for overdue scheduled doses not reported taken today, at most
         once per reminder interval per dose. Returns None when nothing is due.
         """
-        due = [m.medication_name for m in self.medication_mgr.get_missed_medications()]
-        now_ts = time.time()
+        due = [m.medication_name for m in self.medication_mgr.get_missed_medications(now=self.clock())]
+        now_ts = self.clock().timestamp()
         fresh = [m for m in due if now_ts - self._last_reminder_at.get(m, 0.0) >= self.reminder_interval_s]
         if not fresh:
             return None

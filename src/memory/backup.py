@@ -110,9 +110,16 @@ def restore_backup(backup_dir: str, db_path: str) -> dict[str, Any]:
     manifest = checked["manifest"]
     pre_restore: Optional[str] = None
     if os.path.exists(db_path):
-        pre_restore = create_backup(db_path, os.path.dirname(os.path.abspath(backup_dir)))
-        os.replace(pre_restore, pre_restore + "_pre-restore")
-        pre_restore += "_pre-restore"
+        # Raw byte copies of whatever is there now, even if it is corrupt (restore is
+        # usually needed exactly when the live file can no longer be opened).
+        pre_restore = os.path.join(os.path.dirname(os.path.abspath(backup_dir)),
+                                   f"memora_pre-restore_{datetime.now():%Y%m%d_%H%M%S_%f}")
+        os.makedirs(pre_restore, mode=0o700)
+        for path in (db_path, *vector_store_paths(db_path)):
+            if os.path.exists(path):
+                copy = os.path.join(pre_restore, os.path.basename(path))
+                shutil.copy2(path, copy)
+                restrict_permissions(copy)
 
     live_files = {manifest["database_file"]: db_path}
     idx, mapping = vector_store_paths(db_path)

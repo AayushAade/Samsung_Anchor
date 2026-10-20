@@ -41,14 +41,14 @@ class DatabaseEpisodeRepository:
             db_episodes = session.query(EpisodeModel).order_by(EpisodeModel.timestamp.asc(), EpisodeModel.id.asc()).all()
             return [self._to_domain(e) for e in db_episodes]
 
-    def get_episodes_for_today(self) -> list[Episode]:
-        today_str = datetime.now().strftime("%Y-%m-%d")
+    def get_episodes_for_today(self, day=None) -> list[Episode]:
+        today_str = (day or datetime.now()).strftime("%Y-%m-%d")
         with self.session_factory() as session:
             db_episodes = session.query(EpisodeModel).filter(EpisodeModel.timestamp.startswith(today_str)).order_by(EpisodeModel.timestamp.asc(), EpisodeModel.id.asc()).all()
             return [self._to_domain(e) for e in db_episodes]
 
-    def get_visitors_for_today(self) -> list[str]:
-        episodes = self.get_episodes_for_today()
+    def get_visitors_for_today(self, day=None) -> list[str]:
+        episodes = self.get_episodes_for_today(day)
         visitors = []
         for ep in episodes:
             if "speaker:self" in (ep.tags or []):

@@ -608,7 +608,7 @@ class ConversationalMemory:
         if not re.search(r"\bwhat did i do( today)?\b|\bmy timeline\b|\bwhat happened today\b|\bsummary of (my )?day\b", t):
             return None
         repo = getattr(self.db, "episode_repo", None)
-        episodes = repo.get_episodes_for_today() if repo else []
+        episodes = repo.get_episodes_for_today(self.clock()) if repo else []
         lines = []
         for ep in episodes[-5:]:
             # Utterances may contain apostrophes ("I'm tired"): match up to the separator.
@@ -626,7 +626,7 @@ class ConversationalMemory:
             return None
         repo = getattr(self.db, "episode_repo", None)
         own = (self.get_preferred_name() or "").lower()
-        visitors = [v for v in (repo.get_visitors_for_today() if repo else []) if v and v.lower() != own]
+        visitors = [v for v in (repo.get_visitors_for_today(self.clock()) if repo else []) if v and v.lower() != own]
         if not visitors:
             return "I haven't recorded any visitors today."
         names = visitors[0] if len(visitors) == 1 else ", ".join(visitors[:-1]) + " and " + visitors[-1]
@@ -683,7 +683,7 @@ class ConversationalMemory:
     def _appointment(self, raw: str, t: str, **_) -> Optional[str]:
         if not re.search(r"\b(appointment|appointments|doctor's visit|checkup|check-up)\b", t) or not re.search(r"\b(when|what|is|do i|have i|any)\b", t):
             return None
-        upcoming = self.appointments.get_upcoming_appointments() if self.appointments else []
+        upcoming = self.appointments.get_upcoming_appointments(now=self.clock()) if self.appointments else []
         if not upcoming:
             return "I don't have any appointments recorded. A family member or carer can add them for you."
         parts = [f"{a.title} {a.scheduled_time}" + (f" at {a.location}" if getattr(a, "location", "") else "")

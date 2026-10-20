@@ -137,6 +137,12 @@ class AnchorRuntime:
         statuses["Care Policy"] = "READY" if pipeline is not None and hasattr(pipeline, "care_policy_framework") else "FAILED"
         statuses["Decision Trace"] = "READY" if pipeline is not None and hasattr(pipeline, "clinical_trace_logger") else "FAILED"
 
+        battery = getattr(pipeline, "battery", None) if pipeline is not None else None
+        if battery is not None:
+            r = battery.reading()
+            statuses["Battery"] = (f"WARNING (Simulated, {r.level_pct:.0f}%, {r.state}"
+                                   f"{', charging' if r.charging else ''})")
+
         # Memory: the database must answer an integrity check, not merely exist.
         try:
             db = self.coordinator.database

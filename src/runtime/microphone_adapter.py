@@ -62,6 +62,13 @@ class SimulatedMicrophoneAdapter(MicrophoneAdapter):
     def get_status(self) -> DeviceStatus:
         return self.status
 
+    def inject_failure(self) -> None:
+        """Simulation only: make the microphone unavailable."""
+        self.status = DeviceStatus.FAULTED
+
+    def recover(self) -> None:
+        self.status = DeviceStatus.HEALTHY
+
     def shutdown(self) -> None:
         self.status = DeviceStatus.DISCONNECTED
 

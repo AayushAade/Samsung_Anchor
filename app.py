@@ -411,6 +411,7 @@ def cli():
     parser.add_argument("--check", action="store_true", help="Run diagnostics (dependencies, user database integrity, optional capabilities) without opening the camera; exit 1 on failure")
     parser.add_argument("--backup", nargs="?", const="backups", metavar="DIR", help="Write a verified backup of the configured database (default dir: ./backups)")
     parser.add_argument("--restore", metavar="BACKUP_DIR", help="Restore the configured database from a backup directory (stop MEMORA first; asks for confirmation)")
+    parser.add_argument("--simulate", nargs="*", metavar="JOURNEY", help="Run deterministic simulated user journeys in isolated temporary storage (all if none named)")
     parser.add_argument("--repair", action="store_true", help="List people records that have no face data and, after typed confirmation, delete them")
     parser.add_argument("--chat", action="store_true", help="Talk to MEMORA by typing (camera and microphone off); manage stored memories")
     parser.add_argument("--validate-runtime", action="store_true", help="Run runtime stability monitoring and output measured Runtime Report")
@@ -429,6 +430,10 @@ def cli():
     if args.check:
         from health_check import main as run_health_check
         sys.exit(run_health_check(include_camera=False))
+
+    if args.simulate is not None:
+        from src.simulation.journeys import print_report, run_all
+        sys.exit(print_report(run_all(args.simulate or None)))
 
     if args.backup is not None:
         sys.exit(run_backup(args.backup))
