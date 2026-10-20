@@ -455,7 +455,8 @@ class ConversationalMemory:
         if not re.search(r"\bwho (visited|came by|came today|has visited|was here)\b", t):
             return None
         repo = getattr(self.db, "episode_repo", None)
-        visitors = [v for v in (repo.get_visitors_for_today() if repo else []) if v]
+        own = (self.get_preferred_name() or "").lower()
+        visitors = [v for v in (repo.get_visitors_for_today() if repo else []) if v and v.lower() != own]
         if not visitors:
             return "I haven't recorded any visitors today."
         names = visitors[0] if len(visitors) == 1 else ", ".join(visitors[:-1]) + " and " + visitors[-1]

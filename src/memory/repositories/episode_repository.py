@@ -51,7 +51,9 @@ class DatabaseEpisodeRepository:
         episodes = self.get_episodes_for_today()
         visitors = []
         for ep in episodes:
-            if ep.person and ep.person.strip() and ep.person.strip().lower() not in ["unknown", "none", "anonymous"]:
+            if "speaker:self" in (ep.tags or []):
+                continue  # the person's own conversation turns are not visits
+            if ep.person and ep.person.strip() and ep.person.strip().lower() not in ["unknown", "none", "anonymous", "patient", "self"]:
                 p = ep.person.strip()
                 if p not in visitors:
                     visitors.append(p)

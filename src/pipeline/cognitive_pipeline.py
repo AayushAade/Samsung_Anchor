@@ -288,7 +288,8 @@ class CognitivePipeline:
                 event = PresenceEvent(
                     type=PresenceEventType.PERSON_ARRIVED,
                     face_id="patient_self",
-                    name=self.patient_profile_mgr.get_profile().preferred_name,
+                    # The person's own name (never the fictional profile default outside demo).
+                    name=self._patient_name() or None,
                     relationship="Self",
                 )
 
@@ -479,7 +480,8 @@ class CognitivePipeline:
                         timestamp=datetime.now(),
                         location=loc_val,
                         commitments=[],
-                        tags=[f"room:{loc_val}", f"activity:{act_str}"] + [f"object:{o}" for o in det_objs[:3]],
+                        tags=[f"room:{loc_val}", f"activity:{act_str}"] + [f"object:{o}" for o in det_objs[:3]]
+                             + (["speaker:self"] if getattr(event, "face_id", None) == "patient_self" else []),
                     )
                     self.database.episode_repo.add_episode(ep)
                     episode_written = True

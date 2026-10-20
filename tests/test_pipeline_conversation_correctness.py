@@ -75,3 +75,13 @@ def test_no_placeholder_patient_name_outside_demo(pipeline):
 def test_fact_stored_once_per_statement(pipeline):
     say(pipeline, "I like green tea")
     assert len(pipeline.conversational_memory.all_facts()) == 1
+
+
+def test_own_turns_are_not_visits_and_not_attributed_to_placeholder(pipeline):
+    say(pipeline, "My name is Sid")
+    say(pipeline, "I like tea")
+    assert say(pipeline, "Who visited today?") == "I haven't recorded any visitors today."
+    people = {ep.person for ep in pipeline.database.episode_repo.get_all_episodes()}
+    assert "Eleanor" not in people
+    pipeline.process({"face_id": "2", "name": "Riya", "relationship": "Daughter"})
+    assert say(pipeline, "Who visited today?") == "I recorded Riya today."
