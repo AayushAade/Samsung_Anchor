@@ -9,6 +9,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 from src.application.chat import ChatSession
 from src.application.factory import build_application
 from src.memory.database import DatabaseUnavailableError, MemoraDatabase, open_user_database
@@ -33,6 +35,8 @@ def test_corrupt_database_is_reported_and_left_untouched(tmp_path):
     assert bad.read_text() == "this is not a database"
 
 
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root ignores directory permissions, so an unwritable location cannot be simulated")
 def test_unwritable_location_is_reported(tmp_path):
     ro = tmp_path / "ro"
     ro.mkdir()

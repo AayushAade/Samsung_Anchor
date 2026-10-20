@@ -99,6 +99,8 @@ def test_wrong_dimension_embedding_is_rejected_without_partial_identity():
     assert db.identity_repo.get_all() == []
 
 
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root ignores directory permissions, so a write failure cannot be induced this way")
 def test_failed_persist_rolls_back(tmp_path):
     store = FaissVectorStore(str(tmp_path / "x.index"), str(tmp_path / "x.json"))
     store.add_embedding("ok", _vec(1))
