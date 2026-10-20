@@ -106,6 +106,8 @@ def _age_phrase(ts: datetime, now: datetime) -> str:
 def _norm(text: str) -> str:
     t = text.lower().replace("’", "'").strip()
     t = re.sub(r"\bfavourite\b", "favorite", t)
+    t = re.sub(r"\bcolour\b", "color", t)
+    t = re.sub(r"\bflavour\b", "flavor", t)
     return re.sub(r"\s+", " ", t)
 
 
@@ -185,7 +187,7 @@ class ConversationalMemory:
     }
 
     def _feelings(self, raw: str, t: str, **_) -> Optional[str]:
-        m = re.match(r"^(?:i am|i'm|i feel|i'm feeling|i am feeling) (?:a bit |a little |very |so |really |quite )?([a-z]+)\b", t)
+        m = re.match(r"^(?:i'm feeling|i am feeling|i feel|i am|i'm) (?:a bit |a little |very |so |really |quite )?([a-z]+)\b", t)
         if m and m.group(1) in self._FEELINGS:
             return self._FEELINGS[m.group(1)]
         return None
@@ -278,7 +280,7 @@ class ConversationalMemory:
             return None
         t = t.rstrip(".! ")
         rel = "|".join(RELATIONS)
-        m = re.match(rf"^(?:and )?my ({rel})(?:'s name)? is (?:called |named )?([a-z][a-z '\-]{{0,40}})$", t)
+        m = re.match(rf"^(?:and )?my ({rel})(?:'s name)? is (?:called |named )?([a-z][a-z .'\-]{{0,40}})$", t)
         if m:
             return f"relation:{m.group(1)}", m.group(2).strip(), "positive", True
         m = re.match(r"^(?:and )?my favorite ([a-z ]{2,30}?) is ([a-z0-9][a-z0-9 '\-]{0,40})$", t)
@@ -330,9 +332,10 @@ class ConversationalMemory:
         rel = "|".join(RELATIONS)
         facts = self.active_facts()
 
-        m = re.search(rf"\b(?:who is|who's) my ({rel})\b|\bwhat(?:'s| is) my ({rel})(?:'s)? name\b", t)
+        m = re.search(rf"\b(?:who is|who's) my ({rel})\b|\bwhat(?:'s| is) my ({rel})(?:'s)? (?:name|called)\b|"
+                      rf"\bwhat my ({rel}) is called\b|\bwhat(?:'s| is) the name of my ({rel})\b", t)
         if m:
-            relation = m.group(1) or m.group(2)
+            relation = next(g for g in m.groups() if g)
             hits = [f for f in facts if f.key == f"relation:{relation}"]
             return self._answer(hits, now) or f"I don't know who your {relation} is yet. You can tell me, and I'll remember."
 
@@ -348,6 +351,10 @@ class ConversationalMemory:
             hits = [f for f in facts if f.key.split(":")[0] in ("likes", "prefers") and topic_words & _words(f.value)]
             return self._answer(hits, now) or f"You haven't told me whether you like {m.group(1)}."
 
+        if re.search(r"\bwhat (?:are|were) my (?:hobbies|interests)\b|\bwhat do i (?:like|enjoy|love) doing\b", t):
+            likes = [f for f in facts if f.key.split(":")[0] in ("likes", "prefers", "favorite") and f.polarity == "positive"]
+            return self._answer(likes, now, limit=5) or "You haven't told me about your hobbies yet."
+
         if re.search(r"\bwhat (?:\w+ )?(?:do|did) i (?:usually )?(?:like|enjoy|love|prefer|drink|eat|play)\b|"
                      r"\bwhat (?:\w+ )?am i (?:fond|into)\b|\bwhat did i (?:tell|say)\b", t):
             asked = _words(t) - {"what", "do", "did", "i", "usually", "like", "enjoy", "love", "prefer", "drink",
@@ -359,20 +366,21 @@ class ConversationalMemory:
                 cat = "food"
             if cat is None and re.search(r"\bplay\b", t):
                 cat = "sport"
-            likes = [f for f in facts if f.key.split(":")[0] in ("likes", "prefers", "favorite")]
+            likes = [f for f in facts if f.key.split(":")[0] in ("likes", "prefers", "favorite")
+                     and f.polarity == "positive"]
             if cat:
                 hits = [f for f in likes if f.category == cat]
             elif asked:
                 hits = [f for f in likes if asked & _words(f.value)]
             else:
-                hits = likes
+                return self._answer(likes, now, limit=5) or "I don't have a record of that yet. You can tell me, and I'll remember."
             return self._answer(hits, now) or "I don't have a record of that yet. You can tell me, and I'll remember."
         return None
 
-    def _answer(self, hits: list[StoredFact], now: datetime) -> Optional[str]:
+    def _answer(self, hits: list[StoredFact], now: datetime, limit: int = 3) -> Optional[str]:
         if not hits:
             return None
-        hits = sorted(hits, key=lambda f: f.timestamp or datetime.min, reverse=True)[:3]
+        hits = sorted(hits, key=lambda f: f.timestamp or datetime.min, reverse=True)[:limit]
         parts = [f"{_when(f.timestamp, now)} that {_to_second_person(f.statement)}" for f in hits]
         return "You told me " + "; and ".join(parts) + "."
 
@@ -448,7 +456,8 @@ class ConversationalMemory:
         episodes = repo.get_episodes_for_today() if repo else []
         lines = []
         for ep in episodes[-5:]:
-            said = re.search(r"User said: '([^']*)'", ep.summary or "")
+            # Utterances may contain apostrophes ("I'm tired"): match up to the separator.
+            said = re.search(r"User said: '(.*?)'(?: \| System responded:|$)", ep.summary or "")
             what = f"you said \"{said.group(1)}\"" if said else (ep.summary or "")
             if what and not what.startswith("System:"):
                 stamp = ep.timestamp.strftime("%I:%M %p").lstrip("0") if isinstance(ep.timestamp, datetime) else ""
