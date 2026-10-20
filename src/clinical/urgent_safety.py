@@ -108,6 +108,12 @@ def urgent_guidance(concern: UrgentConcern, name: Optional[str] = None,
 
     Never states or implies that MEMORA has contacted anyone.
     """
+    text = _urgent_guidance_text(concern, name, emergency_number, trusted_contact)
+    return text[0].upper() + text[1:]
+
+
+def _urgent_guidance_text(concern: UrgentConcern, name: Optional[str], emergency_number: Optional[str],
+                          trusted_contact: Optional[str]) -> str:
     who = f"{name}, " if name else ""
     call = f"call {emergency_number}" if emergency_number else "call your local emergency number"
     also = f" You can also call {trusted_contact}." if trusted_contact else ""

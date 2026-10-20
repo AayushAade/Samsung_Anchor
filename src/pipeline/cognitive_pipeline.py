@@ -31,6 +31,7 @@ from src.clinical.explainability import ExplainabilityEngine
 from src.clinical.emergency_manager import EmergencyManager
 from src.clinical.patient_state import PatientStateEvaluator, PatientStateMode
 from src.clinical.care_policy import CarePolicyFramework
+from src.clinical.response_guard import check_outgoing
 from src.clinical.decision_trace import ClinicalDecisionTraceLogger
 from src.perception.visual_memory_engine import VisualEpisodicMemoryEngine
 from src.cognition.conversational_memory import (ConversationalMemory, EMERGENCY_NUMBER_KEY,
@@ -442,6 +443,15 @@ class CognitivePipeline:
             elif action is not None and care_decision.message_override:
                 action = InteractionAction(type=action.type, message=care_decision.message_override)
 
+            # Final deterministic safety check on the live output path: whatever
+            # produced the message, unsupported claims are blocked before delivery.
+            self.last_guard_result = None
+            if action is not None and getattr(action, "message", None):
+                guard = check_outgoing(action.message)
+                self.last_guard_result = guard
+                if guard.blocked:
+                    action = InteractionAction(type=action.type, message=guard.message)
+
             if action is not None:
                 if u_speech or care_decision.action_type != "SILENCE":
                     actions.append(action)
@@ -732,7 +742,8 @@ class CognitivePipeline:
         from src.clinical.patient_state import PatientState
         state = PatientState(mode=PatientStateMode.AWAITING_REMINDER, confidence=0.95,
                              primary_need="Scheduled medication reminder", details={"medications": fresh})
-        return self.care_policy_framework.evaluate_policy(state, patient_name=patient_name or "").message_override
+        message = self.care_policy_framework.evaluate_policy(state, patient_name=patient_name or "").message_override
+        return check_outgoing(message).message
 
     def _is_known_visitor_arrival(self, event: Any) -> bool:
         from src.interaction.events import PresenceEventType

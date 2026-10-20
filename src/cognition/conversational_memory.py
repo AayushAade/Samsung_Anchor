@@ -163,7 +163,7 @@ class ConversationalMemory:
         if detect_urgent_concern(speech) is not None:
             return None  # the safety layer owns this turn
         t = _norm(speech)
-        for handler in (self._name_introduction, self._orientation, self._fact_correction_or_statement,
+        for handler in (self._capability_boundaries, self._name_introduction, self._orientation, self._fact_correction_or_statement,
                         self._fact_question, self._timeline, self._visitors, self._last_search,
                         self._medication_report, self._medication_question, self._appointment,
                         self._object_location, self._feelings, self._small_talk):
@@ -197,6 +197,35 @@ class ConversationalMemory:
             return self.greeting(patient_name)
         if re.match(r"^(thanks|thank you)\b", t):
             return "You're welcome."
+        return None
+
+    _MEDS = r"(pills?|tablets?|medicines?|medications?|meds|doses?|prescriptions?|insulin|inhaler)"
+
+    def _capability_boundaries(self, raw: str, t: str, **_) -> Optional[str]:
+        """
+        Requests MEMORA cannot fulfil, answered plainly so nobody believes an action
+        happened: contacting people, and medical or medication advice.
+        """
+        contact = self.get_setting(TRUSTED_CONTACT_KEY)
+        offer = f" Your trusted contact is {contact}, if you'd like to call them." if contact else ""
+        if re.search(r"\b(did|have|has|could|can) (you|memora) (already )?(call|called|phone|phoned|ring|rang|contact|contacted|"
+                     r"tell|told|message|messaged|text|texted|email|emailed|notify|notified|alert|alerted|send|sent)\b", t) \
+                or re.match(r"^(please |can you |could you |would you |will you )?(call|phone|ring|text|message|email|contact|"
+                            r"notify|alert)\b(?! me\b)", t) \
+                or re.match(r"^(please |can you |could you |would you )?(tell|let) (?!me\b)\w+", t) and re.search(r"\b(know|tell)\b", t) \
+                or re.search(r"\bsend (a |an )?(message|text|email|alert)\b", t):
+            return "I can't make calls or send messages, so I haven't contacted anyone." + offer
+        if re.search(rf"\b(should|can|could|may|do|must) i (take|stop|skip|double|have|increase|reduce|cut|change|miss)\b.*\b{self._MEDS}\b", t) \
+                or re.search(rf"\b(extra|another|more|second) {self._MEDS}\b", t) \
+                or re.search(rf"\bis it (safe|ok|okay|alright) to (take|stop|skip|mix|double)\b", t):
+            return ("I can't give advice about medicines. Please ask your doctor or pharmacist before "
+                    "taking, skipping or changing anything. If you think you've taken too much, "
+                    "call your emergency number now.")
+        if re.search(r"\b(am i (sick|ill|unwell|dying|ok|okay|alright)|do i have (dementia|alzheimer'?s|a cold|covid|"
+                     r"cancer|diabetes|an infection)|is something wrong with me|what is wrong with me|what's wrong with me|"
+                     r"what illness do i have)\b", t):
+            return ("I'm sorry you're worried. I can't tell whether you're unwell or give a diagnosis. "
+                    "If you feel unwell, please contact your doctor, or call your emergency number if it feels serious.")
         return None
 
     def fallback_reply(self, patient_name: Optional[str] = None) -> str:
