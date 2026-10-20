@@ -15,6 +15,7 @@ from src.cognition.goals.models import (
     EvidenceSignal,
     GoalCategory,
     GoalHypothesis,
+    GoalState,
 )
 
 

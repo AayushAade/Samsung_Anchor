@@ -11,7 +11,7 @@ Dynamically arbitrates goal priorities based on:
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from src.executive.executive_models import Goal, GoalType
 

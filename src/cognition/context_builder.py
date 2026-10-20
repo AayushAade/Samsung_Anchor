@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List, Optional
 from src.cognition.memory_models import RelevantMemory
 from src.interaction.events import PresenceEvent
 

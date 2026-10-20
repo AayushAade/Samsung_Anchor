@@ -60,5 +60,5 @@ class ConfidenceHistory:
                 return e
         return None
 
-    def clear() -> None:
+    def clear(self) -> None:
         self._history.clear()

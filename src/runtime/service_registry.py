@@ -7,7 +7,7 @@ Provides thread-safe service registration and operational status tracking for al
 from __future__ import annotations
 
 import threading
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from src.core.interfaces import ICognitiveSubsystem
 

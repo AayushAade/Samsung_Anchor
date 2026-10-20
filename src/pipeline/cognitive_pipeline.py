@@ -5,7 +5,7 @@ Executes one complete cognitive cycle.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 import time
 
 from src.cognition.memory_engine import MemoryEngine

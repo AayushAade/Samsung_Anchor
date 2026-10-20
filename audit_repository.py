@@ -16,7 +16,7 @@ import ast
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Set
 
 
 def audit_codebase(root_dir: str = ".") -> Dict[str, Any]:
