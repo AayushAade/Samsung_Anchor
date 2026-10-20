@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from src.cognition.conversational_memory import (ConversationalMemory, EMERGENCY_NUMBER_KEY, PREFERRED_NAME_KEY,
                                                  TRUSTED_CONTACT_KEY)
@@ -138,3 +138,23 @@ def delete_orphaned_identities(db: Any) -> dict[str, Any]:
     for ident in removed:
         db.delete_identity(ident)
     return {"deleted": removed, "integrity_ok": db.check_integrity()["ok"]}
+
+
+def purge_logs(log_dir: str, extra: Optional[list] = None) -> list[str]:
+    """
+    Remove MEMORA's own log files (they can contain what the person said):
+    memora.log and its rotations, chat_debug.log, plus any extra paths given.
+    Only these known names are removed; nothing else in the directory is touched.
+    """
+    import glob
+    names = set(glob.glob(os.path.join(log_dir, "memora.log"))) | set(glob.glob(os.path.join(log_dir, "memora.log.[0-9]")))
+    names |= set(glob.glob(os.path.join(log_dir, "chat_debug.log")))
+    names |= {p for p in (extra or []) if p and os.path.isfile(p)}
+    removed = []
+    for path in sorted(names):
+        try:
+            os.remove(path)
+            removed.append(path)
+        except OSError:
+            pass
+    return removed

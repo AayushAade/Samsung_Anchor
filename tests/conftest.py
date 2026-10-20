@@ -15,10 +15,12 @@ import pytest
 
 _SESSION_DIR = tempfile.mkdtemp(prefix="memora-tests-")
 os.environ["MEMORA_DB_PATH"] = os.path.join(_SESSION_DIR, "memora_test_db.sqlite")
+os.environ["MEMORA_LOG_DIR"] = os.path.join(_SESSION_DIR, "logs")
 
 from config import settings  # noqa: E402  (must follow the environment override)
 
 settings.DB_PATH = os.environ["MEMORA_DB_PATH"]
+settings.LOG_DIR = os.environ["MEMORA_LOG_DIR"]
 
 
 @pytest.fixture(autouse=True, scope="session")

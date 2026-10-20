@@ -96,6 +96,32 @@ def _v2_filesystem_target(path: str) -> str:
     return v2
 
 
+class DatabaseUnavailableError(RuntimeError):
+    """The configured memory database could not be opened; nothing was changed."""
+
+
+def open_user_database(db_path: str | None = None) -> "MemoraDatabase":
+    """
+    Open the configured database, turning low-level failures (corrupt file,
+    unwritable location, locked file) into one actionable error.
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+
+    target = db_path or settings.DB_PATH
+    try:
+        return MemoraDatabase(target)
+    except (SQLAlchemyError, OSError) as e:
+        resolved = resolve_db_url(target)[1] or target
+        reason = str(getattr(e, "orig", None) or e).split("\n")[0]
+        raise DatabaseUnavailableError(
+            f"MEMORA could not open its memory file at {resolved} ({reason}). Nothing was changed.\n"
+            "What you can do:\n"
+            "  - If the file is damaged, restore a backup: python app.py --restore <backup folder>\n"
+            "  - If the folder is not writable, fix its permissions or set MEMORA_DB_PATH to another location\n"
+            "  - To start fresh, move the file somewhere safe first (do not delete it until you are sure)"
+        ) from e
+
+
 def restrict_permissions(path: str) -> None:
     """Personal data files are readable and writable by their owner only (0600)."""
     try:

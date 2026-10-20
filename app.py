@@ -39,7 +39,9 @@ def configure_logging(verbose: bool = False) -> str:
     from logging.handlers import RotatingFileHandler
     from config.paths import DATA_DIR
 
-    log_dir = DATA_DIR / "logs"
+    from pathlib import Path
+    from config import settings
+    log_dir = Path(settings.LOG_DIR)
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "memora.log"
     if not log_path.exists():
@@ -178,7 +180,13 @@ def main(
         print(f"🧪 Simulation data is stored separately at: {settings.DB_PATH}")
 
     # Build application and initialize runtime
-    coordinator = build_application(live_hardware=live_hardware)
+    from src.memory.database import DatabaseUnavailableError, open_user_database
+    try:
+        database = open_user_database()
+    except DatabaseUnavailableError as e:
+        print(e)
+        sys.exit(2)
+    coordinator = build_application(live_hardware=live_hardware, database=database)
     runtime = AnchorRuntime(coordinator)
     runtime.initialize()
 

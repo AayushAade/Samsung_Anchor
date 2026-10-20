@@ -139,7 +139,7 @@ def test_delete_all_requires_confirmation_and_removes_everything(db_path, log_pa
     s.confirm = lambda p: "DELETE"
     s.db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))
     s.db.log_object("keys", 0, 0, "Hall")
-    assert s.handle("/delete-all") == "All your data has been deleted."
+    assert s.handle("/delete-all").startswith("All your data has been deleted")
     s.close()
 
     reopened = MemoraDatabase(db_path)

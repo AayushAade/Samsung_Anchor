@@ -48,12 +48,10 @@ class ChatSession:
         self.coordinator = coordinator
         self.pipeline = coordinator.pipeline
         self.db = coordinator.database
-        self.log_path = log_path or str(DATA_DIR / "logs" / "chat_debug.log")
+        self.log_path = log_path or os.path.join(settings.LOG_DIR, "chat_debug.log")
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
         # The debug log contains what the person typed: owner-only access.
-        if not os.path.exists(self.log_path):
-            os.close(os.open(self.log_path, os.O_WRONLY | os.O_CREAT, 0o600))
-        os.chmod(self.log_path, 0o600)
+        self._touch_log()
         self.confirm = confirm or input
         self._numbered_facts: list[dict] = []
         self._awaiting_consent = False
@@ -210,10 +208,31 @@ class ChatSession:
             if answer.strip() != "DELETE":
                 return "Cancelled. Nothing was deleted."
             report = user_data.delete_all_user_data(self.db)
-            self.pipeline.conversational_memory.search_history.clear()
-            return ("All your data has been deleted." if report["ok"]
-                    else f"Deletion was incomplete. Remaining records: {report['remaining']}")
+            removed_logs = user_data.purge_logs(os.path.dirname(self.log_path), extra=[self.log_path])
+            self._touch_log()
+            self._rebuild_session()
+            if not report["ok"]:
+                return f"Deletion was incomplete. Remaining records: {report['remaining']}"
+            return ("All your data has been deleted, including "
+                    f"{len(removed_logs)} log file(s) that contained what you said. "
+                    "Backup copies you made with --backup are not touched; delete those folders yourself "
+                    "if you no longer want them. Deleted files may remain recoverable on the disk until "
+                    "overwritten.")
         return f"I don't know the command {cmd}. Type /help to see the commands."
+
+    def _touch_log(self) -> None:
+        if not os.path.exists(self.log_path):
+            os.close(os.open(self.log_path, os.O_WRONLY | os.O_CREAT, 0o600))
+        os.chmod(self.log_path, 0o600)
+
+    def _rebuild_session(self) -> None:
+        """Drop all in-memory session state (working memory, caches) after deletion."""
+        from src.application.factory import build_application
+        self._quietly(self.pipeline.shutdown)
+        self.coordinator = self._quietly(build_application, live_hardware=False, database=self.db)
+        self.pipeline = self.coordinator.pipeline
+        self._numbered_facts = []
+        self._awaiting_consent = False
 
     def _consent_command(self, arg: str) -> str:
         mgr = self.pipeline.consent_mgr
@@ -344,9 +363,16 @@ class ChatSession:
 def run_chat() -> None:
     from src.application.factory import build_application
 
+    from src.memory.database import DatabaseUnavailableError, open_user_database
+
+    try:
+        database = open_user_database()
+    except DatabaseUnavailableError as e:
+        print(e)
+        raise SystemExit(2)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        coordinator = build_application(live_hardware=False)
+        coordinator = build_application(live_hardware=False, database=database)
     session = ChatSession(coordinator)
     with open(session.log_path, "a") as f:
         f.write(f"\n--- startup {datetime.now().isoformat()} (DB: {settings.DB_PATH}) ---\n{buf.getvalue()}")

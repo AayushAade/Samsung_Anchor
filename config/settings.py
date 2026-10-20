@@ -36,6 +36,9 @@ DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1")
 # database other than the repository-root default.
 DB_PATH = os.environ.get("MEMORA_DB_PATH") or str(DATABASE_PATH)
 
+# Log files can contain what the person said; MEMORA_LOG_DIR relocates them.
+LOG_DIR = os.environ.get("MEMORA_LOG_DIR") or os.path.join(str(BASE_DIR), "data", "logs")
+
 # ==========================================================
 # Vision
 # ==========================================================

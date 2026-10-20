@@ -99,6 +99,6 @@ def test_export_and_delete_cover_care_data(path, tmp_path):
     data = json.loads(out.read_text())
     assert [c["title"] for c in data["care_items"]] == ["Aspirin"]
     assert data["care_events"][0]["event"] == "REPORTED_TAKEN"
-    assert s.handle("/delete-all") == "All your data has been deleted."
+    assert s.handle("/delete-all").startswith("All your data has been deleted")
     s.close()
     assert "No medication schedules" in _session(path, tmp_path).handle("/medications")
