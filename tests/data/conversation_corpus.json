@@ -10,6 +10,10 @@
   ],
   "cases": [
     {
+      "say": "Have you seen them?",
+      "expect": "Which item do you mean"
+    },
+    {
       "say": "I really like chamomile tea",
       "expect": "remember"
     },
@@ -195,7 +199,7 @@
     },
     {
       "say": "Have you seen it?",
-      "expect": "Which item do you mean"
+      "expect": "haven't seen your pills"
     },
     {
       "say": "I like it",
@@ -203,7 +207,7 @@
     },
     {
       "say": "What's my name?",
-      "expect": "your name is Ana"
+      "expect": "your name is Nani"
     },
     {
       "say": "Forget everything",
