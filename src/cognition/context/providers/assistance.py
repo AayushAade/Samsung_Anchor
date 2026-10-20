@@ -13,8 +13,9 @@ class AssistanceContextProvider(ContextProvider):
     Deterministically evaluates minimum effective assistance level (Level 0 - Level 5).
     """
 
-    def __init__(self, policy_engine: Optional[AssistancePolicyEngine] = None) -> None:
+    def __init__(self, policy_engine: Optional[AssistancePolicyEngine] = None, demo_data: bool = False) -> None:
         self.policy_engine = policy_engine or AssistancePolicyEngine()
+        self.demo_data = demo_data
 
     @property
     def name(self) -> str:
@@ -28,7 +29,10 @@ class AssistanceContextProvider(ContextProvider):
         start_t = time.perf_counter()
 
         has_mem = bool(event.name or event.relationship)
-        has_medical = bool(event.relationship and "Daughter" in event.relationship)
+        # Previously any visit by a "Daughter" counted as a critical medical commitment
+        # (Level 5 safety intervention). That scripted rule is kept for demos only;
+        # MEMORA has no data source for medical commitments in real use.
+        has_medical = self.demo_data and bool(event.relationship and "Daughter" in event.relationship)
 
         assistance_data = self.policy_engine.evaluate_level(
             event=event,

@@ -91,7 +91,7 @@ class ExperienceServer:
         # Security: prevent path traversal
         try:
             file_path = file_path.resolve()
-            if not str(file_path).startswith(str(DASHBOARD_DIR.resolve())):
+            if not file_path.is_relative_to(DASHBOARD_DIR.resolve()):  # prefix match admitted sibling dirs
                 return Response(403, "Forbidden", websockets.Headers())
         except Exception:
             return Response(404, "Not Found", websockets.Headers())

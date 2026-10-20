@@ -10,7 +10,8 @@ class ConsentManager:
 
     def __init__(self) -> None:
         self._consents: Dict[ConsentFeature, ConsentRecord] = {
-            feature: ConsentRecord(feature=feature, granted=True)
+            # Consent is never assumed: every feature starts as not granted.
+            feature: ConsentRecord(feature=feature, granted=False)
             for feature in ConsentFeature
         }
 

@@ -61,8 +61,9 @@ class RelationshipManager:
                 name=name or "Family Member",
                 relationship=relationship or "Loved One",
                 preferred_greeting=f"Hello {name}" if name else "Hello",
-                visit_frequency="Regular visitor",
-                last_interaction="Recently",
+                # Unknown, not invented: there is no visit history for this person yet.
+                visit_frequency="Not yet known",
+                last_interaction="Not recorded",
                 shared_memories=[],
                 important_dates=[],
                 communication_preferences="Warm and calm",

@@ -31,7 +31,7 @@ class CognitiveEvent:
     face_id: Optional[str] = None
     name: Optional[str] = None
     relationship: Optional[str] = None
-    identity_confidence: float = 0.0
+    identity_confidence: Optional[float] = None
     is_known: bool = False
 
     # Temporal
@@ -298,7 +298,8 @@ class CognitiveStream:
             event.face_id = ident.face_id
             event.name = ident.name
             event.relationship = ident.relationship
-            event.identity_confidence = ident.confidence
+            # Only real recognition scores are shown; placeholders are not measurements.
+            event.identity_confidence = ident.confidence if getattr(ident, "confidence_measured", False) else None
             event.is_known = ident.is_known
 
         # Temporal

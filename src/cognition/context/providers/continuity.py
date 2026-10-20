@@ -10,6 +10,16 @@ from src.interaction.events import PresenceEvent
 
 class ContinuityContextProvider(ContextProvider):
     """
+    Daily orientation anchor. Outside demo mode only the clock-derived part of the
+    day is reported; recent/upcoming activities and "today's events" are left empty
+    because MEMORA has no record of them (they used to be invented per hour and
+    were shown to caregivers and placed in model prompts as facts).
+    """
+
+    def __init__(self, demo_data: bool = False) -> None:
+        self.demo_data = demo_data
+
+    """
     Context Provider for Daily Orientation and Life Continuity.
     Determines current routine anchors, day/time orientation, and activity context.
     """
@@ -59,6 +69,11 @@ class ContinuityContextProvider(ContextProvider):
             recent = "Finished dinner"
             upcoming = "Preparing for sleep"
 
+        if not self.demo_data:
+            stage = ("Morning" if 5 <= hour < 12 else "Afternoon" if 12 <= hour < 17
+                     else "Evening" if 17 <= hour < 21 else "Night")
+            recent, upcoming = None, None
+
         current_day_str = now.strftime("%A, %B %d")
         approx_time_str = now.strftime("%I:%M %p").lstrip("0")
 
@@ -66,7 +81,7 @@ class ContinuityContextProvider(ContextProvider):
         today_events = [
             "Morning Medication (9:00 AM)",
             "Doctor's Appointment (2:00 PM)" if hour < 14 else "Family Visit with Sarah",
-        ]
+        ] if self.demo_data else []
 
         orientation_data = DailyOrientationContext(
             routine_stage=stage,

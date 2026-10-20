@@ -103,9 +103,9 @@ class CognitivePipeline:
         self.context_registry.register(IdentityContextProvider())
         self.context_registry.register(MemoryContextProvider(self.memory_engine))
         self.context_registry.register(TemporalContextProvider())
-        self.context_registry.register(ContinuityContextProvider())
+        self.context_registry.register(ContinuityContextProvider(demo_data=demo_data))
         self.context_registry.register(SocialContextProvider())
-        self.context_registry.register(AssistanceContextProvider())
+        self.context_registry.register(AssistanceContextProvider(demo_data=demo_data))
         
         self.context_fusion_engine = ContextFusionEngine(self.context_registry)
 

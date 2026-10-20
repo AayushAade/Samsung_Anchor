@@ -1,3 +1,20 @@
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+}
+
+function escapeDeep(value) {
+    if (typeof value === 'string') return escapeHtml(value);
+    if (Array.isArray(value)) return value.map(escapeDeep);
+    if (value && typeof value === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(value)) out[k] = escapeDeep(v);
+        return out;
+    }
+    return value;
+}
+
 /**
  * Memora Experience Platform — Rendering Engine
  * 
@@ -32,7 +49,9 @@ class MemoraConnection {
 
         this.ws.onmessage = (event) => {
             try {
-                const data = JSON.parse(event.data);
+                // Every string is HTML-escaped once, here, before any panel renders it:
+                // event text (including what the person said) is untrusted.
+                const data = escapeDeep(JSON.parse(event.data));
                 if (this.onEvent) this.onEvent(data);
             } catch (e) {
                 console.error('[Memora] Failed to parse event:', e);
@@ -121,9 +140,10 @@ function renderIdentity(event) {
     const initial = event.name ? event.name.charAt(0).toUpperCase() : '?';
     const name = event.name || 'Unknown';
     const relationship = event.relationship || 'Unknown';
-    const confidence = Math.round((event.identity_confidence || 0) * 100);
+    // null = no recognition score available (never shown as a percentage)
+    const confidence = event.identity_confidence == null ? null : Math.round(event.identity_confidence * 100);
     const circumference = 2 * Math.PI * 16;
-    const offset = circumference - (confidence / 100) * circumference;
+    const offset = circumference - ((confidence ?? 0) / 100) * circumference;
 
     container.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 8px 0;">
@@ -142,7 +162,7 @@ function renderIdentity(event) {
                             stroke-dashoffset="${offset}" />
                     </svg>
                 </div>
-                <span class="confidence__label">${confidence}% confidence</span>
+                <span class="confidence__label">${confidence == null ? 'confidence not measured' : confidence + '% confidence'}</span>
             </div>
         </div>`;
 
@@ -159,8 +179,8 @@ function renderOrientation(event) {
     const stage = event.routine_stage || 'Daytime Routine';
     const currentDay = event.current_day || '';
     const approxTime = event.approximate_time || '';
-    const recent = event.recent_activity || 'Resting in living room';
-    const upcoming = event.upcoming_activity || 'Next scheduled activity';
+    const recent = event.recent_activity || 'Not recorded';
+    const upcoming = event.upcoming_activity || 'Nothing scheduled';
 
     container.innerHTML = `
         <div class="orientation-card">
@@ -194,14 +214,14 @@ function renderRelationship(event) {
     }
 
     const greeting = event.preferred_greeting || `Hello ${event.name || 'Friend'}`;
-    const freq = event.visit_frequency || 'Regular Visitor';
-    const lastVisit = event.last_interaction || 'Recently';
+    const freq = event.visit_frequency || 'Visit frequency not known';
+    const lastVisit = event.last_interaction || 'Last visit not recorded';
     const sharedMems = event.shared_memories || [];
     const dates = event.important_dates || [];
 
     const memsHtml = sharedMems.length > 0
         ? sharedMems.map(m => `<div class="shared-mem-chip">💚 ${m.summary}</div>`).join('')
-        : '<div class="shared-mem-chip">💚 Shared conversations in living room</div>';
+        : '<div class="shared-mem-chip">No shared memories recorded yet</div>';
 
     const datesHtml = dates.length > 0
         ? `<div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:4px;">🗓️ ${dates.join(' · ')}</div>`
@@ -280,12 +300,6 @@ function renderConversation(event) {
     setTimeout(() => panel.classList.remove('active'), 2000);
 }
 
-function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[c]);
-}
-
 function renderClinical(event) {
     const container = document.getElementById('clinical-content');
     const panel = document.getElementById('clinical-panel');
@@ -293,12 +307,13 @@ function renderClinical(event) {
     if (!container || !panel) return;
 
     // No placeholder people, and "nothing pending" is never shown as "confirmed".
-    const patient = escapeHtml(event.patient_name || 'Name not set');
-    const caregiver = escapeHtml(event.primary_caregiver || 'Not set');
-    const meds = escapeHtml((event.pending_medications || []).join(', ') || 'No overdue doses (based on what MEMORA was told)');
-    const appts = escapeHtml((event.upcoming_appointments || []).join(', ') || 'No appointments recorded');
-    const explanation = escapeHtml(event.explanation_reason || 'System evaluating routine observation status.');
-    const consent = event.consent_granted ? 'Granted ✓' : 'Revoked ❌';
+    // (Values arrive HTML-escaped from escapeDeep.)
+    const patient = event.patient_name || 'Name not set';
+    const caregiver = event.primary_caregiver || 'Not set';
+    const meds = (event.pending_medications || []).join(', ') || 'No overdue doses (based on what MEMORA was told)';
+    const appts = (event.upcoming_appointments || []).join(', ') || 'No appointments recorded';
+    const explanation = event.explanation_reason || 'System evaluating routine observation status.';
+    const consent = event.consent_granted ? 'Given ✓' : 'Not given';
 
     container.innerHTML = `
         <div class="clinical-card">
@@ -355,21 +370,21 @@ function renderRuntime(event) {
 
     if (!container || !panel) return;
 
-    const mode = event.runtime_mode || 'Simulation Mode';
-    const cpu = event.cpu_usage_pct !== undefined ? event.cpu_usage_pct : 14.2;
-    const ram = event.ram_usage_pct !== undefined ? event.ram_usage_pct : 36.8;
-    const devCount = event.connected_devices_count !== undefined ? event.connected_devices_count : 6;
+    // Values come from the event; missing values are shown as n/a, never invented.
+    const mode = event.runtime_mode || 'Mode unknown';
+    const cpu = event.cpu_usage_pct != null ? event.cpu_usage_pct : 'n/a';
+    const ram = event.ram_usage_pct != null ? event.ram_usage_pct : 'n/a';
+    const devCount = event.connected_devices_count != null ? event.connected_devices_count : 'n/a';
 
     container.innerHTML = `
         <div class="runtime-card">
             <div class="runtime-card__header">
                 <span class="mode-badge">⚡ ${mode}</span>
-                <span class="device-chip">STATUS: HEALTHY</span>
+                <span class="device-chip">${/simulat/i.test(mode) ? 'SIMULATED SENSORS' : 'SENSORS: SEE --check'}</span>
             </div>
             <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:6px;">
                 <div><strong>System Resources:</strong> CPU: ${cpu}% | RAM: ${ram}%</div>
-                <div><strong>Active Hardware Adapters:</strong> ${devCount} Connected</div>
-                <div style="margin-top:2px; font-size:0.75rem; color:var(--text-tertiary);">Camera, Mic, Speaker, BLE, IMU OK</div>
+                <div><strong>Registered Adapters:</strong> ${devCount}</div>
             </div>
         </div>`;
 
@@ -383,10 +398,10 @@ function renderOperations(event) {
 
     if (!container || !panel) return;
 
-    const profile = event.deployment_profile || 'Simulation Profile';
-    const health = event.system_health_status || 'Healthy';
-    const cycles = event.total_cycles_executed !== undefined ? event.total_cycles_executed : 1;
-    const errors = event.active_errors_count !== undefined ? event.active_errors_count : 0;
+    const profile = event.deployment_profile || 'Profile unknown';
+    const health = event.system_health_status || 'Unknown';
+    const cycles = event.total_cycles_executed != null ? event.total_cycles_executed : 'n/a';
+    const errors = event.active_errors_count != null ? event.active_errors_count : 'n/a';
 
     container.innerHTML = `
         <div class="ops-card">
@@ -397,7 +412,6 @@ function renderOperations(event) {
             <div style="font-size:0.8rem; color:var(--text-secondary); margin-top:6px;">
                 <div><strong>Total Cycles Executed:</strong> ${cycles}</div>
                 <div><strong>Active Error Alerts:</strong> ${errors}</div>
-                <div style="margin-top:2px; font-size:0.75rem; color:var(--text-tertiary);">Structured JSON Logging & Metrics Active</div>
             </div>
         </div>`;
 
