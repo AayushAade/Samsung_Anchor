@@ -30,6 +30,8 @@ HELP_TEXT = """Commands:
   /appointments                        List upcoming appointments
   /add-appointment TITLE on YYYY-MM-DD HH:MM [at PLACE]
   /remove-appointment N
+  /set-emergency-number NUMBER          e.g. /set-emergency-number 911
+  /set-trusted-contact NAME PHONE      e.g. /set-trusted-contact Riya 555-0100
   /people          Show people I know
   /objects         Show where I last saw things
   /export [file]   Save a copy of everything I store about you (JSON)
@@ -145,6 +147,8 @@ class ChatSession:
         if cmd in ("/medications", "/add-medication", "/remove-medication",
                    "/appointments", "/add-appointment", "/remove-appointment"):
             return self._care_command(cmd, arg)
+        if cmd in ("/set-emergency-number", "/set-trusted-contact"):
+            return self._safety_setting(cmd, arg)
         if cmd == "/people":
             people = user_data.list_people(self.db)
             if not people:
@@ -175,6 +179,21 @@ class ChatSession:
             return ("All your data has been deleted." if report["ok"]
                     else f"Deletion was incomplete. Remaining records: {report['remaining']}")
         return f"I don't know the command {cmd}. Type /help to see the commands."
+
+    def _safety_setting(self, cmd: str, arg: str) -> str:
+        import re
+        from src.cognition.conversational_memory import EMERGENCY_NUMBER_KEY, TRUSTED_CONTACT_KEY
+        if cmd == "/set-emergency-number":
+            if not re.fullmatch(r"\+?[0-9][0-9 \-]{1,19}", arg):
+                return "Please give a number, for example: /set-emergency-number 911"
+            self.db._set_system_state(EMERGENCY_NUMBER_KEY, arg)
+            return f"Saved. If something sounds urgent I'll tell you to call {arg}. I can't make calls myself."
+        m = re.fullmatch(r"([A-Za-z][A-Za-z .'\-]{0,40}?)\s+(\+?[0-9][0-9 \-]{3,19})", arg)
+        if not m:
+            return "Please give a name and phone number, for example: /set-trusted-contact Riya 555-0100"
+        contact = f"{m.group(1).strip()} on {m.group(2).strip()}"
+        self.db._set_system_state(TRUSTED_CONTACT_KEY, contact)
+        return f"Saved. In an urgent situation I'll also suggest calling {contact}. I can't make calls myself."
 
     def _care_command(self, cmd: str, arg: str) -> str:
         import re

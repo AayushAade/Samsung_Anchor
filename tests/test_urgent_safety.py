@@ -88,3 +88,17 @@ def test_pipeline_directs_user_to_human_help(utterance):
     assert "notified" not in reply
     assert "previously you were discussing" not in reply
     assert pipeline.current_patient_state.mode == PatientStateMode.EMERGENCY
+
+
+def test_configured_number_and_trusted_contact_used_without_claiming_a_call(tmp_path):
+    from src.application.chat import ChatSession
+    from src.application.factory import build_application
+    coord = build_application(live_hardware=False, database=MemoraDatabase(str(tmp_path / "s.sqlite")))
+    chat = ChatSession(coord, log_path=str(tmp_path / "log"))
+    assert chat.handle("/set-emergency-number 112").startswith("Saved.")
+    assert chat.handle("/set-trusted-contact Riya 555-0100").startswith("Saved.")
+    assert chat.handle("/set-emergency-number call them").startswith("Please give a number")
+    reply = chat.handle("I fell and can't get up")
+    assert "call 112" in reply and "Riya on 555-0100" in reply
+    assert "can't contact anyone myself" in reply
+    assert "I have called" not in reply and "notified" not in reply

@@ -36,6 +36,8 @@ from src.cognition.memory_models import MemoryImportance, MemoryType, RelevantMe
 FACT_TAG = "user_fact"
 PREFERENCE_TAG = "user_preference"
 PREFERRED_NAME_KEY = "user_preferred_name"
+EMERGENCY_NUMBER_KEY = "emergency_number"
+TRUSTED_CONTACT_KEY = "trusted_contact"
 
 RELATIONS = ("daughter", "son", "wife", "husband", "partner", "doctor", "caregiver", "nurse", "brother",
              "sister", "mother", "father", "grandson", "granddaughter", "friend", "neighbor", "neighbour")
@@ -211,6 +213,10 @@ class ConversationalMemory:
     def get_preferred_name(self) -> Optional[str]:
         getter = getattr(self.db, "_get_system_state", None)
         return getter(PREFERRED_NAME_KEY) if getter else None
+
+    def get_setting(self, key: str) -> Optional[str]:
+        getter = getattr(self.db, "_get_system_state", None)
+        return getter(key) if getter else None
 
     def _name_introduction(self, raw: str, t: str, face_id=None, **_) -> Optional[str]:
         m = re.match(r"^(?:hi|hello|hey)?[, ]*(?:my name is|my name's|call me|you can call me)\s+([a-z][a-z'\-]{1,30})[.!]?$", t)

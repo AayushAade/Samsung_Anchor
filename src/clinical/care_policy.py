@@ -62,6 +62,8 @@ class CarePolicyFramework:
         current_message: Optional[str] = None,
         patient_name: str = "Eleanor",
         location: str = "Living Room",
+        emergency_number: Optional[str] = None,
+        trusted_contact: Optional[str] = None,
     ) -> CareDecision:
 
         # Rule 1: Emergency Safety Escalation
@@ -71,11 +73,14 @@ class CarePolicyFramework:
             concern_value = patient_state.details.get("urgent_concern")
             if concern_value:
                 concern = UrgentConcern(UrgentConcernType(concern_value), patient_state.details.get("matched_text", ""))
-                message = urgent_guidance(concern, name=patient_name)
+                message = urgent_guidance(concern, name=patient_name, emergency_number=emergency_number,
+                                          trusted_contact=trusted_contact)
             else:
-                message = (f"{patient_name + ', if' if patient_name else 'If'} you need help, please call your local emergency number "
+                call = emergency_number or "your local emergency number"
+                message = (f"{patient_name + ', if' if patient_name else 'If'} you need help, please call {call} "
                            "or press your help button, or call out to someone nearby. "
-                           "I can't contact anyone myself.")
+                           "I can't contact anyone myself."
+                           + (f" You can also call {trusted_contact}." if trusted_contact else ""))
             return CareDecision(
                 principle=CarePrinciple.EMERGENCY_ESCALATION,
                 action_type="ESCALATE",

@@ -33,7 +33,8 @@ from src.clinical.patient_state import PatientStateEvaluator, PatientStateMode
 from src.clinical.care_policy import CarePolicyFramework
 from src.clinical.decision_trace import ClinicalDecisionTraceLogger
 from src.perception.visual_memory_engine import VisualEpisodicMemoryEngine
-from src.cognition.conversational_memory import ConversationalMemory
+from src.cognition.conversational_memory import (ConversationalMemory, EMERGENCY_NUMBER_KEY,
+                                                 TRUSTED_CONTACT_KEY)
 from src.cognition.cos.kernel import CognitiveKernel
 from src.trust.safety_manager import SafetyManager
 from src.trust.evidence_accumulator import EvidenceAccumulator
@@ -404,6 +405,8 @@ class CognitivePipeline:
                 current_message=recall_msg if u_speech else (action.message if action else None),
                 patient_name=patient_name,
                 location=getattr(event, "room", "Living Room"),
+                emergency_number=self.conversational_memory.get_setting(EMERGENCY_NUMBER_KEY),
+                trusted_contact=self.conversational_memory.get_setting(TRUSTED_CONTACT_KEY),
             )
 
             p_name = getattr(event, "name", None) or patient_name or "Patient"

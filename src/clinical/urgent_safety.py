@@ -101,7 +101,8 @@ def detect_urgent_concern(text: Optional[str]) -> Optional[UrgentConcern]:
 
 
 def urgent_guidance(concern: UrgentConcern, name: Optional[str] = None,
-                    emergency_number: Optional[str] = None) -> str:
+                    emergency_number: Optional[str] = None,
+                    trusted_contact: Optional[str] = None) -> str:
     """
     Calm, short guidance that directs the user to human help.
 
@@ -109,13 +110,14 @@ def urgent_guidance(concern: UrgentConcern, name: Optional[str] = None,
     """
     who = f"{name}, " if name else ""
     call = f"call {emergency_number}" if emergency_number else "call your local emergency number"
+    also = f" You can also call {trusted_contact}." if trusted_contact else ""
     if concern.concern_type == UrgentConcernType.SELF_HARM:
         return (f"{who}I'm really glad you told me. You deserve support right now. "
                 f"Please {call}, or a crisis line, or tell someone near you. "
-                "I can't contact anyone myself.")
+                f"I can't contact anyone myself.{also}")
     if concern.concern_type == UrgentConcernType.HELP_REQUEST:
         return (f"{who}I hear that you need help. If you are hurt or unwell, please {call} "
                 "or press your help button, or call out to someone nearby. "
-                "I can't contact anyone myself.")
+                f"I can't contact anyone myself.{also}")
     return (f"{who}that sounds serious. Please {call} now, or press your help button, "
-            "or call out to someone nearby. I can't contact anyone myself.")
+            f"or call out to someone nearby. I can't contact anyone myself.{also}")

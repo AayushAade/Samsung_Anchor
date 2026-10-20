@@ -12,7 +12,8 @@ import os
 from datetime import datetime
 from typing import Any
 
-from src.cognition.conversational_memory import ConversationalMemory, PREFERRED_NAME_KEY
+from src.cognition.conversational_memory import (ConversationalMemory, EMERGENCY_NUMBER_KEY, PREFERRED_NAME_KEY,
+                                                 TRUSTED_CONTACT_KEY)
 from src.memory.models import (CareEventModel, CareItemModel, EpisodeModel, FeedbackEventModel, Identity, IdentityEvidence,
                                InteractionRecordModel, Object, ObjectHistory, RelevantMemoryModel,
                                SemanticNodeModel, SystemState)
@@ -65,6 +66,8 @@ def export_user_data(db: Any) -> dict[str, Any]:
         history = [{"object": h.object_name, "timestamp": h.timestamp, "room": h.room}
                    for h in s.query(ObjectHistory).all()]
         preferred = s.query(SystemState).filter_by(key=PREFERRED_NAME_KEY).first()
+        safety = {r.key: r.value for r in s.query(SystemState).filter(
+            SystemState.key.in_([EMERGENCY_NUMBER_KEY, TRUSTED_CONTACT_KEY])).all()}
         care_items = [{"id": c.item_id, "kind": c.kind, "title": c.title, "detail": c.detail,
                        "scheduled_time": c.scheduled_time, "entered_by": c.entered_by, "created_at": c.created_at}
                       for c in s.query(CareItemModel).all()]
@@ -75,6 +78,7 @@ def export_user_data(db: Any) -> dict[str, Any]:
         "version": EXPORT_FORMAT_VERSION,
         "exported_at": datetime.now().isoformat(),
         "preferred_name": preferred.value if preferred else None,
+        "safety_settings": safety,
         "facts": list_facts(db),
         "people": list_people(db),
         "objects": list_objects(db),
@@ -111,7 +115,8 @@ def delete_all_user_data(db: Any) -> dict[str, Any]:
     with db._session_scope() as s:
         for model in PERSONAL_TABLES:
             s.query(model).delete()
-        s.query(SystemState).filter(SystemState.key == PREFERRED_NAME_KEY).delete()
+        s.query(SystemState).filter(SystemState.key.in_(
+            [PREFERRED_NAME_KEY, EMERGENCY_NUMBER_KEY, TRUSTED_CONTACT_KEY])).delete(synchronize_session=False)
 
     with db.SessionFactory() as s:
         remaining = {m.__tablename__: s.query(m).count() for m in PERSONAL_TABLES}
