@@ -1,3 +1,9 @@
+> **Historical document — not supported by current evidence (2026-10-20).**
+> Written before the engineering audit recorded in PROJECT_STATE.md. At that time the
+> suite could not run from a clean clone, the scenario validator never compared results,
+> tests wrote to the user database, and urgent statements were mishandled. Do not cite
+> as certification, safety assurance, or production readiness.
+
 # MEMORA — System Validation Report
 
 > **Phase 40 — Complete Platform Validation**
