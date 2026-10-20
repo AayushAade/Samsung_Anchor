@@ -4,6 +4,34 @@ Persistent record of findings and work in progress, so an interrupted session
 does not repeat work. Newest cycle first. Severity: P0 safety/data/privacy,
 P1 core product, P2 reliability, P3 usability/commercial.
 
+## Remediation and release-readiness mission — 2026-10-21 (same branch, PR #1 draft)
+
+Baseline: HEAD `8e725f7` synced with origin, CI green; 16 untracked owner files; real DB
+SHA-1 `26f38093…`, owner backup `~/memora_backups/20261020/` SHA-1 `d8d8ccd7…`. Both are
+unchanged at the end of the mission, and the untracked files were not touched.
+
+| ID | Sev | Finding | Evidence | Status | Test |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| C2-19 | P1 | Reported dose stored with storage consent declined | probe: `care_events=1` | fixed `fa5213f` | test_consent_policy |
+| C2-20 | P2 | Slash commands saved without storage consent; policy undocumented | probe: `care_items=1` | fixed `fa5213f`: one policy for every write (commands refused with explanation, storage layer raises `ConsentRequiredError`); `docs/PRIVACY_AND_CONSENT.md` | test_consent_policy (persisted state + marker absent from every file) |
+| C2-21 | P2 | `--simulate` wrote to the real `data/logs/memora.log` | test failed before fix | fixed `03c7c29`: own temporary workspace, removed afterwards; real environment: 65 entries unchanged after 20/20 | test_simulation_isolation |
+| C2-22 | P1 | faster-whisper contacted huggingface.co on every start | DNS lookups seen at socket layer | fixed `977d8ff`: explicit network policy, all opt-in, local-only model loading, lazy ASR | test_network_policy (socket interception) |
+| C2-23 | P1 | `MEMORA_PROFILE` could turn chat/simulation into real-hardware mode | reproduced LAPTOP mode | fixed `0ecfd68`: hardware only via `--live-hardware` | test_hardware_activation_is_explicit |
+| R-01 | P3 | Each pytest session left a `memora-tests-*` temp directory | 130 present | fixed `03c7c29` (earlier synthetic leftovers left in the system temp folder) | count unchanged after a session |
+| R-02 | P0 | `--vision-standalone` opened the real camera and the restricted SCRFD detector without `--live-hardware` | code trace | fixed `5583a4c` (exit 2 without the flag) | test_vision_standalone_refuses_without_live_hardware |
+| R-03 | P2 | Backup manifest could name files outside the backup folder (read/copied on verify/restore) | 5 cases failed before fix | fixed `5583a4c` | test_manifest_cannot_name_files_outside_the_backup |
+| R-04 | P3 | `/export` temp file created with umask permissions before chmod | code | fixed `5583a4c` | test_export_is_owner_only_from_creation |
+| R-05 | P3 | Start-up "GEMINI_API_KEY is not set" warning implied a key enables cloud use | output | fixed `5583a4c` | — |
+| R-06 | P1 | Leading "Actually", "No,", "Sorry,", "Well," hid every statement; spoken corrections ignored | end-to-end CLI run | fixed `93c5563` | test_conversational_memory (+15 cases), test_cli_end_to_end |
+| R-07 | P3 | `--check` named the configured path, not the `_v2` file actually used | end-to-end CLI run | fixed `93c5563`; README explains the mapping | test_check_names_the_file_actually_used… |
+| R-08 | P2 | CI on Python 3.11 only; no end-to-end CLI test | workflow | fixed `09cf8ac`: 3.11/3.12/3.13 matrix + CLI journey | CI |
+| R-09 | P2 | Hardware install on macOS: PyAV (faster-whisper) and OpenCV both bundle `libavdevice`; the Objective-C runtime warns of duplicate classes ("may cause spurious casting failures and mysterious crashes") | `.venv` with hardware extras | **open** — hardware install only; not reproduced as a crash; needs testing with real hardware | — |
+| C2-24 | info | Local DB never opened by new code; contains test contamination | read-only inspection | **owner decision** (PROJECT_STATE §5) | — |
+
+Checked with no defect found: no network listener other than the localhost-only,
+origin-checked dashboard; no pickle/eval/shell use; repeated chat start/stop leaves no threads
+or file descriptors; migrations refuse newer schemas; full-history secret scan clean.
+
 ## Cycle 2 — started 2026-10-20 (branch `fix/p0-data-isolation-and-safety`, PR #1 draft)
 
 Phase Zero (verified): branch == origin (0/0); no other branch has unique commits;
@@ -32,7 +60,7 @@ PR #1 open, draft, mergeable, 0 reviews; working tree clean except owner's untra
 | C2-17 | P3 | Object sighting source; schema migrations | audit | done `8313383` | test_migrations |
 | C2-18 | P2 | CI | — | done `8c671ec`; green on `466be66` | GitHub Actions |
 
-### Final handoff audit at `fafcb78` (2026-10-20) — findings recorded, **not fixed** (audit-only scope)
+### Final handoff audit at `fafcb78` (2026-10-20) — findings recorded during the audit-only scope; C2-19..C2-23 since fixed (see the remediation table above)
 | ID | Sev | Finding | Evidence | Recommended fix |
 | :--- | :--- | :--- | :--- | :--- |
 | C2-19 | P1 | With storage consent **declined**, "I took my aspirin" still stores a REPORTED_TAKEN care event and replies "I've noted…", contradicting "I won't save anything you tell me" | probe in temp dir: `care_events=1` after declining | Gate `_medication_report` on `_may_store()`; reply that memory is off |

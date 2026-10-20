@@ -1,15 +1,28 @@
 # MEMORA — System Architecture (as implemented)
 
-_Updated for cycle 2 (consent, response guard, simulation, migrations). Describes the code paths that actually execute today (2026-10-20), traced from
+_Updated 2026-10-21 (consent policy, explicit hardware activation, network policy, simulation isolation). Describes the code paths that actually execute today, traced from
 `app.py`. Design intent from older documents is not repeated unless the code
 implements it._
 
 ## 1. System boundary
 
 MEMORA is a single Python process. It has no server API, no accounts, and no
-network dependency for its core loop. Optional outbound network use: Gemini
-(identity-learning name extraction only, when `GEMINI_API_KEY` is set) and the
-local WebSocket dashboard (`--dashboard`, localhost:8765).
+network dependency for its core loop. **Network policy** (`src/network_policy.py`): no outbound
+connection unless an opt-in variable is "1" — `MEMORA_ALLOW_MODEL_DOWNLOAD` (model weights),
+`MEMORA_ALLOW_CLOUD_ASR` (Google speech recognition), `MEMORA_ALLOW_CLOUD_LLM` + `GEMINI_API_KEY`
+(Gemini name extraction); models otherwise load from local files only, and speech recognition
+loads lazily on first use. The only listener is the optional local dashboard (`--dashboard`,
+localhost:8765, origin allow-list).
+
+**Hardware activation** (`src/application/factory.hardware_config_for`): real camera,
+microphone and speaker adapters are constructed only when `--live-hardware` is given;
+otherwise every construction path (factory, coordinator, pipeline defaults) uses
+`RuntimeMode.SIMULATION`, whatever `MEMORA_PROFILE` says. `--vision-standalone` also requires
+`--live-hardware`.
+
+**Consent policy** (`docs/PRIVACY_AND_CONSENT.md`): every persistent personal write requires
+`memory` consent. User-facing paths refuse with an explanation, and the storage layer
+(`CareStore`, `ConversationalMemory._save_fact`) raises `ConsentRequiredError` as a backstop.
 
 ```
  keyboard (--chat) ─┐
@@ -34,7 +47,7 @@ local WebSocket dashboard (`--dashboard`, localhost:8765).
 | `--simulation`, `--scenario` | Same runtime with simulated adapters / scripted payloads | `data/simulation/memora_simulation_v2.sqlite` unless `MEMORA_DB_PATH` set |
 | `--check` | `health_check.py` → `StartupValidator` (does not open camera) | `settings.DB_PATH` (opened for integrity check) |
 | `--show-memory` | `inspect_database.inspect_database(None)` | `settings.DB_PATH` |
-| `--simulate [NAME]` | `src/simulation/journeys.py`: each journey builds its own `ChatSession` with a `SimulatedClock` (and optional `SimulatedBattery`) | a fresh temporary directory per journey, removed afterwards |
+| `--simulate [NAME]` | `src/simulation/journeys.py`: each journey builds its own `ChatSession` with a `SimulatedClock` (and optional `SimulatedBattery`) | a fresh temporary directory per journey; the CLI also points `MEMORA_LOG_DIR`/`MEMORA_DB_PATH` at its own temporary workspace before logging starts, and removes it afterwards |
 | `--backup [DIR]`, `--restore DIR`, `--repair` | `src/memory/backup.py`, `user_data.py` | `settings.DB_PATH` (opened via `open_user_database`) |
 
 `build_application` (src/application/factory.py) is the single construction path
@@ -126,7 +139,7 @@ front-end tells the person the turn may not have been saved.
 | :--- | :--- | :--- |
 | numpy, SQLAlchemy, faiss-cpu, OpenCV, SpeechRecognition, psutil, pydantic | core | import failure (required) |
 | PyAudio / pyttsx3 / faster-whisper / insightface / mediapipe / ultralytics | real sensors and models | guarded imports; simulated/console fallbacks; `--check` reports missing packages |
-| google-genai + `GEMINI_API_KEY` | identity-learning name extraction | local regex heuristics |
+| google-genai + `GEMINI_API_KEY` + `MEMORA_ALLOW_CLOUD_LLM=1` | identity-learning name extraction | local regex heuristics (default) |
 
 ## 7. Trust boundaries
 

@@ -1,6 +1,6 @@
 # Safety Design and Known Limitations
 
-_2026-10-20. Describes behaviour as implemented and tested. MEMORA is not a medical
+_Updated 2026-10-21. Describes behaviour as implemented and tested. MEMORA is not a medical
 device, has not been clinically evaluated, and must not be relied on for safety,
 emergency response, or medication management without human oversight._
 
@@ -41,12 +41,17 @@ The cognitive-OS `SafetyManager` evaluates an internal proposed action and is
 | Visitor announcements | Only for identities with a name and relationship; never for unknown faces or the person themself | Avoid misidentification |
 | Negated symptoms ("I'm not having chest pain") | Treated as urgent (conservative) | A missed emergency is worse than a gentle prompt; negation handling is not reliable enough to relax this |
 | Face recognition | Off unless the person consents (`/consent faces on`) | Biometric data |
+| Storage declined | Nothing personal is saved by any path; "I took my pills" is acknowledged but not recorded, and the person is told memory is off; urgent guidance still works | One consent policy (`docs/PRIVACY_AND_CONSENT.md`) |
+| Real devices | Used only when `--live-hardware` is given explicitly; no environment variable or profile can enable them | Prevent unexpected recording |
+| Spoken corrections ("Actually, my daughter is Priya") | Replace a single earlier name and say what was changed; with several stored names, ask which one is wrong rather than deleting any | Silent loss or silent duplication of family names would mislead the person |
 
 ## 3. Verified (software only)
 - Urgent detection: 31 positive/negative phrasings (`tests/test_urgent_safety.py`), simulated
   journeys `urgent_distress`, `medical_boundaries`.
 - Output guard: blocked and allowed message sets, and a test that the guard runs on the
   live delivery path (`tests/test_response_guard_and_boundaries.py`).
+- Urgent statements take precedence over memory parsing even when they start with a filler or
+  correction word (detection runs on the original text before leading words are removed).
 - No fabricated people, prescriptions, routines, consent or confidence in real-use
   components (`tests/test_no_invented_context.py`, object-graph sweep).
 

@@ -1,42 +1,54 @@
 # MEMORA — Project State
 
-_Last updated: 2026-10-20. This file records verified facts only. Where something
+_Last updated: 2026-10-21. This file records verified facts only. Where something
 was not run or not checked, it says so._
 
-## 0. Final handoff audit — evidence at code commit `fafcb78`
+## 0. Current state — remediation mission, validated code commit `09cf8ac` (2026-10-21)
 
-**Git:** branch `fix/p0-data-isolation-and-safety`, in sync with origin (0 ahead / 0 behind),
-no stashes; working tree clean except 16 untracked `validation/artifacts/session_*` files that
-pre-date this work's isolation fix (left untouched). Draft PR #1 open, mergeable, no reviews.
+**Git:** branch `fix/p0-data-isolation-and-safety`, pushed, no force-pushes, no history
+rewritten. Commits after `09cf8ac` change only documentation and add test cases (no product code). Draft PR #1 open, not merged.
+16 untracked owner files (`validation/artifacts/session_*`) untouched.
 
-**Verified (direct evidence)**
-| Check | Result | Where |
-| :--- | :--- | :--- |
-| GitHub Actions on `fafcb78` (push 39456648298, PR 39456655903) | both runs `success`; core job log: `752 passed, 4 skipped`, ruff clean, `20/20 journeys passed`, `--check` pass-with-warnings; Docker job success | GitHub |
-| Local full suite on `fafcb78` (macOS arm64, `.venv` with all extras) | `756 passed`, exit 0 | local |
-| `ruff check .` | clean | local |
-| `python app.py --simulate` | 20/20 journeys PASS (each listed), exit 0 | local |
-| Release-gate test groups | consent 17, cloud-ASR/voice 4, migrations 4, memory integrity 58, deletion 3, backup/restore 4, thread-pool journey 1, dashboard origin/XSS 3, safety responses 64, no-physical-devices 4 — all passed | local |
-| Real data untouched by tests and journeys | `memora_db_v2.sqlite` and the 20 Oct backup: same checksum and mtime before/after; no `memora_db_v2.faces.*` files; `data/simulation/` unchanged | local |
-| Clean isolated dev DB procedure (below) | fresh DB 0600, schema v1, all personal tables 0 rows, chat + verified backup work; real DB unchanged | temp dir |
+**Fixed in this mission** (details, evidence and tests: `docs/EXECUTION_LEDGER.md`):
+| Commit | Fix |
+| :--- | :--- |
+| `fa5213f` | One consent policy for every persistent write: conversation, slash commands, reported doses, logs; storage layer raises `ConsentRequiredError` (C2-19, C2-20) |
+| `0ecfd68` | Real devices only via `--live-hardware`; `MEMORA_PROFILE` can no longer enable them (C2-23) |
+| `977d8ff` | Explicit network policy: nothing leaves the computer unless opted in; socket-level tests (C2-22) |
+| `03c7c29` | `--simulate` runs in its own temporary workspace; test sessions clean up (C2-21) |
+| `5583a4c` | `--vision-standalone` requires `--live-hardware`; backup-manifest path validation; owner-only export temp file; misleading Gemini warning removed |
+| `93c5563` | Statements and corrections that start with "Actually", "No,", "Well," are understood; `--check` names the real file |
+| `9e7dd3a` | Licensing inventory updated; licence options for the owner (none chosen) |
+| `09cf8ac` | End-to-end CLI journey test; CI on Python 3.11, 3.12, 3.13 |
 
-**Found in this audit, not fixed (audit-only scope)** — see `docs/EXECUTION_LEDGER.md` C2-19…C2-24:
-consent gap for reported doses (C2-19); undocumented storage of explicit commands without
-consent (C2-20); `--simulate` writes metadata to the real log (C2-21); Hugging Face network
-request when the optional faster-whisper extra is installed (C2-22); chat/`--simulate` rely on
-`MEMORA_PROFILE` being unset to stay off real devices (C2-23).
+**Verified on `09cf8ac`** (full table: `docs/RELEASE_GATES.md`): dev suite 812 passed; fresh
+clone + clean 3.11 venv 808 passed / 4 skipped; clean 3.12 and 3.13 containers 806 passed / 6
+skipped (each skip reviewed); journeys 20/20 everywhere; ruff clean; Docker build, `--check`,
+persistence, non-root, 0600; full-history secret scan clean; GitHub Actions green (3 Python
+versions + Docker); owner DB (SHA-1 `26f38093…`) and owner backup (SHA-1 `d8d8ccd7…`) unchanged.
 
-**Unverified hardware behaviour:** camera, microphone, speech recognition, text-to-speech, face
-recognition, object detection — never run on real devices in this work; the test suite blocks
-real devices.
+**Open defects:** R-09 (P2, hardware install on macOS only): PyAV and OpenCV both bundle
+`libavdevice`, and the Objective-C runtime warns of possible crashes. No crash has been
+reproduced; it needs a hardware test session.
 
-**Owner decisions:** local DB handling; repository licence; InsightFace model / YOLO; consent
-policy for explicit commands (C2-20); hardware-test authorisation; Gemini key; merging PR #1.
+**Not verified:** camera, microphone, speech recognition, text-to-speech, face recognition,
+object detection (no real devices used, by instruction); Windows; Gemini against the live API;
+runs longer than 20 minutes.
 
-**External review required:** legal (licences, contributor ownership, Gemini terms, patent timing
-given the public repo); clinical (urgent-phrase set, reminder and reassurance wording);
-usability with people with memory difficulties and carers; regulatory/privacy (medical-device,
-health-data, biometric-data rules).
+**Owner decisions:** repository licence (options in `docs/LICENSING_REVIEW.md` §6); the
+InsightFace model tracked in the public repository; YOLO/AGPL; `banner.png` provenance; local
+DB handling (§5); authorising a hardware test session; merging PR #1; any release.
+
+**External review required:** legal (licences, contributor ownership, competition terms, Gemini
+terms, patent timing); clinical (urgent-phrase set, wording); usability with people with memory
+difficulties and carers; privacy/regulatory (medical-device, health-data, biometric rules).
+
+Software completion is not release authorisation: the text product meets the engineering gates
+it can meet alone; release, pilots and distribution are the owner's decisions.
+
+### Earlier: final handoff audit at `fafcb78` (2026-10-20)
+CI and local suite green (756 passed); found C2-19…C2-24, all except C2-24 (owner decision)
+fixed in the mission above.
 
 ## 1. Repository and branches
 
@@ -97,6 +109,7 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 - No `GEMINI_API_KEY` configured → cloud paths not exercised against the live API.
 - No camera or microphone was opened during this work (privacy; not needed for the verified paths).
 - `assets/models/` contains `scrfd_500m_bnkps.onnx` (tracked). `yolov8n.pt` exists locally (ignored).
+- Real data, verified unchanged at the end of the 2026-10-21 mission: `memora_db_v2.sqlite` SHA-1 `26f38093…`; `~/memora_backups/20261020/memora_db_v2.sqlite` SHA-1 `d8d8ccd7…`.
 
 ## 3. Verified entry points
 
@@ -113,7 +126,8 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | `python deployment/benchmarks/soak_runtime.py SECONDS` | 20 min and 10 min simulated soaks run; see `docs/evidence/RUNTIME_SOAK_20261020.md` |
 | `docker build -f deployment/docker/Dockerfile .` + `docker run -it -v memora-data:/data memora` | Built and run; `--check` passes with optional-capability warning; chat memory persisted across two container runs |
 | Dashboard (`experience/server.py`) | Run against synthetic events in the browser pane: escaping and honest fallbacks verified (`1abc9ed`) |
-| `python app.py` (no args), `--live-hardware`, `--vision-standalone` | **Not run** in this work (would open camera/microphone) |
+| `python app.py` (no args) | Simulated runtime (real devices only with `--live-hardware`) |
+| `--live-hardware`, `--vision-standalone --live-hardware` | **Not run** in this work (would open camera/microphone). Without `--live-hardware`, `--vision-standalone` exits 2 (tested) |
 | `demo_mode.py`, `operate.py --demo` | Scripted presentation — output is labelled synthetic |
 | `demo.py`, `live_demo.py`, `demo_experience.py`, `identity_learning_demo.py` | Not reviewed or run |
 
@@ -128,16 +142,17 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | `8ccf2bd` | fresh clone, clean venv (core+dev) | 664 passed, 2 skipped (cloud SDK not installed), 21 s |
 | `466be66` | `.venv` (macOS arm64) | 749 passed in ~73 s; ruff clean; `app.py --simulate` 20/20 |
 | `ac87a0f` | clean `python:3.12-slim` and `python:3.13-slim` containers | 747 passed, 6 skipped (reasons stated); journeys 20/20 |
-| **Latest (`6bd49a9`)** | fresh clone, clean Python 3.11 venv, core+dev deps | **752 passed, 4 skipped** (reasons stated), 23 s; ruff clean; journeys 20/20; `--check` pass; chat verified |
+| **Latest (`09cf8ac`)** | `.venv`; fresh clone + clean 3.11 venv; clean 3.12/3.13 containers; GitHub Actions | **812 passed**; 808 passed / 4 skipped; 806 passed / 6 skipped each; CI green — see `docs/RELEASE_GATES.md` |
+| `6bd49a9` | fresh clone, clean Python 3.11 venv, core+dev deps | **752 passed, 4 skipped** (reasons stated), 23 s; ruff clean; journeys 20/20; `--check` pass; chat verified |
 | `6bd49a9` | GitHub Actions (ubuntu, Python 3.11) | core and Docker jobs passing on push and PR |
-| Latest (`466be66`) | GitHub Actions, ubuntu-latest, Python 3.11 | core job (ruff, pytest, journeys, --check) and Docker job passing |
+| `466be66` | GitHub Actions, ubuntu-latest, Python 3.11 | core job (ruff, pytest, journeys, --check) and Docker job passing |
 | `823a85e`-era | Fresh clone + clean venv, `requirements-dev.txt` only | 634 passed, 2 skipped (cloud SDK not installed) |
 | Before `90eab3c` | Fresh clone | **Import failure**: `src/runtime/runtime_engine.py` had never been committed |
 
 Static analysis: `ruff.toml` (correctness rules only) passes; it found three
-runtime NameErrors that were fixed. No type checking is configured. No CI is
-active (`deployment/ci/github-workflow.yml` is a template; activation is the
-owner's decision because Actions minutes may be billed).
+runtime NameErrors that were fixed. No type checking is configured. CI:
+`.github/workflows/ci.yml` (GitHub-hosted runners, free for this public repository) runs
+ruff, the suite, journeys and `--check` on Python 3.11/3.12/3.13, plus a Docker job.
 
 ## 5. Known blockers and open issues
 

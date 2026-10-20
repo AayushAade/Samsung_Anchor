@@ -75,7 +75,10 @@ def test_risk_engine_marks_urgent_concern_critical():
 
 
 @pytest.mark.parametrize("utterance", ["Help me, I fell", "I have chest pain", "I can't breathe",
-                                       "I took too many pills"])
+                                       "I took too many pills",
+                                       # leading filler/correction words must not hide urgency
+                                       "Actually, I fell and I can't get up", "No, I can't breathe",
+                                       "Well, my chest hurts"])
 def test_pipeline_directs_user_to_human_help(utterance):
     pipeline = CognitivePipeline(MemoraDatabase(":memory:"))
     try:

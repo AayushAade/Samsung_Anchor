@@ -1,7 +1,7 @@
 # MEMORA — Master Roadmap
 
 _Prioritised from verified findings (see PROJECT_STATE.md and
-CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-20._
+CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-21._
 
 ## Done in this cycle (all on `fix/p0-data-isolation-and-safety`)
 
@@ -43,21 +43,26 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-20._
 | P2 | Core verified on Python 3.12/3.13 | `ac87a0f` |
 | P0 | Dashboard WebSocket cross-site hijacking | `e4dc941` |
 
-## Next (re-ranked after the final handoff audit at `fafcb78`)
+## Done in the remediation mission (2026-10-21)
+| Pri | Item | Commit |
+| :--- | :--- | :--- |
+| P1 | One consent policy for every write, incl. commands, reported doses and logs (C2-19, C2-20) | `fa5213f` |
+| P1 | Real devices only via `--live-hardware` (C2-23); `--vision-standalone` included | `0ecfd68`, `5583a4c` |
+| P1 | Explicit network policy, socket-level tests (C2-22) | `977d8ff` |
+| P2 | `--simulate` isolated from the normal environment (C2-21); test temp cleanup | `03c7c29` |
+| P2 | Backup-manifest path validation; owner-only export temp file | `5583a4c` |
+| P1 | Corrections and statements starting with "Actually", "No,", "Well," | `93c5563` |
+| P2 | End-to-end CLI journey test; CI on Python 3.11/3.12/3.13 | `09cf8ac` |
 
-### Fix before any pilot (found in the audit; small, not yet done)
-0a. C2-19 — with storage consent declined, do not save reported doses; say memory is off.
-0b. C2-23 — force simulated hardware whenever `live_hardware` is false (chat, `--simulate`).
-0c. C2-22 — load speech recognition lazily and offline by default; disclose any model download
-    (or deploy the core install only).
-0d. C2-21 — `--simulate` logs into its own temporary directory.
-0e. C2-20 — decide and document whether explicit commands may save without storage consent.
+## Next
 
 ### Owner decisions (blocking)
 1. Local DB: restore the pre-work backup or start a fresh database (test contamination).
-2. Licensing: repository licence; stop redistributing `assets/models/scrfd_500m_bnkps.onnx`?
-   InsightFace/YOLO commercial licences or replacements.
-3. Authorise real-hardware testing (camera, microphone, speaker) on a named machine.
+2. Licensing: repository licence (options in `docs/LICENSING_REVIEW.md` §6); stop
+   redistributing `assets/models/scrfd_500m_bnkps.onnx`? InsightFace/YOLO commercial licences or
+   replacements; record `assets/images/banner.png` provenance.
+3. Authorise real-hardware testing (camera, microphone, speaker) on a named machine; include
+   ledger R-09 (PyAV/OpenCV duplicate `libavdevice` on macOS).
 4. Authorise a Gemini test key (or decide to drop cloud name extraction).
 5. Merge PR #1 into `main` after review.
 

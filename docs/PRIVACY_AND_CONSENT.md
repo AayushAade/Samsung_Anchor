@@ -18,6 +18,12 @@ Only non-personal records needed to operate: the consent decisions themselves
 (`consent:<feature>` with timestamp), `schema_version`, and system defaults
 (`current_room`, `next_anon_index`). Nothing the person says.
 
+Operational logs in the log folder (`MEMORA_LOG_DIR`, default `data/logs/`, files 0600) record
+start-up times, the database path and diagnostic messages, but no conversation content. This
+is checked by `tests/test_consent_policy.py` (a marker word must not appear in any file) and
+`tests/test_cli_end_to_end.py` (names must not appear in the logs). The database path can
+include the computer's user name.
+
 ## What happens without `memory` consent
 - Statements are not stored; MEMORA says memory is turned off instead of "I'll remember".
 - `/add-medication`, `/add-appointment`, `/set-emergency-number`, `/set-trusted-contact` are refused
