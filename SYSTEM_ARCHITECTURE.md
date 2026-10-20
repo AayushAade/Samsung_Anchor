@@ -1,6 +1,6 @@
 # MEMORA — System Architecture (as implemented)
 
-_Describes the code paths that actually execute today (2026-10-20), traced from
+_Updated for cycle 2 (consent, response guard, simulation, migrations). Describes the code paths that actually execute today (2026-10-20), traced from
 `app.py`. Design intent from older documents is not repeated unless the code
 implements it._
 
@@ -34,6 +34,8 @@ local WebSocket dashboard (`--dashboard`, localhost:8765).
 | `--simulation`, `--scenario` | Same runtime with simulated adapters / scripted payloads | `data/simulation/memora_simulation_v2.sqlite` unless `MEMORA_DB_PATH` set |
 | `--check` | `health_check.py` → `StartupValidator` (does not open camera) | `settings.DB_PATH` (opened for integrity check) |
 | `--show-memory` | `inspect_database.inspect_database(None)` | `settings.DB_PATH` |
+| `--simulate [NAME]` | `src/simulation/journeys.py`: each journey builds its own `ChatSession` with a `SimulatedClock` (and optional `SimulatedBattery`) | a fresh temporary directory per journey, removed afterwards |
+| `--backup [DIR]`, `--restore DIR`, `--repair` | `src/memory/backup.py`, `user_data.py` | `settings.DB_PATH` (opened via `open_user_database`) |
 
 `build_application` (src/application/factory.py) is the single construction path
 for all runtime modes.
@@ -43,6 +45,8 @@ for all runtime modes.
 - **Main thread**: `AnchorRuntime.run_continuous` loop (cycle delay 0.1 s) captures a
   frame, calls `AnchorCoordinator.process_frame`, drains the action queue, prints a
   heartbeat every 10 cycles.
+- **Context-fusion pool**: each pipeline owns a 10-worker `ThreadPoolExecutor`; it is
+  closed by `CognitivePipeline.shutdown()` (it previously leaked on every restart).
 - **Cognitive worker thread** (daemon): `AnchorCoordinator._cognitive_worker_loop`
   consumes recognition results from a **bounded queue (max 10, drop-oldest,
   `dropped_events_count`)** and runs `CognitivePipeline.process`.
@@ -71,15 +75,24 @@ Order of execution (src/pipeline/cognitive_pipeline.py):
 6. Patient state (`PatientStateEvaluator`): emergency flag → **urgent concern in speech**
    (`src/clinical/urgent_safety.py`) → repetition/searching/disorientation/distress →
    overdue scheduled medication → oriented/calm.
-7. Direct answer from `ConversationalMemory` (facts, names, orientation, objects,
-   appointments, timeline, visitors, small talk). Returns nothing for urgent speech.
+7. Direct answer from `ConversationalMemory`: capability/medical boundaries first (calls,
+   messages, medication changes, diagnosis), then names, orientation, forget/corrections,
+   facts, medication reports/questions, appointments, timeline, visitors, objects (with
+   sighting source and age), feelings, small talk. Returns nothing for urgent speech.
+   Storing anything requires conversation-storage consent.
 8. COS kernel + `SafetyManager.evaluate_action` — **recorded in the audit trail only;
    it does not gate what is spoken** (see §8).
 9. Care policy (`CarePolicyFramework`) chooses principle and message.
 10. **Reply precedence**: urgent guidance → direct answer → care-policy reply to speech →
     honest fallback; without speech: throttled scheduled reminder or visitor greeting.
-11. Speak via `runtime_manager.speaker`; `last_speech_delivered` records the result.
-12. Persist: system reply encoded as a memory (`MemoryEncoder`), episode logged.
+10b. Battery notice (simulated battery only), never appended to urgent guidance.
+10c. **Response guard** (`src/clinical/response_guard.py`) checks the final message for
+    claims MEMORA cannot make (contacting anyone, doses taken, diagnoses, medication
+    instructions) and replaces it if necessary.
+11. Speak via `runtime_manager.speaker`; `last_speech_delivered` records the result
+    (False if no audio backend actually spoke).
+12. Persist: episode logged (only with storage consent). MEMORA's own replies are not
+    stored as memories.
 13. Decision trace, explainability, audit record (outcome SPOKEN / SPEECH_OUTPUT_FAILED / SILENT).
 14. LTM, behaviour, reasoning, knowledge, executive, experience engines run and produce
     summaries — **after** the reply is spoken; their output goes to the cognitive stream /
@@ -95,12 +108,17 @@ front-end tells the person the turn may not have been saved.
 | :--- | :--- | :--- | :--- |
 | SQLite (`MemoraDatabase`) | `<db>_v2.sqlite` | identities, identity_evidence, objects, object_history, episodes, relevant_memories (user facts with provenance tags; system replies), semantic_nodes, interaction_records, feedback_events, system_state (incl. preferred name) | Yes |
 | Face embeddings (`FaissVectorStore`) | `<db>_v2.faces.json` (authoritative) + `.faces.index` (derived) | 128-D embeddings per identity | Yes; per database; atomic writes; corrupt files quarantined |
-| In-memory only | process | patient profile, medication schedules, appointments, caregiver preferences, working memory, search history, behaviour/executive state | **No** |
+| SQLite care tables | `care_items`, `care_events` | medication schedules, appointments (with `entered_by`), REMINDED/REPORTED_TAKEN events | Yes |
+| SQLite system_state | `system_state` | preferred name, emergency number, trusted contact, `consent:<feature>` decisions, `schema_version` | Yes |
+| In-memory only | process | patient profile (demo defaults), caregiver preferences, working memory, search history, behaviour/executive state | **No** |
 
 - `resolve_db_url` maps `memora_db.sqlite` → `memora_db_v2.sqlite` unless an existing file is passed explicitly.
 - `MemoraDatabase.check_integrity()` cross-checks identities against embeddings.
-- No schema migration framework: tables are created with `create_all`; columns are never altered. Structured fact fields are stored as tags to avoid a migration.
-- File permissions follow the process umask (not restricted); exports are written 0600.
+- Schema: `create_all` creates missing tables; `src/memory/migrations.py` applies versioned,
+  additive, transactional migrations (v1: `source` on `objects`/`object_history`) and refuses a
+  database newer than the build. Structured fact fields are stored as tags.
+- Database, face data, logs, exports and backups are written owner-only (0600 / 0700 dirs).
+  Not encrypted at rest.
 
 ## 6. External dependencies and fallbacks
 
@@ -113,6 +131,10 @@ front-end tells the person the turn may not have been saved.
 ## 7. Trust boundaries
 
 - **User speech** (keyboard/ASR): parsed only by deterministic regex; never executed.
+- **Microphone audio**: identity-learning transcription uses Google's online service; the
+  microphone is not opened for it unless `MEMORA_ALLOW_CLOUD_ASR=1` and voice consent is given.
+- **Dashboard**: localhost only; WebSocket accepts only the dashboard's own origin; all event
+  text is HTML-escaped before rendering.
 - **Gemini output**: untrusted; validated to a short plain name and a known relationship
   before it can label an identity; 10 s timeout; failures fall back locally.
 - **Face recognition**: an identity is named only after it was bound via an explicit
@@ -122,12 +144,11 @@ front-end tells the person the turn may not have been saved.
 
 ## 8. Known architectural limitations
 
-- `SafetyManager` decisions are audit-only. Urgent-speech safety is enforced by the
-  patient-state/care-policy path, which is tested; the COS safety checks are not.
+- `SafetyManager` (cognitive OS) decisions are advisory/audit-only. Output safety is
+  enforced by the urgent-safety path and the response guard on the delivery path.
 - The ~20 "phase" engines run every cycle but do not affect behaviour; they add latency
   and complexity without user-visible effect.
-- Profile, medications and appointments are not persisted and have no user interface to
-  enter them, so reminders cannot yet be configured by a real user.
+- The patient profile (beyond preferred name and safety contacts) is not persisted.
 - The pipeline prints extensively to stdout; `--chat` redirects it to `data/logs/chat_debug.log`.
 - `CognitivePipeline.__init__` constructs every subsystem (~40 objects) eagerly; startup imports
   heavy optional ML packages when installed.

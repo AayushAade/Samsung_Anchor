@@ -28,44 +28,53 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-20._
 | P1 | Emergency number + trusted contact in urgent guidance | `44f385f` |
 | P1 | Phrasing coverage measured (corpus 40/40) | `cdd1465` |
 
-## Next
+## Done in cycle 2 (2026-10-20)
+| Pri | Item | Commit |
+| :--- | :--- | :--- |
+| P0 | Response guard on the delivery path; honest call/medication/diagnosis answers | `3354043` |
+| P1 | Conflicting relations surfaced, corrections, retraction, pronouns, names | `cef558c`, `bbca359` |
+| P0 | Consent enforced (storage, faces) with chat onboarding | `e5fbee3` |
+| P2 | Actionable storage errors; delete-all covers logs and session state | `1bc192a` |
+| P2 | Versioned additive migrations; sighting source stated | `8313383` |
+| P1 | Simulation: clock, battery, sensor failures, 20 journeys; restore-on-corrupt and thread-leak fixes | `0666d05` |
+| P2 | CI (GitHub Actions) — green | `8c671ec` |
+| P0 | Tests could drive real devices/sound; honest speaker fallback | `466be66` |
+| P0 | Silent cloud transcription of microphone audio; voice consent; SpeechRecognition optional | `592ddab` |
+| P2 | Core verified on Python 3.12/3.13 | `ac87a0f` |
+| P0 | Dashboard WebSocket cross-site hijacking | `e4dc941` |
 
-### P0 — safety, privacy, correctness
-1. **Owner decision:** run `--backup` then `--repair` on the local DB (27 faceless identities), or re-enrol.
-2. **Decide quiet-hours / throttling policy for proactive speech** (reminders, visitor announcements)
-   and enforce it on the actual reply path, or remove the advisory COS SafetyManager from the cycle.
-   _Acceptance_: a test proves the chosen policy on spoken output.
-4. **Consent records for face enrolment and voice capture** before any real-hardware use.
-5. **Licensing:** remove or replace the tracked InsightFace model and AGPL dependencies before any
-   commercial build (counsel review); the repository is public.
+## Next (re-ranked)
 
-### P1 — core product
-6. **Voice I/O on real hardware** (microphone → ASR → pipeline → TTS), consented and tested on the
-   owner's Mac, first with recorded audio fixtures.
-7. **Real face enrolment flow** with explicit consent and deletion, verified with consenting subjects.
-8. **Person profile persistence** (beyond preferred name): caregiver contacts and emergency number
-   used in urgent guidance (currently generic "local emergency number").
-9. **Grow the phrasing corpus** from real (consented) usage logs; track coverage over time.
+### Owner decisions (blocking)
+1. Local DB: restore the pre-work backup or start a fresh database (test contamination).
+2. Licensing: repository licence; stop redistributing `assets/models/scrfd_500m_bnkps.onnx`?
+   InsightFace/YOLO commercial licences or replacements.
+3. Authorise real-hardware testing (camera, microphone, speaker) on a named machine.
+4. Authorise a Gemini test key (or decide to drop cloud name extraction).
+5. Merge PR #1 into `main` after review.
 
-### P2 — operations and quality
-10. Versioned schema migrations (additive tables work today via `create_all`; column changes would not).
-11. Activate CI (owner approval for GitHub Actions usage).
-12. Multi-hour soak and a real-hardware soak once sensors are verified.
+### P1 — product
+6. Voice mode end to end (local ASR, e.g. faster-whisper, instead of cloud) with consent,
+   verified first with recorded audio fixtures, then on hardware.
+7. Caregiver-mediated setup (schedules, contacts, consent on behalf of the person) — needs
+   product and legal input.
+8. Grow the phrasing corpus from consented pilot usage; measure false answers explicitly.
 
-### P3 — performance and architecture
-13. Lazy-construct or remove the ~20 phase engines that run every cycle without affecting replies.
-14. Licence-compatible object detector to replace the contour heuristic.
+### P2 — reliability and security
+9. Encryption at rest for the database and face data (OS keychain-backed key).
+10. Multi-hour soak; real-hardware soak once sensors are verified.
+11. Remove or lazy-load the phase engines that do not affect replies (simplicity, startup).
 
-### P4 — commercial
-15. Licensing decisions with counsel — `docs/LICENSING_REVIEW.md`.
-16. Customer discovery per `docs/product/PRODUCT_SPEC.md`; regulatory questions for professional review.
+### P3 — commercialisation
+12. Third-party notices generated at release; customer-discovery plan execution
+    (`docs/product/PRODUCT_SPEC.md`); professional regulatory review.
 
 ## Release stages
 
 | Stage | Entry criteria | Current |
 | :--- | :--- | :--- |
-| Development | — | **Here** |
-| Internal alpha | P0 items 1–4 done; profile/schedules persisted (5); backup/restore (11); owner dogfoods `--chat` daily for 2 weeks with no data loss | not yet |
+| Development | — | Passed |
+| Internal alpha / controlled technical pilot (text mode) | Engineering gates A–I (see `docs/RELEASE_GATES.md`); owner dogfoods `--chat` for 2 weeks with no data loss | **Engineering gates met; dogfooding not started** |
 | Controlled pilot | Real voice I/O verified; consent flows; caregiver configuration; written risk assessment; professional regulatory/privacy review; supervised, consenting participants | not yet |
 | Release candidate | Pilot findings resolved; security review; clean-install on target platform; documented rollback | not yet |
 | Production | Appropriate regulatory and legal sign-off | not yet |
