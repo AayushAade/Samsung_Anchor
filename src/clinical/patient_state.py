@@ -113,7 +113,9 @@ class PatientStateEvaluator:
                 )
 
             # Anxiety keywords
-            if any(w in speech_clean for w in ["scared", "worried", "anxious", "help me", "frightened"]):
+            if any(w in speech_clean for w in ["scared", "worried", "anxious", "help me", "frightened",
+                                                "forgetting", "can't remember", "cannot remember",
+                                                "losing my mind", "what's wrong with me", "upset"]):
                 return PatientState(
                     mode=PatientStateMode.ANXIOUS,
                     confidence=0.92,
@@ -130,6 +132,7 @@ class PatientStateEvaluator:
                 confidence=0.95,
                 primary_need=f"Gentle reminder for scheduled medication: {med_names}",
                 last_updated=now_iso,
+                details={"medications": list(missed_medications)},
             )
 
         # 5. Cognitive Context Evaluation

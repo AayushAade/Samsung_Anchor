@@ -136,11 +136,13 @@ class ConversationalMemory:
     """Answers recall questions and records user-provided facts."""
 
     def __init__(self, database: Any, clock: Callable[[], datetime] = datetime.now,
-                 visual_memory: Any = None) -> None:
+                 visual_memory: Any = None, appointments: Any = None) -> None:
         self.db = database
         self.clock = clock
         # Optional VisualEpisodicMemoryEngine holding richer in-session sightings.
         self.visual_memory = visual_memory
+        # Optional AppointmentManager; appointments must be entered by the person or a carer.
+        self.appointments = appointments
         self.search_history: list[dict] = []
 
     # ------------------------------------------------------------------
@@ -157,7 +159,7 @@ class ConversationalMemory:
         t = _norm(speech)
         for handler in (self._name_introduction, self._orientation, self._fact_correction_or_statement,
                         self._fact_question, self._timeline, self._visitors, self._last_search,
-                        self._object_location, self._feelings, self._small_talk):
+                        self._appointment, self._object_location, self._feelings, self._small_talk):
             reply = handler(speech, t, face_id=face_id, patient_name=patient_name)
             if reply:
                 return reply
@@ -456,6 +458,16 @@ class ConversationalMemory:
         names = visitors[0] if len(visitors) == 1 else ", ".join(visitors[:-1]) + " and " + visitors[-1]
         return f"I recorded {names} today."
 
+    def _appointment(self, raw: str, t: str, **_) -> Optional[str]:
+        if not re.search(r"\b(appointment|appointments|doctor's visit|checkup|check-up)\b", t) or not re.search(r"\b(when|what|is|do i|have i|any)\b", t):
+            return None
+        upcoming = self.appointments.get_upcoming_appointments() if self.appointments else []
+        if not upcoming:
+            return "I don't have any appointments recorded. A family member or carer can add them for you."
+        parts = [f"{a.title} {a.scheduled_time}" + (f" at {a.location}" if getattr(a, "location", "") else "")
+                 for a in upcoming[:3]]
+        return "Here's what I have recorded: " + "; ".join(parts) + "."
+
     def _last_search(self, raw: str, t: str, **_) -> Optional[str]:
         if not re.search(r"\bwhat (was|am) i (looking|searching) for\b", t):
             return None
@@ -475,10 +487,12 @@ class ConversationalMemory:
             if m:
                 target = re.sub(r"\b(again|now|please|today|anywhere)\b", "", m.group(1)).strip()
                 break
-        if not target and not any(obj in t for obj in KNOWN_OBJECTS):
+        mentioned = [obj for obj in sorted(KNOWN_OBJECTS, key=len, reverse=True)
+                     if re.search(rf"\b{re.escape(obj)}\b", t)]  # whole words: "hat" must not match "what"
+        if not target and not mentioned:
             return None
         if not target:
-            target = next(obj for obj in sorted(KNOWN_OBJECTS, key=len, reverse=True) if obj in t)
+            target = mentioned[0]
         if target in ("i", "you", "we", "it", "that", "this"):
             return None
 

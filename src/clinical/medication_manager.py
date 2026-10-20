@@ -60,6 +60,9 @@ class MedicationManager:
     def add_medication(self, schedule: MedicationSchedule) -> None:
         self._schedules[schedule.med_id] = schedule
 
+    def remove_medication(self, med_id: str) -> bool:
+        return self._schedules.pop(med_id, None) is not None
+
     def get_all_schedules(self) -> List[MedicationSchedule]:
         return list(self._schedules.values())
 

@@ -46,9 +46,9 @@ def test_end_to_end_10_clinical_scenarios():
     specs = get_all_clinical_scenario_specs()
     results = validator.run_all_scenarios(specs)
 
-    assert len(results) == 10
+    assert len(results) == len(specs)
     passed_count = sum(1 for r in results if r.passed)
-    assert passed_count == 10
+    assert passed_count == len(specs)
 
     pipeline.shutdown()
 

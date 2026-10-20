@@ -73,7 +73,7 @@ class CarePolicyFramework:
                 concern = UrgentConcern(UrgentConcernType(concern_value), patient_state.details.get("matched_text", ""))
                 message = urgent_guidance(concern, name=patient_name)
             else:
-                message = (f"{patient_name + ', ' if patient_name else ''}if you need help, please call your local emergency number "
+                message = (f"{patient_name + ', if' if patient_name else 'If'} you need help, please call your local emergency number "
                            "or press your help button, or call out to someone nearby. "
                            "I can't contact anyone myself.")
             return CareDecision(
@@ -127,11 +127,14 @@ class CarePolicyFramework:
 
         # Rule 5: Missed Medication / Routine (One-Step Guidance)
         if patient_state.mode == PatientStateMode.AWAITING_REMINDER:
-            need_desc = patient_state.primary_need
+            meds = patient_state.details.get("medications") or []
+            what = " and ".join(meds) if meds else "your scheduled medication"
             return CareDecision(
                 principle=CarePrinciple.ONE_STEP_GUIDANCE,
                 action_type="SPEAK",
-                message_override=f"Here is a gentle reminder{_addr(patient_name)}: {need_desc}.",
+                # A reminder is not evidence the dose was taken; MEMORA asks rather than assumes.
+                message_override=(f"A gentle reminder{_addr(patient_name)}: it's past the time for {what}. "
+                                  "If you haven't taken it yet, please check with your medication plan."),
                 dignity_preserved=True,
                 caregiver_notified=False,
                 reasoning="One-step guidance: single clear prompt.",

@@ -7,10 +7,14 @@ class AppointmentManager:
     Tracks clinical appointments, doctor consultations, therapy, and family events.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False) -> None:
         self._appointments: Dict[str, Appointment] = {}
+        # The example appointment is fictional demo data; real appointments are
+        # entered by the person or their carer.
+        if seed_demo_data:
+            self._seed_demo_appointment()
 
-        # Seed appointment
+    def _seed_demo_appointment(self) -> None:
         doctor_visit = Appointment(
             appt_id="APPT-001",
             title="Neurology Checkup",

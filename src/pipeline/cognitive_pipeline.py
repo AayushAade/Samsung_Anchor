@@ -118,7 +118,7 @@ class CognitivePipeline:
         self.patient_profile_mgr = PatientProfileManager()
         self.caregiver_mgr = CaregiverManager()
         self.medication_mgr = MedicationManager(seed_demo_data=demo_data)
-        self.appointment_mgr = AppointmentManager()
+        self.appointment_mgr = AppointmentManager(seed_demo_data=demo_data)
         self.consent_mgr = ConsentManager()
         self.audit_logger = AuditLogger()
         self.explainability_engine = ExplainabilityEngine()
@@ -154,7 +154,8 @@ class CognitivePipeline:
         self.care_policy_framework = CarePolicyFramework()
         self.clinical_trace_logger = ClinicalDecisionTraceLogger()
         self.visual_memory_engine = VisualEpisodicMemoryEngine(database, seed_demo_data=demo_data)
-        self.conversational_memory = ConversationalMemory(database, visual_memory=self.visual_memory_engine)
+        self.conversational_memory = ConversationalMemory(database, visual_memory=self.visual_memory_engine,
+                                                          appointments=self.appointment_mgr)
         self.cognitive_kernel = CognitiveKernel()
         
         # Phase 22 — Trust, Safety, Reliability & Data Lifecycle Infrastructure
@@ -197,6 +198,9 @@ class CognitivePipeline:
         self.session_engine = SessionEngine()
 
         self._latest_transcript: Optional[str] = None
+        # Scheduled reminders: per-dose throttle (caregiver-configurable interval).
+        self._last_reminder_at: dict[str, float] = {}
+        self.reminder_interval_s = max(60.0, prefs.reminder_frequency_minutes * 60.0)
         self.runtime_manager.sensor_bus.subscribe(
             SensorEventType.SPEECH_TRANSCRIPT,
             self._on_speech_transcript,
@@ -209,8 +213,11 @@ class CognitivePipeline:
     def reset(self):
         self.presence_engine.reset()
         self.conversation_manager.reset()
+        self.patient_state_evaluator.reset()
+        self.emergency_mgr.clear_emergency()
         self._latest_transcript = None
         self.conversational_memory.search_history.clear()
+        self._last_reminder_at.clear()
 
     def shutdown(self):
         """
@@ -357,6 +364,11 @@ class CognitivePipeline:
                 # The presence greeting is for people arriving on camera; it is not a
                 # reply to something the person said.
                 action = None
+            elif action is None and self._is_known_visitor_arrival(event):
+                # Attention gating only interrupts when stored memories score highly, which
+                # meant a known visitor with no history was never announced. Announce
+                # named visitors; unknown faces and the person themself stay silent.
+                action = self.interaction_manager.handle_event(event, None)
 
             # --------------------------------------------------
             # 6.5 Cognitive Operating System & Safety Guardrails
@@ -409,6 +421,18 @@ class CognitivePipeline:
                 action = _speak(care_decision.message_override)
             elif u_speech:
                 action = _speak(self.conversational_memory.fallback_reply(patient_name))
+            elif care_decision.principle == CarePrinciple.ONE_STEP_GUIDANCE and \
+                    self.current_patient_state.mode == PatientStateMode.AWAITING_REMINDER:
+                # Proactive scheduled reminder, at most once per reminder interval per dose.
+                due = self.current_patient_state.details.get("medications", [])
+                now_ts = time.time()
+                fresh = [m for m in due if now_ts - self._last_reminder_at.get(m, 0.0) >= self.reminder_interval_s]
+                if fresh:
+                    for m in fresh:
+                        self._last_reminder_at[m] = now_ts
+                    action = _speak(care_decision.message_override)
+                else:
+                    action = None
             elif action is not None and care_decision.message_override:
                 action = InteractionAction(type=action.type, message=care_decision.message_override)
 
@@ -686,6 +710,16 @@ class CognitivePipeline:
             return None
         return self.conversational_memory.respond(u_speech, face_id=face_id,
                                                   patient_name=self._patient_name())
+
+    def _is_known_visitor_arrival(self, event: Any) -> bool:
+        from src.interaction.events import PresenceEventType
+        rel = (getattr(event, "relationship", None) or "").strip().lower()
+        name = (getattr(event, "name", None) or "").strip()
+        own_name = (self._patient_name() or "").strip().lower()
+        return (getattr(event, "type", None) == PresenceEventType.PERSON_ARRIVED
+                and bool(name)
+                and rel not in ("patient", "self")
+                and name.lower() != own_name)
 
     def _patient_name(self) -> str:
         """
