@@ -131,7 +131,9 @@ class FaissVectorStore:
                 "embedding_dim": self.embedding_dim,
             }
             tmp_map = self.mapping_path + ".tmp"
-            with open(tmp_map, "w") as f:
+            # Biometric data: create owner-only (0600) before any bytes are written.
+            fd = os.open(tmp_map, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
                 json.dump(payload, f)
                 f.flush()
                 os.fsync(f.fileno())
@@ -139,6 +141,7 @@ class FaissVectorStore:
 
             tmp_idx = self.index_path + ".tmp"
             faiss.write_index(self.index, tmp_idx)
+            os.chmod(tmp_idx, 0o600)
             os.replace(tmp_idx, self.index_path)
             self.last_save_error = None
             return True

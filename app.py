@@ -278,6 +278,39 @@ def show_memory_timeline() -> None:
     inspect_database(None)  # configured default: settings.DB_PATH / MEMORA_DB_PATH
 
 
+def run_repair(read=input) -> int:
+    """
+    Interactive repair of the configured database. Nothing is changed without
+    the operator typing DELETE. A backup copy is made first.
+    """
+    import shutil
+    from datetime import datetime
+    from config import settings
+    from src.memory.database import MemoraDatabase
+    from src.memory import user_data
+
+    db = MemoraDatabase(settings.DB_PATH)
+    orphans = user_data.orphaned_identities(db)
+    print(f"Database: {db.db_path}")
+    if not orphans:
+        print("No people records without face data. Nothing to repair.")
+        return 0
+    print(f"{len(orphans)} people records have no face data and cannot be recognised:")
+    for p in orphans:
+        print(f"  {p['id']:<18} name={p['name'] or '-':<14} relationship={p['relationship'] or '-':<12} last seen {p['last_seen'] or 'never'}")
+    print("Facts, episodes and object sightings are NOT affected.")
+    if read("Type DELETE to remove these records (a backup is made first): ").strip() != "DELETE":
+        print("Cancelled. Nothing was changed.")
+        return 0
+    backup = f"{db.db_path}.backup-{datetime.now():%Y%m%d%H%M%S}"
+    shutil.copy2(db.db_path, backup)
+    os.chmod(backup, 0o600)
+    result = user_data.delete_orphaned_identities(db)
+    print(f"Backup written to {backup}")
+    print(f"Deleted {len(result['deleted'])} records. Integrity check: {'OK' if result['integrity_ok'] else 'still inconsistent'}")
+    return 0 if result["integrity_ok"] else 1
+
+
 def cli():
     parser = argparse.ArgumentParser(description="MEMORA (Samsung Anchor) Cognitive Platform")
     parser.add_argument("--scenario", action="store_true", help="Run 10 clinical caregiving scenario validations")
@@ -286,6 +319,7 @@ def cli():
     parser.add_argument("--vision-standalone", action="store_true", help="Run standalone OpenCV vision detection and tracking loop")
     parser.add_argument("--show-memory", action="store_true", help="Print memory timeline, visitors, conversations, objects, facts, and DB stats")
     parser.add_argument("--check", action="store_true", help="Run diagnostics (dependencies, user database integrity, optional capabilities) without opening the camera; exit 1 on failure")
+    parser.add_argument("--repair", action="store_true", help="List people records that have no face data and, after typed confirmation, delete them")
     parser.add_argument("--chat", action="store_true", help="Talk to MEMORA by typing (camera and microphone off); manage stored memories")
     parser.add_argument("--validate-runtime", action="store_true", help="Run runtime stability monitoring and output measured Runtime Report")
 
@@ -302,6 +336,9 @@ def cli():
     if args.check:
         from health_check import main as run_health_check
         sys.exit(run_health_check(include_camera=False))
+
+    if args.repair:
+        sys.exit(run_repair())
 
     if args.chat:
         from src.application.chat import run_chat

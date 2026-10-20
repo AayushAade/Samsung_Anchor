@@ -135,3 +135,26 @@ def test_run_loop_end_to_end(db_path, log_path):
     assert "Nice to meet you, Ana" in text
     assert "MEMORA: It's" in text
     assert text.endswith("MEMORA: Goodbye.")
+
+
+def test_repair_requires_confirmation_and_keeps_other_data(tmp_path, monkeypatch):
+    import app
+    from config import settings
+    from src.memory.database import vector_store_paths
+    path = str(tmp_path / "repair.sqlite")
+    db = MemoraDatabase(path)
+    keep = db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))
+    orphan = db.register_anonymous(-np.ones(128, dtype=np.float32) / np.sqrt(128))
+    db.vector_store.remove_identity(orphan)  # simulate lost face data
+    db.episode_repo.add_episode(__import__("src.cognition.episode", fromlist=["Episode"]).Episode(
+        person="Sid", summary="kept", timestamp=__import__("datetime").datetime.now()))
+    monkeypatch.setattr(settings, "DB_PATH", path)
+
+    assert app.run_repair(read=lambda p: "no") == 0
+    assert {p["id"] for p in user_data.list_people(MemoraDatabase(path))} == {keep, orphan}
+
+    assert app.run_repair(read=lambda p: "DELETE") == 0
+    after = MemoraDatabase(path)
+    assert {p["id"] for p in user_data.list_people(after)} == {keep}
+    assert after.episode_repo.count() == 1
+    assert any(".backup-" in f for f in os.listdir(tmp_path))

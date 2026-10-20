@@ -144,3 +144,12 @@ def test_legacy_files_are_adopted_read_only_for_default_db(tmp_path, monkeypatch
     assert db.vector_store.loaded_from == str(legacy_map)
     assert db.vector_store.find_match(_vec(5), 0.5)[0] == "Anonymous_ID_1"
     assert legacy_map.read_text() == before
+
+
+def test_personal_data_files_are_owner_only(tmp_path):
+    path = str(tmp_path / "perm.sqlite")
+    db = MemoraDatabase(path)
+    db.register_anonymous(_vec(21))
+    index_path, mapping_path = vector_store_paths(db.db_path)
+    for p in (db.db_path, index_path, mapping_path):
+        assert oct(os.stat(p).st_mode & 0o777) == "0o600", p

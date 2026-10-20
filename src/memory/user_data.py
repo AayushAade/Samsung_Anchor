@@ -110,3 +110,17 @@ def delete_all_user_data(db: Any) -> dict[str, Any]:
         remaining = {m.__tablename__: s.query(m).count() for m in PERSONAL_TABLES}
     remaining["face_embeddings"] = len(db.vector_store)
     return {"ok": not any(remaining.values()), "remaining": remaining}
+
+
+def orphaned_identities(db: Any) -> list[dict[str, Any]]:
+    """People records that have no face data (they can never be recognised)."""
+    missing = set(db.check_integrity()["identities_without_embeddings"])
+    return [p for p in list_people(db) if p["id"] in missing]
+
+
+def delete_orphaned_identities(db: Any) -> dict[str, Any]:
+    """Delete people records without face data; facts and episodes are kept."""
+    removed = [p["id"] for p in orphaned_identities(db)]
+    for ident in removed:
+        db.delete_identity(ident)
+    return {"deleted": removed, "integrity_ok": db.check_integrity()["ok"]}

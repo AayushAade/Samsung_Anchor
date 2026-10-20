@@ -96,6 +96,15 @@ def _v2_filesystem_target(path: str) -> str:
     return v2
 
 
+def restrict_permissions(path: str) -> None:
+    """Personal data files are readable and writable by their owner only (0600)."""
+    try:
+        if os.path.exists(path):
+            os.chmod(path, 0o600)
+    except OSError as e:  # e.g. a file owned by another user on a shared volume
+        logger.warning("Could not restrict permissions on %s: %s", path, e)
+
+
 def vector_store_paths(db_path: str) -> tuple[str, str]:
     """Face-embedding files that belong to the database file at db_path."""
     base = os.path.splitext(os.path.abspath(db_path))[0]
@@ -170,6 +179,8 @@ class MemoraDatabase:
 
         self.engine = _build_engine(self.db_url)
         Base.metadata.create_all(self.engine)
+        if self.db_path is not None:
+            restrict_permissions(self.db_path)
 
         self.SessionFactory = sessionmaker(bind=self.engine)
         self.lock = threading.Lock()

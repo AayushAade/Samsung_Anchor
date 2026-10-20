@@ -447,15 +447,12 @@ class CognitivePipeline:
                             self.last_speech_delivered = False
                             print(f"⚠️ [Speaker] Speech output failed: {speak_err}")
 
-                # Automatic Experience Encoding into MemoryRepository
-                self.memory_encoder.encode_experience(
-                    person_name=p_name,
-                    location=loc_val,
-                    content=action.message,
-                    context=f"State: {self.current_patient_state.mode.value}, Time: {c_time}",
-                )
+                # MEMORA's own replies are not stored as memories about the person (they
+                # could later be recalled as if they were facts); the exchange is
+                # recorded as an episode below.
 
             # Automatic Real Episode Generation into DB EpisodeRepository on runtime cycle
+            episode_written = False
             try:
                 from src.cognition.episode import Episode
                 from datetime import datetime
@@ -486,6 +483,7 @@ class CognitivePipeline:
                         tags=[f"room:{loc_val}", f"activity:{act_str}"] + [f"object:{o}" for o in det_objs[:3]],
                     )
                     self.database.episode_repo.add_episode(ep)
+                    episode_written = True
                     print(f"📅 [Episode Logging] Persisted episode for {p_name}: '{ep_summary}' into database.")
             except Exception as ep_err:
                 print(f"⚠️ [Episode Logging Error] Failed to persist episode: {ep_err}")
@@ -501,7 +499,7 @@ class CognitivePipeline:
             # 7. Clinical Decision Trace & Audit Logging
             # --------------------------------------------------
             speech_produced = bool(action and hasattr(action, "message") and action.message and care_decision.action_type != "SILENCE")
-            memory_written = bool(action is not None)
+            memory_written = episode_written  # true only if a record was actually persisted
             strat_name = getattr(getattr(conversation_context, "response_strategy", None), "value", "Supportive Silence")
 
             self.latest_clinical_trace = self.clinical_trace_logger.record_trace(

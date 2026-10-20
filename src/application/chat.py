@@ -41,6 +41,10 @@ class ChatSession:
         self.db = coordinator.database
         self.log_path = log_path or str(DATA_DIR / "logs" / "chat_debug.log")
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
+        # The debug log contains what the person typed: owner-only access.
+        if not os.path.exists(self.log_path):
+            os.close(os.open(self.log_path, os.O_WRONLY | os.O_CREAT, 0o600))
+        os.chmod(self.log_path, 0o600)
         self.confirm = confirm or input
         self._numbered_facts: list[dict] = []
 

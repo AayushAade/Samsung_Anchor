@@ -1,4 +1,5 @@
 from __future__ import annotations
+import uuid
 from typing import Optional, Any
 from src.cognition.experience import Experience
 from src.cognition.memory_models import (
@@ -29,7 +30,8 @@ class MemoryEncoder:
         )
 
         mem = RelevantMemory(
-            memory_id="temp",
+            # Unique id: a fixed "temp" id made every save overwrite the previous memory.
+            memory_id=f"exp_{uuid.uuid4().hex}",
             memory_type=MemoryType.EPISODIC,
             title=title,
             summary=summary,
