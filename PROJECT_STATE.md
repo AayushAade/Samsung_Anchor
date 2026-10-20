@@ -18,6 +18,14 @@ Commits on the work branch (newest first):
 
 | Commit | Summary |
 | :--- | :--- |
+| `466be66` | Suite can never touch physical devices or make sound; honest speaker fallback; licensing + safety docs |
+| `8c671ec` | GitHub Actions CI (tests, ruff, journeys, diagnostics, Docker) — **4/4 checks passing** |
+| `0666d05` | Simulation: clock, battery, sensor failures, 20 journeys; fixed restore-on-corrupt and thread leak |
+| `8313383` | Versioned additive migrations; object sightings record and state their source |
+| `1bc192a` | Actionable storage errors; delete-all removes logs and session state |
+| `e5fbee3` | Consent enforced (storage + face recognition); consent onboarding |
+| `cef558c`, `bbca359` | Conflicting relations, corrections, retraction, pronouns, names (bbca359 fixes a test committed red in cef558c) |
+| `3354043` | Response guard on the delivery path; honest call/medication/diagnosis answers |
 | `cdd1465` | Phrasing corpus (40 cases via pipeline): 32/40 → 40/40 |
 | `44f385f` | Configurable emergency number and trusted contact in urgent guidance |
 | `839ea7b` | Fictional people/prescriptions/habits removed from all real-use components (object-graph sweep test) |
@@ -78,7 +86,10 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | Start of work (`5ebaa1e`) | `.venv` | 538 passed in 51 s — **but the suite modified the real user DB and wrote into the repo** |
 | `9f47497` | `.venv` | 641 passed in 58 s; real DB checksum unchanged; no repo files modified |
 | `17ba5ed` | `.venv` | 658 passed in ~60 s; `ruff check .` (E9/F63/F7/F82) clean |
-| Latest (`cdd1465`) | `.venv` | 666 passed in ~64 s; ruff gate clean |
+| `cdd1465` | `.venv` | 666 passed in ~64 s; ruff gate clean |
+| `8ccf2bd` | fresh clone, clean venv (core+dev) | 664 passed, 2 skipped (cloud SDK not installed), 21 s |
+| Latest (`466be66`) | `.venv` (macOS arm64) | 749 passed in ~73 s; ruff clean; `app.py --simulate` 20/20 |
+| Latest (`466be66`) | GitHub Actions, ubuntu-latest, Python 3.11 | core job (ruff, pytest, journeys, --check) and Docker job passing |
 | `823a85e`-era | Fresh clone + clean venv, `requirements-dev.txt` only | 634 passed, 2 skipped (cloud SDK not installed) |
 | Before `90eab3c` | Fresh clone | **Import failure**: `src/runtime/runtime_engine.py` had never been committed |
 
@@ -88,6 +99,13 @@ active (`deployment/ci/github-workflow.yml` is a template; activation is the
 owner's decision because Actions minutes may be billed).
 
 ## 5. Known blockers and open issues
+
+- **Local database contamination (owner action).** `memora_db_v2.sqlite` was written to by
+  earlier test runs before tests were isolated: the "Reading Glasses"/"Water Bottle" sightings
+  are simulation seeds (present in the 20 Oct pre-work backup from 29 Sept), and 10 episodes plus
+  1 identity were added by the first baseline run of this work (15:15 on 20 Oct). MEMORA now
+  presents legacy sightings as unverified notes. Options: restore
+  `~/memora_backups/20261020/memora_db_v2.sqlite`, or start a fresh database for real use.
 
 - Real hardware paths (camera, microphone, TTS, face recognition, object detection) are **unverified**.
 - Gemini integration is unverified against the live API (no key).

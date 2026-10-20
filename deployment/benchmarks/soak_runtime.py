@@ -13,6 +13,10 @@ proc = psutil.Process()
 sink = io.StringIO()
 with contextlib.redirect_stdout(sink):
     coord = build_application(live_hardware=False)
+    # Synthetic database: grant consent so face tracking and storage are exercised.
+    from src.clinical.clinical_models import ConsentFeature
+    for feature in (ConsentFeature.FACE_RECOGNITION, ConsentFeature.CONVERSATION_STORAGE):
+        coord.pipeline.consent_mgr.update_consent(feature, True)
     rt = AnchorRuntime(coord); rt.initialize(); rt.start()
 out = open(sys.argv[2] if len(sys.argv) > 2 else "soak_samples.csv", "w", newline="")
 w = csv.writer(out); w.writerow(["t_s", "cycles", "rss_mb", "threads", "qdepth", "dropped", "episodes", "p50_ms", "p95_ms"])
