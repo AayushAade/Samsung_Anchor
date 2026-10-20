@@ -28,6 +28,9 @@ def _isolated_database_path():
     real_default = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "memora_db_v2.sqlite"))
     assert os.path.abspath(settings.DB_PATH) != real_default
     yield settings.DB_PATH
+    # Remove this session's synthetic databases and logs.
+    import shutil
+    shutil.rmtree(_SESSION_DIR, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

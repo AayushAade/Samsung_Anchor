@@ -422,6 +422,17 @@ def cli():
     mode_group.add_argument("--simulation", action="store_true", help="Run in simulated mode with synthetic perception")
 
     args = parser.parse_args()
+
+    simulation_workspace = None
+    if args.simulate is not None:
+        # Simulation gets its own workspace before anything (including logging) can touch
+        # the configured database or log directory; it is removed afterwards.
+        import tempfile
+        from config import settings
+        simulation_workspace = tempfile.mkdtemp(prefix="memora-simulate-")
+        settings.LOG_DIR = os.environ["MEMORA_LOG_DIR"] = os.path.join(simulation_workspace, "logs")
+        settings.DB_PATH = os.environ["MEMORA_DB_PATH"] = os.path.join(simulation_workspace, "unused.sqlite")
+
     configure_logging(verbose=args.verbose)
 
     if args.show_memory:
@@ -433,8 +444,16 @@ def cli():
         sys.exit(run_health_check(include_camera=False))
 
     if args.simulate is not None:
+        import shutil
         from src.simulation.journeys import print_report, run_all
-        sys.exit(print_report(run_all(args.simulate or None)))
+        try:
+            code = print_report(run_all(args.simulate or None))
+        finally:
+            for handler in list(logging.getLogger().handlers):
+                handler.close()
+                logging.getLogger().removeHandler(handler)
+            shutil.rmtree(simulation_workspace, ignore_errors=True)
+        sys.exit(code)
 
     if args.backup is not None:
         sys.exit(run_backup(args.backup))
