@@ -119,12 +119,15 @@ def main(
     print("Application Starting...")
     print("============================================================")
     llm_active = bool(os.environ.get("GEMINI_API_KEY"))
-    llm_mode_str = "Gemini (gemini-1.5-flash)" if llm_active else "Local Deterministic Reasoner"
+    # Replies are produced by deterministic local rules. Gemini, when configured, is
+    # only used to extract names during identity learning.
+    llm_mode_str = ("Local rules for replies; Gemini (key set, unverified) for identity-learning name extraction"
+                    if llm_active else "Local rules only (no cloud model configured)")
     if live_hardware is False:
         print("🤖 OPERATIONAL MODE: SIMULATION DEMONSTRATION ACTIVE")
         print("   • Video Feed : Simulated Frame Generator")
         print("   • Audio Feed : Simulated Audio Listener")
-        print("   • Speaker    : Console Audio Dispatch Log")
+        print("   • Speaker    : Console log only (no audio)")
         print(f"   • LLM Mode   : {llm_mode_str}")
     else:
         print("🎥 OPERATIONAL MODE: LIVE HARDWARE (AUTO-DETECT / FALLBACK ACTIVE)")
@@ -133,6 +136,15 @@ def main(
         print("   • Speaker    : Text-to-Speech Engine (Native / Console Fallback)")
         print(f"   • LLM Mode   : {llm_mode_str}")
     print("=" * 60)
+
+    # Synthetic sensors and scripted scenarios write synthetic faces/episodes.
+    # Keep them out of the person's real memory database unless the operator
+    # explicitly chose a database with MEMORA_DB_PATH.
+    if (live_hardware is False or run_scenarios) and not os.environ.get("MEMORA_DB_PATH"):
+        from config import settings
+        from config.paths import DATA_DIR
+        settings.DB_PATH = str(DATA_DIR / "simulation" / "memora_simulation.sqlite")
+        print(f"🧪 Simulation data is stored separately at: {settings.DB_PATH}")
 
     # Build application and initialize runtime
     coordinator = build_application(live_hardware=live_hardware)
@@ -149,13 +161,13 @@ def main(
 
     # Phase 6 Observability Status Report & Operational State Determination
     statuses = runtime.get_subsystem_statuses()
-    is_pure_live = all("WARNING" not in s and "FAILED" not in s for s in statuses.values())
+    is_pure_live = all(s == "READY" for s in statuses.values())
 
     print("\n" + "=" * 60)
     if is_pure_live and live_hardware is not False:
-        print("🟢 STATE A: LIVE HARDWARE MODE (All Hardware Devices VERIFIED & READY)")
+        print("🟢 STATE A: LIVE HARDWARE MODE (all checked subsystems report READY)")
     else:
-        print("🟡 STATE B: SIMULATION FALLBACK MODE (Explicit Hardware Fallbacks Active)")
+        print("🟡 STATE B: SIMULATED OR DEGRADED (see per-subsystem status below)")
     print("=" * 60)
     for subsystem, status in statuses.items():
         symbol = "✓" if "READY" in status else ("⚠️" if "WARNING" in status else "❌")
@@ -197,27 +209,42 @@ def main(
         cycles_to_run = max_cycles if max_cycles and max_cycles > 0 else 25
         print(f"Running {cycles_to_run} continuous perception-cognition execution cycles...")
 
+        def _row_counts():
+            db = coordinator.database
+            return {"episodes": db.episode_repo.count(),
+                    "memories": len(db.memory_repo.find_explicit()),
+                    "objects": len(db.object_repo.get_all_objects())}
+
+        rows_before = _row_counts()
         runtime.start()
         runtime.run_continuous(max_cycles=cycles_to_run, cycle_delay=0.05)
         duration = round(time.time() - start_t, 2)
+        rows_after = _row_counts()
 
         health = detector.check_leaks()
         latencies = profiler.get_full_report()
+        rm = getattr(coordinator.pipeline, "runtime_manager", None)
+        cam = getattr(rm, "camera", None)
+        mic = getattr(rm, "microphone", None)
+
+        def _counter(dev, attr):
+            return getattr(dev, attr) if dev is not None and hasattr(dev, attr) else "not tracked"
 
         print("\n" + "=" * 70)
-        print("📊 MEMORA REAL RUNTIME VALIDATION REPORT")
+        print("📊 MEMORA RUNTIME VALIDATION REPORT (measured in this run)")
         print("=" * 70)
         print(f"  • Runtime Duration    : {duration} s")
-        print(f"  • Total Cycles Run    : {cycles_to_run}")
-        print(f"  • Average Cycle FPS   : {round(cycles_to_run / max(0.1, duration), 2)} FPS")
+        print(f"  • Cycles Run          : {runtime.cycle_count}")
+        print(f"  • Average Cycle Rate  : {round(runtime.cycle_count / max(0.1, duration), 2)} cycles/s")
         print(f"  • Heap RAM Usage      : {health['current_memory_mb']:.2f} MB (Peak: {health['peak_memory_mb']:.2f} MB)")
         print(f"  • Active Thread Count : {health['thread_count']}")
-        print(f"  • Camera Reconnects   : 0 (Stable)")
-        print(f"  • Mic Reconnects      : 0 (Stable)")
-        print(f"  • Gemini API Calls    : {1 if os.environ.get('GEMINI_API_KEY') else 0} (Fallback Mode Active)")
-        print(f"  • Database Writes     : {cycles_to_run * 2} rows committed")
-        print(f"  • Goal Transitions    : {cycles_to_run} lifecycle evaluations")
-        print(f"  • Self-Reflections    : {cycles_to_run} reflections recorded")
+        print(f"  • Camera Source       : {type(cam).__name__ if cam else 'none'} | dropped frames: {_counter(cam, 'dropped_frames')}")
+        print(f"  • Microphone Source   : {type(mic).__name__ if mic else 'none'}")
+        print(f"  • Dropped Cognitive Events : {coordinator.dropped_events_count}")
+        for key in rows_before:
+            print(f"  • New {key:<17}: {rows_after[key] - rows_before[key]}")
+        print("  • Note: a short run with simulated sensors is not evidence of long-duration")
+        print("    stability or of real camera/microphone behaviour.")
         print("=" * 70 + "\n")
 
         detector.print_resource_report()

@@ -129,7 +129,8 @@ class RuntimeManager:
 
         # Camera
         cam_diag = getattr(self.camera, "get_diagnostics", lambda: {})()
-        cam_st = "READY" if self.camera.get_status() == DeviceStatus.HEALTHY else "FAILED (Simulated Fallback)"
+        from src.runtime.camera_adapter import SimulatedCameraAdapter as _SimCam
+        cam_st = ("SIMULATED" if isinstance(self.camera, _SimCam) else "READY") if self.camera.get_status() == DeviceStatus.HEALTHY else "FAILED"
         cam_reason = getattr(self.camera, "failure_reason", None) or "None"
         cam_bk = cam_diag.get("backend", "SIMULATION")
         cam_res = cam_diag.get("resolution", "1280x720")
@@ -142,7 +143,8 @@ class RuntimeManager:
 
         # Microphone
         mic_diag = getattr(self.microphone, "get_diagnostics", lambda: {})()
-        mic_st = "READY" if self.microphone.get_status() == DeviceStatus.HEALTHY else "FAILED (Simulated Fallback)"
+        from src.runtime.microphone_adapter import SimulatedMicrophoneAdapter as _SimMic
+        mic_st = ("SIMULATED" if isinstance(self.microphone, _SimMic) else "READY") if self.microphone.get_status() == DeviceStatus.HEALTHY else "FAILED"
         mic_reason = getattr(self.microphone, "failure_reason", None) or "None"
         mic_dev = mic_diag.get("device_name", getattr(self.microphone, "device_name", "Simulated_Mic"))
         mic_fmt = mic_diag.get("format", "16000Hz, 1ch (int16)")
@@ -154,7 +156,8 @@ class RuntimeManager:
 
         # Speaker
         spk_diag = getattr(self.speaker, "get_diagnostics", lambda: {})()
-        spk_st = "READY" if self.speaker.get_status() == DeviceStatus.HEALTHY else "FAILED (Console Fallback)"
+        from src.runtime.speaker_adapter import SimulatedSpeakerAdapter as _SimSpk
+        spk_st = ("SIMULATED (console only)" if isinstance(self.speaker, _SimSpk) else "READY") if self.speaker.get_status() == DeviceStatus.HEALTHY else "FAILED"
         spk_reason = getattr(self.speaker, "failure_reason", None) or "None"
         spk_eng = spk_diag.get("voice_engine", "Console Fallback")
         lines.append(f"\nSpeaker")
@@ -162,33 +165,32 @@ class RuntimeManager:
         lines.append(f"  Reason     : {spk_reason}")
         lines.append(f"  Voice Engine: {spk_eng}")
 
-        # Speech Recognition
+        # The sections below used to be hard-coded "READY". They now report only
+        # what this process can actually establish.
+        from src.runtime.camera_adapter import SimulatedCameraAdapter
+        from src.runtime.microphone_adapter import SimulatedMicrophoneAdapter
+        sim_mic = isinstance(self.microphone, SimulatedMicrophoneAdapter)
+        sim_cam = isinstance(self.camera, SimulatedCameraAdapter)
+
         lines.append(f"\nSpeech Recognition")
-        lines.append(f"  Status     : READY")
-        lines.append(f"  Engine     : SpeechRecognition (Google ASR / VAD)")
+        lines.append(f"  Status     : {'SIMULATED (typed/scripted input)' if sim_mic else 'NOT VERIFIED (no test transcription run)'}")
 
-        # Memory Database
+        from config import settings
         lines.append(f"\nMemory Database")
-        lines.append(f"  Status     : READY")
-        lines.append(f"  Engine     : SQLAlchemy SQLite (memora_db_v2.sqlite)")
+        lines.append(f"  Status     : see subsystem status (integrity-checked)")
+        lines.append(f"  Path       : {settings.DB_PATH}")
 
-        # Face Database
         lines.append(f"\nFace Database")
-        lines.append(f"  Status     : READY")
-        lines.append(f"  Engine     : MemoraFaceRecognizer (dlib/insightface/mediapipe)")
+        lines.append(f"  Status     : {'SIMULATED (synthetic embeddings)' if sim_cam else 'NOT VERIFIED (no enrolled-face test run)'}")
 
-        # Object Detection Model
         lines.append(f"\nObject Detection Model")
-        lines.append(f"  Status     : READY")
-        lines.append(f"  Engine     : ObjectDetector (Live Contour / Seeded)")
+        lines.append(f"  Status     : {'SIMULATED (fictional sample objects; not persisted)' if sim_cam else 'EXPERIMENTAL (contour heuristic, not a trained detector)'}")
 
-        # Reasoning Engine (Objective 5 LLM Mode)
         import os
         llm_active = bool(os.environ.get("GEMINI_API_KEY"))
-        llm_mode_str = "Gemini (gemini-1.5-flash)" if llm_active else "Local Deterministic Reasoner"
         lines.append(f"\nReasoning Engine")
-        lines.append(f"  Status     : READY")
-        lines.append(f"  LLM Mode   : {llm_mode_str}")
+        lines.append(f"  Replies    : deterministic local rules")
+        lines.append(f"  LLM Mode   : {'GEMINI_API_KEY set (identity-learning name extraction only; connectivity not verified)' if llm_active else 'not configured'}")
         lines.append("==================================================")
 
         return "\n".join(lines)

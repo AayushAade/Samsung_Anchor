@@ -20,6 +20,7 @@ __pycache__/
 # ------------------------------------------------------------
 .env
 .env.*
+!.env.example
 venv/
 .venv/
 env/
@@ -63,6 +64,9 @@ logs/
 *.sqlite3
 *.db-journal
 
+# Simulation-mode database (synthetic sensor data)
+data/simulation/
+
 # Runtime-generated database files
 face_embeddings.index
 face_mapping.json
@@ -85,9 +89,10 @@ weights/
 # ------------------------------------------------------------
 # Runtime / Deployment
 # ------------------------------------------------------------
-tmp/
-temp/
-runtime/
+# Anchored to the repo root: an unanchored "runtime/" also ignored src/runtime/.
+/tmp/
+/temp/
+/runtime/
 *.pid
 
 # ------------------------------------------------------------

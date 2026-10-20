@@ -82,17 +82,15 @@ class AnchorRuntime:
         Inspect all application subsystems and return Phase 6 status map:
         READY | WARNING | DISABLED | FAILED
         """
+        # Nothing is reported READY unless it was actually checked below.
         statuses = {
-            "Runtime": "READY",
-            "Camera": "READY",
-            "Audio": "READY",
-            "Speech Recognition": "READY",
-            "Memory": "READY",
-            "Perception": "READY",
-            "Cognition": "READY",
-            "Care Policy": "READY",
-            "Decision Trace": "READY",
-            "Speaker": "READY",
+            "Runtime": "READY" if self.coordinator is not None else "FAILED",
+            "Camera": "NOT CHECKED",
+            "Audio": "NOT CHECKED",
+            "Speech Recognition": "NOT CHECKED",
+            "Memory": "NOT CHECKED",
+            "Cognition": "READY" if getattr(self.coordinator, "pipeline", None) is not None else "FAILED",
+            "Speaker": "NOT CHECKED",
         }
 
         try:
@@ -105,6 +103,8 @@ class AnchorRuntime:
                     statuses["Camera"] = "FAILED"
                 elif isinstance(rm.camera, SimulatedCameraAdapter):
                     statuses["Camera"] = "WARNING (Simulated)"
+                else:
+                    statuses["Camera"] = "READY"
 
                 # Audio / Mic status
                 mic_status = rm.microphone.get_status()
@@ -113,6 +113,8 @@ class AnchorRuntime:
                     statuses["Audio"] = "FAILED"
                 elif isinstance(rm.microphone, SimulatedMicrophoneAdapter):
                     statuses["Audio"] = "WARNING (Simulated)"
+                else:
+                    statuses["Audio"] = "READY"
 
                 # Speaker status
                 spk_status = rm.speaker.get_status()
@@ -121,15 +123,37 @@ class AnchorRuntime:
                     statuses["Speaker"] = "FAILED"
                 elif isinstance(rm.speaker, SimulatedSpeakerAdapter):
                     statuses["Speaker"] = "WARNING (Simulated)"
-        except Exception:
-            pass
+                else:
+                    statuses["Speaker"] = "READY"
+        except Exception as e:
+            statuses["Runtime"] = f"WARNING (device status unavailable: {e})"
 
-        # Memory status
+        # Derived statuses
+        pipeline = getattr(self.coordinator, "pipeline", None)
+        statuses["Perception"] = statuses["Camera"] if pipeline is not None and hasattr(pipeline, "perception_manager") else "FAILED"
+        if "Simulated" in statuses["Audio"]:
+            statuses["Speech Recognition"] = "WARNING (Simulated - typed or scripted input only)"
+        # Deterministic rule modules: available when constructed.
+        statuses["Care Policy"] = "READY" if pipeline is not None and hasattr(pipeline, "care_policy_framework") else "FAILED"
+        statuses["Decision Trace"] = "READY" if pipeline is not None and hasattr(pipeline, "clinical_trace_logger") else "FAILED"
+
+        # Memory: the database must answer an integrity check, not merely exist.
         try:
-            if not self.coordinator.database:
+            db = self.coordinator.database
+            if not db:
                 statuses["Memory"] = "FAILED"
-        except Exception:
-            statuses["Memory"] = "WARNING"
+            else:
+                report = db.check_integrity()
+                if report["ok"]:
+                    statuses["Memory"] = "READY"
+                else:
+                    missing = len(report["identities_without_embeddings"])
+                    detail = (f"{missing} identities lack face embeddings" if missing
+                              else report.get("vector_store_load_error") or report.get("vector_store_save_error")
+                              or "identity/embedding mismatch")
+                    statuses["Memory"] = f"WARNING ({detail})"
+        except Exception as e:
+            statuses["Memory"] = f"FAILED ({e})"
 
         return statuses
 
@@ -219,13 +243,10 @@ class AnchorRuntime:
                     t_lat = (time.perf_counter() - t0) * 1000.0
                     fps = 1000.0 / (t_lat + 1e-3)
 
-                    # Consume and dispatch any pending interaction actions
-                    actions = self.coordinator.consume_actions()
-                    for action in actions:
-                        if hasattr(self.coordinator.speaker, "execute"):
-                            self.coordinator.speaker.execute(action)
-                        elif hasattr(self.coordinator.speaker, "speak") and getattr(action, "message", None):
-                            self.coordinator.speaker.speak(action.message)
+                    # Drain pending actions. Speech was already delivered once by the
+                    # pipeline through the speaker HAL; dispatching again here caused
+                    # every reply to be spoken twice (and real `say` audio in simulation).
+                    self.coordinator.consume_actions()
 
                     if self.cycle_count % 10 == 0 or self.cycle_count == 1:
                         # Extract comprehensive telemetry metrics

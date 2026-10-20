@@ -235,6 +235,7 @@ class CognitivePipeline:
 
         actions = []
         executive_summary = None
+        self.last_speech_delivered = False
         event = None
         stream = CognitiveStream.instance()
         cycle_id = stream.next_cycle_id()
@@ -413,9 +414,13 @@ class CognitivePipeline:
             if action is not None:
                 if u_speech or care_decision.action_type != "SILENCE":
                     actions.append(action)
-                    # Physical Audio Output via Speaker HAL
+                    # Physical Audio Output via Speaker HAL; record whether it succeeded.
                     if hasattr(action, "message") and action.message:
-                        self.runtime_manager.speaker.speak(action.message)
+                        try:
+                            self.last_speech_delivered = bool(self.runtime_manager.speaker.speak(action.message))
+                        except Exception as speak_err:
+                            self.last_speech_delivered = False
+                            print(f"⚠️ [Speaker] Speech output failed: {speak_err}")
 
                 # Automatic Experience Encoding into MemoryRepository
                 self.memory_encoder.encode_experience(
@@ -463,16 +468,9 @@ class CognitivePipeline:
             total_latency = time.perf_counter() - cycle_start
             metrics.stop_timer("latency.cognition.total")
 
-            # Granular Stage Timing Breakdown (Objective 6)
-            t_ms = total_latency * 1000.0
-            stage_cam = min(1.5, t_ms * 0.10)
-            stage_face = min(2.0, t_ms * 0.15)
-            stage_obj = min(1.2, t_ms * 0.10)
-            stage_asr = min(5.0, t_ms * 0.20) if u_speech else 0.1
-            stage_ret = min(1.0, t_ms * 0.10)
-            stage_reas = min(10.0, t_ms * 0.25)
-            stage_tts = min(5.0, t_ms * 0.10) if action and getattr(action, "message", None) else 0.1
-            print(f"⏱️ [Latency Breakdown] Camera: {stage_cam:.1f}ms | Face: {stage_face:.1f}ms | Objects: {stage_obj:.1f}ms | ASR: {stage_asr:.1f}ms | Retrieval: {stage_ret:.1f}ms | Reasoning: {stage_reas:.1f}ms | TTS: {stage_tts:.1f}ms | TOTAL: {t_ms:.1f}ms")
+            # Only the measured total is reported. (Per-stage figures used to be printed
+            # as fixed fractions of the total, which were not measurements.)
+            self.last_cycle_latency_ms = total_latency * 1000.0
 
             # --------------------------------------------------
             # 7. Clinical Decision Trace & Audit Logging
@@ -514,7 +512,7 @@ class CognitivePipeline:
                 assistance_level=ast_lvl,
                 presence_state=pres_state,
                 strategy=strat_val,
-                outcome="DELIVERED"
+                outcome=("SPOKEN" if self.last_speech_delivered else "SPEECH_OUTPUT_FAILED") if actions else "SILENT",
             )
 
             from src.clinical.clinical_models import ConsentFeature

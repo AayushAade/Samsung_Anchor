@@ -107,5 +107,6 @@ class MemoryLeakDetector:
             for r in health['recommendations']:
                 print(f"     • {r}")
         else:
-            print("  ✓ Zero memory leaks or thread leaks detected.")
+            print(f"  ✓ No thread or memory growth above thresholds across {len(self._history)} sample(s).")
+            print("    (A short run cannot rule out slow leaks.)")
         print("=" * 60 + "\n")
