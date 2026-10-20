@@ -66,6 +66,8 @@ logs/
 
 # Simulation-mode database (synthetic sensor data)
 data/simulation/
+# User data exports (personal data)
+data/exports/
 
 # Runtime-generated database files
 face_embeddings.index

@@ -285,6 +285,7 @@ def cli():
     parser.add_argument("--max-cycles", type=int, default=None, help="Maximum execution cycles (default: continuous)")
     parser.add_argument("--vision-standalone", action="store_true", help="Run standalone OpenCV vision detection and tracking loop")
     parser.add_argument("--show-memory", action="store_true", help="Print memory timeline, visitors, conversations, objects, facts, and DB stats")
+    parser.add_argument("--chat", action="store_true", help="Talk to MEMORA by typing (camera and microphone off); manage stored memories")
     parser.add_argument("--validate-runtime", action="store_true", help="Run runtime stability monitoring and output measured Runtime Report")
 
     mode_group = parser.add_mutually_exclusive_group()
@@ -295,6 +296,11 @@ def cli():
 
     if args.show_memory:
         show_memory_timeline()
+        return
+
+    if args.chat:
+        from src.application.chat import run_chat
+        run_chat()
         return
 
     live_hw = None

@@ -236,6 +236,7 @@ class CognitivePipeline:
         actions = []
         executive_summary = None
         self.last_speech_delivered = False
+        self.last_cycle_error = None
         event = None
         stream = CognitiveStream.instance()
         cycle_id = stream.next_cycle_id()
@@ -659,6 +660,7 @@ class CognitivePipeline:
                 pass  # Never let stream emission crash the pipeline
             
         except Exception as e:
+            self.last_cycle_error = repr(e)
             print(f"[CognitivePipeline] FATAL ERROR: {e}")
             traceback.print_exc()
             # Graceful degradation: If anything fails, don't crash the background thread.
