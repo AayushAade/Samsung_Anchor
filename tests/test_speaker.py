@@ -7,8 +7,9 @@ from src.interaction.actions import (
 )
 
 
+@patch("devices.speaker.subprocess.Popen")  # never run the real `say` (no sound in tests)
 @patch("builtins.print")
-def test_execute_speak(mock_print):
+def test_execute_speak(mock_print, mock_popen):
 
     speaker = SpeakerDevice()
 
@@ -22,3 +23,4 @@ def test_execute_speak(mock_print):
     mock_print.assert_called_once_with(
         "Hello Samsung Anchor"
     )
+    mock_popen.assert_called_once_with(["say", "Hello Samsung Anchor"])

@@ -172,13 +172,15 @@ class PyTTSx3SpeakerAdapter(SpeakerAdapter):
         # 3. Linux Fallback: espeak
         if sys.platform.startswith("linux"):
             try:
-                subprocess.run(["espeak", _as_argument(text)], check=False)
+                subprocess.run(["espeak", _as_argument(text)], check=True)
                 return True
             except Exception as e:
                 self.failure_reason = f"Linux espeak CLI error: {e}"
 
-        print(f"[ConsoleSpeaker Fallback] Speaking: '{text}'")
-        return True
+        # No audio backend worked: the text is shown on the console, but it was NOT
+        # spoken aloud, so report failure rather than success.
+        print(f"[ConsoleSpeaker Fallback] (not spoken aloud) '{text}'")
+        return False
 
     def play_chime(self) -> bool:
         print(f"[HardwareSpeaker] Play Chime (Vol: {self.volume}%)")
