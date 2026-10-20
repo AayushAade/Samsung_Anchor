@@ -71,3 +71,34 @@ def test_restore_works_when_live_database_is_corrupt(tmp_path):
     pre = result["pre_restore_backup"]
     assert open(os.path.join(pre, os.path.basename(path)), "rb").read() == b"not a database"
     assert "Riya" in ConversationalMemory(MemoraDatabase(path)).respond("Who is my daughter?")
+
+
+@pytest.mark.parametrize("bad_name", ["../outside.txt", "/etc/hosts", "sub/file", "..", "manifest.json"])
+def test_manifest_cannot_name_files_outside_the_backup(tmp_path, bad_name):
+    """An edited manifest must not make verify/restore read or write outside the backup folder."""
+    path = str(tmp_path / "live.sqlite")
+    db = _db_with_data(path)
+    backup = create_backup(db.db_path, str(tmp_path / "b"))
+    outside = tmp_path / "b" / "outside.txt"
+    outside.write_text("not part of the backup")
+    manifest_path = os.path.join(backup, "manifest.json")
+    manifest = json.load(open(manifest_path))
+    manifest["files"][bad_name] = "0" * 64
+    json.dump(manifest, open(manifest_path, "w"))
+    before = open(db.db_path, "rb").read()
+    with pytest.raises(BackupError, match="invalid file"):
+        restore_backup(backup, db.db_path)
+    assert open(db.db_path, "rb").read() == before
+    assert outside.read_text() == "not part of the backup"
+
+
+def test_export_is_owner_only_from_creation(tmp_path):
+    from src.memory import user_data
+    db = _db_with_data(str(tmp_path / "live.sqlite"))
+    old = os.umask(0o022)
+    try:
+        written = user_data.write_export(db, str(tmp_path / "out" / "e.json"))
+    finally:
+        os.umask(old)
+    assert oct(os.stat(written).st_mode & 0o777) == "0o600"
+    assert not os.path.exists(written + ".tmp")

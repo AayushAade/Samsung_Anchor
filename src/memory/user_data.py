@@ -95,7 +95,8 @@ def write_export(db: Any, path: str) -> str:
     directory = os.path.dirname(os.path.abspath(path))
     os.makedirs(directory, exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
+    # Created owner-only from the start: the export holds personal data.
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
         json.dump(data, f, indent=2, default=str)
     os.replace(tmp, path)
     try:

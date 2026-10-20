@@ -81,10 +81,22 @@ def create_backup(db_path: str, dest_root: str) -> str:
     return target
 
 
+def _check_names(manifest: dict[str, Any]) -> None:
+    """A manifest may only name plain files inside the backup directory."""
+    names = list(manifest.get("files", {})) + [manifest.get("database_file", "")]
+    for name in names:
+        if (not isinstance(name, str) or not name or name in (".", "..", MANIFEST)
+                or os.path.basename(name) != name or "\\" in name):
+            raise BackupError(f"Backup manifest names an invalid file: {name!r}")
+    if manifest["database_file"] not in manifest["files"]:
+        raise BackupError("Backup manifest does not list its database file")
+
+
 def verify_backup(backup_dir: str) -> dict[str, Any]:
     """Check checksums and run the identity/embedding integrity check on a scratch copy."""
     with open(os.path.join(backup_dir, MANIFEST)) as f:
         manifest = json.load(f)
+    _check_names(manifest)
     for name, digest in manifest["files"].items():
         path = os.path.join(backup_dir, name)
         if not os.path.exists(path) or _sha256(path) != digest:

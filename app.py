@@ -144,6 +144,11 @@ def main(
     """
 
     if vision_standalone:
+        # A developer diagnostic that opens the real camera: like every other path to a
+        # physical device, it runs only when --live-hardware is given explicitly.
+        if live_hardware is not True:
+            print("--vision-standalone uses the real camera; add --live-hardware to run it.")
+            sys.exit(2)
         run_vision_standalone_loop()
         return
 
@@ -406,7 +411,7 @@ def cli():
     parser.add_argument("--scenario", action="store_true", help="Run 10 clinical caregiving scenario validations")
     parser.add_argument("--dashboard", action="store_true", help="Launch live Experience Platform browser dashboard")
     parser.add_argument("--max-cycles", type=int, default=None, help="Maximum execution cycles (default: continuous)")
-    parser.add_argument("--vision-standalone", action="store_true", help="Run standalone OpenCV vision detection and tracking loop")
+    parser.add_argument("--vision-standalone", action="store_true", help="Developer diagnostic: standalone OpenCV face detection loop on the real camera (requires --live-hardware)")
     parser.add_argument("--show-memory", action="store_true", help="Print memory timeline, visitors, conversations, objects, facts, and DB stats")
     parser.add_argument("--verbose", action="store_true", help="Show debug diagnostics on the console")
     parser.add_argument("--check", action="store_true", help="Run diagnostics (dependencies, user database integrity, optional capabilities) without opening the camera; exit 1 on failure")

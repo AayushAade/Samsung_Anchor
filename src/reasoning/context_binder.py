@@ -48,7 +48,7 @@ class MemoraContextBinder:
         self.use_api = True
         
         if not self.api_key:
-            print("[Context Binder Warning] GEMINI_API_KEY is not set. Context Binder will run in local rule-based fallback mode.")
+            # Local rules are the default (docs/PRIVACY_AND_CONSENT.md); nothing to warn about.
             self.use_api = False
         elif os.environ.get("MEMORA_ALLOW_CLOUD_LLM") != "1":
             # A key alone is not consent to send transcripts to Google.

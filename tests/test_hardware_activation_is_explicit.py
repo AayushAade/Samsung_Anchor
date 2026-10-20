@@ -64,3 +64,16 @@ def test_direct_pipeline_construction_is_simulated(monkeypatch, profile):
         assert p.runtime_manager.config.mode == RuntimeMode.SIMULATION
     finally:
         p.shutdown()
+
+
+@pytest.mark.parametrize("live_hardware", [False, None])
+def test_vision_standalone_refuses_without_live_hardware(monkeypatch, live_hardware):
+    """The standalone camera diagnostic must not open a device unless --live-hardware is given."""
+    import cv2
+    import app as memora_app
+    opened = []
+    monkeypatch.setattr(cv2, "VideoCapture", lambda *a, **k: opened.append(a) or pytest.fail("camera opened"))
+    monkeypatch.setattr(memora_app, "run_vision_standalone_loop", lambda: opened.append("loop"))
+    with pytest.raises(SystemExit) as exit_info:
+        memora_app.main(vision_standalone=True, live_hardware=live_hardware)
+    assert exit_info.value.code == 2 and opened == []
