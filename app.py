@@ -278,6 +278,56 @@ def show_memory_timeline() -> None:
     inspect_database(None)  # configured default: settings.DB_PATH / MEMORA_DB_PATH
 
 
+def _configured_db_file() -> str:
+    from config import settings
+    from src.memory.database import resolve_db_url
+    fs_path = resolve_db_url(settings.DB_PATH)[1]
+    if fs_path is None:
+        raise SystemExit("The configured database is in-memory; nothing to back up or restore.")
+    return fs_path
+
+
+def run_backup(dest: str) -> int:
+    from src.memory.backup import BackupError, create_backup, verify_backup
+    db_file = _configured_db_file()
+    try:
+        target = create_backup(db_file, dest)
+        report = verify_backup(target)
+    except (BackupError, OSError) as e:
+        print(f"Backup FAILED: {e}")
+        return 1
+    rows = report["manifest"]["row_counts"]
+    print(f"Backup written and verified: {target}")
+    print(f"  people={rows.get('identities', 0)} facts/memories={rows.get('relevant_memories', 0)} "
+          f"episodes={rows.get('episodes', 0)} care items={rows.get('care_items', 0)}")
+    if not report["integrity"]["ok"]:
+        print("  Note: the source database has integrity warnings (see `python app.py --check`).")
+    return 0
+
+
+def run_restore(backup_dir: str, read=input) -> int:
+    from src.memory.backup import BackupError, restore_backup, verify_backup
+    db_file = _configured_db_file()
+    try:
+        checked = verify_backup(backup_dir)
+    except (BackupError, OSError, KeyError, ValueError) as e:
+        print(f"Backup cannot be used: {e}")
+        return 1
+    m = checked["manifest"]
+    print(f"Backup from {m['created_at']} (source {m['source_db']}), checksums OK.")
+    print(f"This will REPLACE {db_file} and its face data. Stop any running MEMORA first.")
+    if read("Type RESTORE to continue: ").strip() != "RESTORE":
+        print("Cancelled. Nothing was changed.")
+        return 0
+    try:
+        result = restore_backup(backup_dir, db_file)
+    except (BackupError, OSError) as e:
+        print(f"Restore FAILED: {e}")
+        return 1
+    print(f"Restored. Previous files saved to: {result['pre_restore_backup'] or '(none existed)'}")
+    return 0
+
+
 def run_repair(read=input) -> int:
     """
     Interactive repair of the configured database. Nothing is changed without
@@ -319,6 +369,8 @@ def cli():
     parser.add_argument("--vision-standalone", action="store_true", help="Run standalone OpenCV vision detection and tracking loop")
     parser.add_argument("--show-memory", action="store_true", help="Print memory timeline, visitors, conversations, objects, facts, and DB stats")
     parser.add_argument("--check", action="store_true", help="Run diagnostics (dependencies, user database integrity, optional capabilities) without opening the camera; exit 1 on failure")
+    parser.add_argument("--backup", nargs="?", const="backups", metavar="DIR", help="Write a verified backup of the configured database (default dir: ./backups)")
+    parser.add_argument("--restore", metavar="BACKUP_DIR", help="Restore the configured database from a backup directory (stop MEMORA first; asks for confirmation)")
     parser.add_argument("--repair", action="store_true", help="List people records that have no face data and, after typed confirmation, delete them")
     parser.add_argument("--chat", action="store_true", help="Talk to MEMORA by typing (camera and microphone off); manage stored memories")
     parser.add_argument("--validate-runtime", action="store_true", help="Run runtime stability monitoring and output measured Runtime Report")
@@ -336,6 +388,12 @@ def cli():
     if args.check:
         from health_check import main as run_health_check
         sys.exit(run_health_check(include_camera=False))
+
+    if args.backup is not None:
+        sys.exit(run_backup(args.backup))
+
+    if args.restore:
+        sys.exit(run_restore(args.restore))
 
     if args.repair:
         sys.exit(run_repair())
