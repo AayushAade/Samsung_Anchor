@@ -3,6 +3,12 @@ import numpy as np
 import time
 import os
 import threading
+from collections import deque
+
+# Rolling window of recent embeddings kept per face track. Tracks previously kept
+# every frame's embedding forever and averaged the whole history twice per frame,
+# so memory and per-frame time grew without bound while a person stayed in view.
+TRACK_EMBEDDING_WINDOW = 30
 from config import settings
 from src.utils.event_logger import log_event
 
@@ -394,7 +400,7 @@ class MemoraFaceRecognizer:
                 # Compute embedding distance for the associated detection
                 emb_dist = 999.0
                 if len(track["embeddings"]) > 1 and len(det["embedding"]) > 0:
-                    track_avg_emb = np.mean(track["embeddings"][:-1], axis=0)
+                    track_avg_emb = np.mean(list(track["embeddings"])[:-1], axis=0)
                     emb_dist = float(np.linalg.norm(det["embedding"] - track_avg_emb))
 
                 # Print exact requested format
@@ -425,7 +431,7 @@ class MemoraFaceRecognizer:
                             "state": "RECOGNIZED",
                             "box": track["box"],
                             "center": track["center"],
-                            "embeddings": track["embeddings"],
+                            "embeddings": track["embeddings"],  # keep the bounded deque
                             "frames_seen": track["frames_seen"],
                             "missed_frames": 0,
                             "last_seen_time": now_time,
@@ -523,7 +529,7 @@ class MemoraFaceRecognizer:
                     "state": initial_state,
                     "box": det["box"],
                     "center": det["center"],
-                    "embeddings": [det["embedding"]],
+                    "embeddings": deque([det["embedding"]], maxlen=TRACK_EMBEDDING_WINDOW),
                     "frames_seen": 1,
                     "consensus_count": 1,
                     "missed_frames": 0,
@@ -550,7 +556,7 @@ class MemoraFaceRecognizer:
                         "state": "RECOGNIZED",
                         "box": det["box"],
                         "center": det["center"],
-                        "embeddings": [det["embedding"]],
+                        "embeddings": deque([det["embedding"]], maxlen=TRACK_EMBEDDING_WINDOW),
                         "frames_seen": 1,
                         "missed_frames": 0,
                         "last_seen_time": now_time,
@@ -575,7 +581,7 @@ class MemoraFaceRecognizer:
                         "state": "UNKNOWN",
                         "box": det["box"],
                         "center": det["center"],
-                        "embeddings": [det["embedding"]],
+                        "embeddings": deque([det["embedding"]], maxlen=TRACK_EMBEDDING_WINDOW),
                         "frames_seen": 1,
                         "missed_frames": 0,
                         "last_seen_time": now_time,
