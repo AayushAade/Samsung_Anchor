@@ -62,7 +62,22 @@ pytest 9.1.1 (MIT), ruff 0.14.0 (MIT) — not distributed.
 - **Review:** Gemini API terms for health-adjacent data; FFmpeg components bundled
   in OpenCV wheels if redistributing binaries.
 
-## 4. Recommendations
+## 4. Blocked or decision-required items (final audit, `fafcb78`)
+Nothing below has been activated, licensed, or cleared. MEMORA is not legally cleared for
+commercial distribution.
+
+| Item | Where it appears | Status | Decision needed |
+| :--- | :--- | :--- | :--- |
+| `assets/models/scrfd_500m_bnkps.onnx` (InsightFace SCRFD) | tracked in git (public); loaded by `src/vision/detector.py`; the main recogniser looks in `assets/` and so does not load it | **Blocked for commercial use** (non-commercial research licence per InsightFace README) | Stop tracking/redistributing (it stays in public history), obtain a commercial licence, or replace |
+| InsightFace auto-downloaded models (any `insightface` model zoo use) | `requirements-hardware.txt` path | **Blocked for commercial use** | Same as above |
+| `ultralytics` + `yolov8n.pt` | `src/memory/object_ledger.py`; weights local, untracked | **Blocked for closed-source use** (AGPL-3.0; Enterprise licence needed) | Enterprise licence, AGPL compliance, or replacement detector |
+| `Systran/faster-whisper-tiny.en` | fetched from huggingface.co at runtime when `faster-whisper` is installed | Model card states MIT (converted from openai/whisper-tiny.en); **runtime download is undisclosed** (ledger C2-22) | Bundle or pre-download with provenance, or disable by default |
+| dlib / `face_recognition` models | optional fallback, not installed | **Unverified** | Check model licences before enabling |
+| Gemini API | `requirements-cloud.txt`, identity learning only | **Externally unverified**; API terms not reviewed | Counsel review before sending any personal data |
+| Repository licence | none | **Blocked** | Choose with all contributors' written agreement |
+| Deployment paths | Core install and the Docker image include none of the blocked assets (image copies no `assets/`) | Core path has no identified blocker beyond the repository licence | — |
+
+## 5. Recommendations
 1. Choose a repository licence or proprietary terms, with all contributors' written agreement.
 2. Decide whether to stop tracking `assets/models/scrfd_500m_bnkps.onnx` (it remains in
    public history either way) and how to source a commercially usable face model.

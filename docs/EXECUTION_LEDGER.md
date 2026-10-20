@@ -32,5 +32,15 @@ PR #1 open, draft, mergeable, 0 reviews; working tree clean except owner's untra
 | C2-17 | P3 | Object sighting source; schema migrations | audit | done `8313383` | test_migrations |
 | C2-18 | P2 | CI | — | done `8c671ec`; green on `466be66` | GitHub Actions |
 
+### Final handoff audit at `fafcb78` (2026-10-20) — findings recorded, **not fixed** (audit-only scope)
+| ID | Sev | Finding | Evidence | Recommended fix |
+| :--- | :--- | :--- | :--- | :--- |
+| C2-19 | P1 | With storage consent **declined**, "I took my aspirin" still stores a REPORTED_TAKEN care event and replies "I've noted…", contradicting "I won't save anything you tell me" | probe in temp dir: `care_events=1` after declining | Gate `_medication_report` on `_may_store()`; reply that memory is off |
+| C2-20 | P2 | Explicit commands (`/add-medication`, `/add-appointment`, `/set-emergency-number`, `/set-trusted-contact`) save regardless of storage consent; replies say "Saved" but the policy is undocumented | same probe: `care_items=1` | Owner/product decision; then document or gate |
+| C2-21 | P2 | `app.py --simulate` appends INFO metadata (temp DB paths, migrations applied) to the real `data/logs/memora.log`; no conversation content | real log grew 1,820 → 16,651 bytes; only `src.memory.*` and `httpx` lines | Configure logging into the journey temp dir (or disable file logging) in `--simulate` |
+| C2-22 | P1 | When `faster-whisper` (hardware extra) is installed, every pipeline start makes an HTTPS request to huggingface.co for `Systran/faster-whisper-tiny.en` (and downloads it if absent). Chat says "Nothing is sent anywhere" | 27 `httpx` GETs during `--simulate`; 1 per chat start. Core install / Docker / CI do not include faster-whisper | Load ASR lazily only in voice mode; `local_files_only`/offline by default; disclose any download |
+| C2-23 | P1 | Chat and `--simulate` use simulated adapters only because `MEMORA_PROFILE` is unset; with a hardware profile (e.g. `LAPTOP`) they would construct real camera/microphone adapters | `ConfigManager().get_runtime_mode()` → LAPTOP when set; pipeline takes mode from it regardless of `live_hardware=False` | Force `RuntimeMode.SIMULATION` when `live_hardware is False` |
+| C2-24 | info | Local `memora_db_v2.sqlite` has never been opened by the new code (no `schema_version`, no `source` column, 0644). `--check`, `--chat` and the runtime would migrate it and set 0600; `--backup` only reads it | read-only `sqlite3` inspection; checksum `26f38093…` unchanged | Follow the clean-DB procedure in PROJECT_STATE §5 |
+
 ## Cycle 1 — 2026-10-20 (commits 5ebaa1e..8ccf2bd)
 See PROJECT_STATE.md commit table and MASTER_ROADMAP.md "Done in this cycle".

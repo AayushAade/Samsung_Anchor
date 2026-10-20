@@ -43,7 +43,15 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-20._
 | P2 | Core verified on Python 3.12/3.13 | `ac87a0f` |
 | P0 | Dashboard WebSocket cross-site hijacking | `e4dc941` |
 
-## Next (re-ranked)
+## Next (re-ranked after the final handoff audit at `fafcb78`)
+
+### Fix before any pilot (found in the audit; small, not yet done)
+0a. C2-19 — with storage consent declined, do not save reported doses; say memory is off.
+0b. C2-23 — force simulated hardware whenever `live_hardware` is false (chat, `--simulate`).
+0c. C2-22 — load speech recognition lazily and offline by default; disclose any model download
+    (or deploy the core install only).
+0d. C2-21 — `--simulate` logs into its own temporary directory.
+0e. C2-20 — decide and document whether explicit commands may save without storage consent.
 
 ### Owner decisions (blocking)
 1. Local DB: restore the pre-work backup or start a fresh database (test contamination).

@@ -60,7 +60,9 @@ Chat commands (`/help` lists them all): `/memories`, `/forget N`, `/medications`
 - Default database: `memora_db_v2.sqlite` in the project folder (face data alongside as
   `memora_db_v2.faces.json`). Override with `MEMORA_DB_PATH=/path/to/memora.sqlite`.
 - `--simulation` and `--scenario` use a separate database under `data/simulation/`.
-- Nothing is sent to a cloud service in `--chat` mode.
+- In `--chat` mode no conversation content is sent anywhere. Known exception (open defect C2-22):
+  if the optional `requirements-hardware.txt` extras are installed, startup contacts huggingface.co
+  to check/download a speech-recognition model. The core install and the Docker image do not.
 
 ## Other commands
 

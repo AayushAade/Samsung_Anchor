@@ -3,6 +3,41 @@
 _Last updated: 2026-10-20. This file records verified facts only. Where something
 was not run or not checked, it says so._
 
+## 0. Final handoff audit — evidence at code commit `fafcb78`
+
+**Git:** branch `fix/p0-data-isolation-and-safety`, in sync with origin (0 ahead / 0 behind),
+no stashes; working tree clean except 16 untracked `validation/artifacts/session_*` files that
+pre-date this work's isolation fix (left untouched). Draft PR #1 open, mergeable, no reviews.
+
+**Verified (direct evidence)**
+| Check | Result | Where |
+| :--- | :--- | :--- |
+| GitHub Actions on `fafcb78` (push 39456648298, PR 39456655903) | both runs `success`; core job log: `752 passed, 4 skipped`, ruff clean, `20/20 journeys passed`, `--check` pass-with-warnings; Docker job success | GitHub |
+| Local full suite on `fafcb78` (macOS arm64, `.venv` with all extras) | `756 passed`, exit 0 | local |
+| `ruff check .` | clean | local |
+| `python app.py --simulate` | 20/20 journeys PASS (each listed), exit 0 | local |
+| Release-gate test groups | consent 17, cloud-ASR/voice 4, migrations 4, memory integrity 58, deletion 3, backup/restore 4, thread-pool journey 1, dashboard origin/XSS 3, safety responses 64, no-physical-devices 4 — all passed | local |
+| Real data untouched by tests and journeys | `memora_db_v2.sqlite` and the 20 Oct backup: same checksum and mtime before/after; no `memora_db_v2.faces.*` files; `data/simulation/` unchanged | local |
+| Clean isolated dev DB procedure (below) | fresh DB 0600, schema v1, all personal tables 0 rows, chat + verified backup work; real DB unchanged | temp dir |
+
+**Found in this audit, not fixed (audit-only scope)** — see `docs/EXECUTION_LEDGER.md` C2-19…C2-24:
+consent gap for reported doses (C2-19); undocumented storage of explicit commands without
+consent (C2-20); `--simulate` writes metadata to the real log (C2-21); Hugging Face network
+request when the optional faster-whisper extra is installed (C2-22); chat/`--simulate` rely on
+`MEMORA_PROFILE` being unset to stay off real devices (C2-23).
+
+**Unverified hardware behaviour:** camera, microphone, speech recognition, text-to-speech, face
+recognition, object detection — never run on real devices in this work; the test suite blocks
+real devices.
+
+**Owner decisions:** local DB handling; repository licence; InsightFace model / YOLO; consent
+policy for explicit commands (C2-20); hardware-test authorisation; Gemini key; merging PR #1.
+
+**External review required:** legal (licences, contributor ownership, Gemini terms, patent timing
+given the public repo); clinical (urgent-phrase set, reminder and reassurance wording);
+usability with people with memory difficulties and carers; regulatory/privacy (medical-device,
+health-data, biometric-data rules).
+
 ## 1. Repository and branches
 
 | Item | State |
@@ -106,6 +141,21 @@ owner's decision because Actions minutes may be billed).
 
 ## 5. Known blockers and open issues
 
+- **Local database: what it contains (read-only inspection, 2026-10-20).** Episodes 3 Aug (81),
+  4 Aug (30), 29 Sep (10), 20 Oct (10), all for "Eleanor" (fictional demo patient) or "Sid";
+  27 identities (1 named, "Sid"; none have face data); 7 memory rows (one overwritten by the old
+  fixed-"temp"-id bug); 2 object sightings that are simulation seeds. No evidence of genuine
+  personal use. The pre-work backup (`~/memora_backups/20261020/`, 29 Sep state) differs only by
+  the 20 Oct test-run additions. The file has never been opened by the new code.
+- **Safe procedure for a clean development database (verified in a temp dir):**
+  1. Do not run `--check`, `--chat` or the runtime against `memora_db_v2.sqlite` (they would
+     migrate it and change its permissions). Leave it and the backup untouched.
+  2. Choose a location outside the repository, e.g. `~/memora-data/dev/`, and set
+     `MEMORA_DB_PATH=~/memora-data/dev/memora.sqlite` and `MEMORA_LOG_DIR=~/memora-data/dev/logs`.
+  3. `python app.py --check` — expect "User Memory Database … 0 people, consistent".
+  4. Verify read-only: `sqlite3 -readonly <dir>/memora_v2.sqlite "select count(*) from episodes"` (and
+     other tables) = 0; `schema_version` = 1; file mode `-rw-------`.
+  5. `python app.py --chat`, then `python app.py --backup <dir>/backups` for a verified first backup.
 - **Local database contamination (owner action).** `memora_db_v2.sqlite` was written to by
   earlier test runs before tests were isolated: the "Reading Glasses"/"Water Bottle" sightings
   are simulation seeds (present in the 20 Oct pre-work backup from 29 Sept), and 10 episodes plus
