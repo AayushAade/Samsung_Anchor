@@ -13,6 +13,11 @@ except ImportError:
     HAS_PYTTSX3 = False
 
 
+
+def _as_argument(text: str) -> str:
+    """Text passed to a TTS command can never be parsed as a command-line option."""
+    return " " + text if text.startswith("-") else text
+
 class SpeakerAdapter(ABC):
     """
     Abstract Speaker Hardware Adapter.
@@ -159,7 +164,7 @@ class PyTTSx3SpeakerAdapter(SpeakerAdapter):
         # 2. System Fallback: macOS native `say` command
         if sys.platform == "darwin":
             try:
-                subprocess.run(["say", text], check=True)
+                subprocess.run(["say", _as_argument(text)], check=True)
                 return True
             except Exception as e:
                 self.failure_reason = f"macOS say CLI error: {e}"
@@ -167,7 +172,7 @@ class PyTTSx3SpeakerAdapter(SpeakerAdapter):
         # 3. Linux Fallback: espeak
         if sys.platform.startswith("linux"):
             try:
-                subprocess.run(["espeak", text], check=False)
+                subprocess.run(["espeak", _as_argument(text)], check=False)
                 return True
             except Exception as e:
                 self.failure_reason = f"Linux espeak CLI error: {e}"
