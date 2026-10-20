@@ -192,6 +192,22 @@
     {
       "say": "Where are my pills?",
       "expect": "haven't seen your pills"
+    },
+    {
+      "say": "Have you seen it?",
+      "expect": "Which item do you mean"
+    },
+    {
+      "say": "I like it",
+      "expect": "What do you mean by 'it'"
+    },
+    {
+      "say": "What's my name?",
+      "expect": "your name is Ana"
+    },
+    {
+      "say": "Forget everything",
+      "expect": "/delete-all"
     }
   ]
 }

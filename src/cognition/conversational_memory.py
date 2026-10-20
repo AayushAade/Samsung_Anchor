@@ -42,6 +42,11 @@ TRUSTED_CONTACT_KEY = "trusted_contact"
 RELATIONS = ("daughter", "son", "wife", "husband", "partner", "doctor", "caregiver", "nurse", "brother",
              "sister", "mother", "father", "grandson", "granddaughter", "friend", "neighbor", "neighbour")
 
+# Relations a person normally has only one of; a new value replaces the old one.
+SINGLE_VALUED_RELATIONS = {"wife", "husband", "partner", "mother", "father"}
+PRONOUNS = {"it", "that", "this", "them", "those", "these", "they", "him", "her", "one"}
+NUMBER_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+
 CATEGORIES = {
     "drink": {"tea", "coffee", "juice", "water", "milk", "lemonade", "soda", "cocoa", "chai", "wine", "beer"},
     "sport": {"cricket", "football", "soccer", "tennis", "golf", "badminton", "hockey", "basketball",
@@ -163,7 +168,9 @@ class ConversationalMemory:
         if detect_urgent_concern(speech) is not None:
             return None  # the safety layer owns this turn
         t = _norm(speech)
-        for handler in (self._capability_boundaries, self._name_introduction, self._orientation, self._fact_correction_or_statement,
+        for handler in (self._capability_boundaries, self._name_correction_or_question, self._name_introduction,
+                        self._orientation, self._forget, self._relation_correction, self._relations_have,
+                        self._fact_correction_or_statement,
                         self._fact_question, self._timeline, self._visitors, self._last_search,
                         self._medication_report, self._medication_question, self._appointment,
                         self._object_location, self._feelings, self._small_talk):
@@ -309,9 +316,10 @@ class ConversationalMemory:
             return None
         t = t.rstrip(".! ")
         rel = "|".join(RELATIONS)
-        m = re.match(rf"^(?:and )?my ({rel})(?:'s name)? is (?:called |named )?([a-z][a-z .'\-]{{0,40}})$", t)
+        m = re.match(rf"^(?:and )?my ({rel})(?:'s name)? is (?:called |named )?(?!not\b)([a-z][a-z .'\-]{{0,40}})$", t)
         if m:
-            return f"relation:{m.group(1)}", m.group(2).strip(), "positive", True
+            relation = m.group(1)
+            return f"relation:{relation}", m.group(2).strip(), "positive", relation in SINGLE_VALUED_RELATIONS
         m = re.match(r"^(?:and )?my favorite ([a-z ]{2,30}?) is ([a-z0-9][a-z0-9 '\-]{0,40})$", t)
         if m:
             return f"favorite:{m.group(1).strip()}", m.group(2).strip(), "positive", True
@@ -336,7 +344,12 @@ class ConversationalMemory:
         if not parsed:
             return None
         key, value, polarity, single_valued = parsed
+        if value.strip().lower() in PRONOUNS:
+            return (f"What do you mean by '{value.strip()}'? Tell me what it is, for example "
+                    "'I like jasmine tea', and I'll remember it.")
         statement = raw.strip().rstrip(".!")
+        others = [f for f in self.active_facts() if key.startswith("relation:") and not single_valued
+                  and f.key == key and f.value.lower() != value.lower()]
         superseded = []
         for f in self.active_facts():
             same_key_conflict = single_valued and f.key == key and f.value != value
@@ -354,7 +367,103 @@ class ConversationalMemory:
         if superseded:
             old = "; ".join(_to_second_person(f.statement) for f in superseded)
             return f"Thank you, I've updated that. Earlier you told me: {old}. Now I have: {_to_second_person(statement)}."
+        if others:
+            relation = key.split(":", 1)[1]
+            names = [o.value.title() for o in others] + [value.title()]
+            return (f"I'll remember that {_to_second_person(statement)}. You've also told me about "
+                    f"{' and '.join(n for n in names[:-1])}, so I now have more than one {relation}: "
+                    f"{', '.join(names)}. If one of these is wrong, say for example "
+                    f"'my {relation} is not {names[0]}'.")
         return f"I'll remember that {_to_second_person(statement)}."
+
+    def _retract(self, fact: "StoredFact", reason: str) -> None:
+        mem = next((m for m in self._raw_fact_memories() if m.memory_id == fact.memory_id), None)
+        if mem is None:
+            return
+        tags = [tg for tg in mem.tags if not tg.startswith("status:")] + ["status:retracted", f"retracted_reason:{reason}"]
+        self._repo().save(dataclasses.replace(mem, tags=tags))
+
+    def _relation_correction(self, raw: str, t: str, **_) -> Optional[str]:
+        """'My daughter is not Riya' / 'No, my daughter's name is Priya, not Riya'."""
+        rel = "|".join(RELATIONS)
+        t = t.rstrip(".! ")
+        m = re.match(rf"^(?:no,? )?my ({rel})(?:'s name)? (?:is not|isn't|is n't) (?:called |named )?([a-z][a-z .'\-]{{0,40}})$", t)
+        replace_with = None
+        if not m:
+            m2 = re.match(rf"^(?:no,? )?my ({rel})(?:'s name)? is (?:called |named )?([a-z][a-z .'\-]{{0,40}}?),? not ([a-z][a-z .'\-]{{0,40}})$", t)
+            if not m2:
+                return None
+            relation, replace_with, wrong = m2.group(1), m2.group(2).strip(), m2.group(3).strip()
+        else:
+            relation, wrong = m.group(1), m.group(2).strip()
+        matches = [f for f in self.active_facts() if f.key == f"relation:{relation}" and f.value.lower() == wrong.lower()]
+        for f in matches:
+            self._retract(f, "corrected by person")
+        reply = (f"Thank you for correcting me. I won't say your {relation} is {wrong.title()} any more."
+                 if matches else f"I didn't have your {relation} noted as {wrong.title()}.")
+        if replace_with:
+            statement = f"My {relation} is {replace_with.title()}"
+            if not any(f.key == f"relation:{relation}" and f.value.lower() == replace_with.lower() for f in self.active_facts()):
+                self._save_fact(f"fact_{uuid.uuid4().hex}", f"relation:{relation}", replace_with.lower(), "positive", statement)
+            reply += f" I've noted that your {relation} is {replace_with.title()}."
+        return reply
+
+    def _relations_have(self, raw: str, t: str, **_) -> Optional[str]:
+        """'I have two daughters, Riya and Priya' / 'I have a son called Leo'."""
+        rel = "|".join(RELATIONS)
+        m = re.match(rf"^i have (a|an|one|two|three|four|five) ({rel})s?,? (?:named |called |who (?:is|are) called )?"
+                     rf"([a-z][a-z .'\-]{{0,60}})[.!]?$", t)
+        if not m:
+            return None
+        relation = m.group(2)
+        names = [n.strip() for n in re.split(r",| and ", m.group(3)) if n.strip()]
+        if not names or len(names) > 5 or any(n in PRONOUNS for n in names):
+            return None
+        stored = []
+        for name in names:
+            if not any(f.key == f"relation:{relation}" and f.value.lower() == name.lower() for f in self.active_facts()):
+                self._save_fact(f"fact_{uuid.uuid4().hex}", f"relation:{relation}", name.lower(), "positive",
+                                f"My {relation} is {name.title()}")
+                stored.append(name.title())
+        if not stored:
+            return f"I already have that noted."
+        return f"I'll remember that your {relation}{'s are' if len(stored) > 1 else ' is'} {' and '.join(stored)}."
+
+    def _forget(self, raw: str, t: str, **_) -> Optional[str]:
+        m = re.match(r"^(?:please )?forget (?:that |about )?(.+?)[.!]?$", t)
+        if not m:
+            return None
+        what = m.group(1).strip()
+        if what in ("everything", "it all", "all of it", "all that", "everything about me"):
+            return ("To delete everything I've stored, use /delete-all - it asks you to confirm first. "
+                    "To remove one thing, use /memories and then /forget with its number.")
+        parsed = self._parse_statement(what)
+        targets = []
+        if parsed:
+            key, value = parsed[0], parsed[1]
+            targets = [f for f in self.active_facts() if f.key == key and f.value.lower() == value.lower()]
+        if not targets:
+            words = _words(what) - {"i", "my", "me", "the", "a", "is", "that", "like", "love"}
+            targets = [f for f in self.active_facts() if words and words <= _words(f.statement)]
+        if not targets:
+            return "I couldn't find that in what you've told me, so nothing was changed."
+        for f in targets:
+            self._retract(f, "person asked to forget")
+        return "Okay, I won't use that any more: " + "; ".join(_to_second_person(f.statement) for f in targets) + "."
+
+    def _name_correction_or_question(self, raw: str, t: str, **_) -> Optional[str]:
+        name = self.get_preferred_name()
+        if re.match(r"^(?:no,? )?(?:my name is not|my name isn't|that's not my name|that is not my name|"
+                    r"don't call me|do not call me)\b", t):
+            setter = getattr(self.db, "_set_system_state", None)
+            if setter and name:
+                setter(PREFERRED_NAME_KEY, "")
+            return "I'm sorry about that. What would you like me to call you? You can say: my name is ..."
+        if re.search(r"\b(what(?:'s| is) my name|who am i|do you know (?:my name|who i am))\b", t):
+            if name:
+                return f"You told me your name is {name}."
+            return "You haven't told me your name yet. You can say: my name is ..."
+        return None
 
     def _fact_question(self, raw: str, t: str, **_) -> Optional[str]:
         now = self.clock()
@@ -366,6 +475,9 @@ class ConversationalMemory:
         if m:
             relation = next(g for g in m.groups() if g)
             hits = [f for f in facts if f.key == f"relation:{relation}"]
+            if len(hits) > 1:
+                return (f"You've told me about more than one {relation}. "
+                        + self._answer(hits, now, limit=5))
             return self._answer(hits, now) or f"I don't know who your {relation} is yet. You can tell me, and I'll remember."
 
         m = re.search(r"\bwhat(?:'s| is) my favorite ([a-z ]{2,30}?)\??$", t)
@@ -589,8 +701,14 @@ class ConversationalMemory:
             return None
         if not target:
             target = mentioned[0]
-        if target in ("i", "you", "we", "it", "that", "this"):
+        if target in ("i", "you", "we"):
             return None
+        if target in PRONOUNS:
+            recent = self.search_history[-1] if self.search_history else None
+            if recent and time.time() - recent["timestamp"] < 600:
+                target = recent["object"]
+            else:
+                return "Which item do you mean? For example: where are my glasses?"
 
         self.search_history.append({"object": target, "timestamp": time.time()})
         now = self.clock()

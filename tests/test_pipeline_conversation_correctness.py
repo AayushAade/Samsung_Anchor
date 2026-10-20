@@ -39,7 +39,7 @@ def test_unrelated_fact_not_returned(pipeline):
 def test_fact_round_trip_and_correction(pipeline):
     say(pipeline, "My daughter is Riya")
     assert "Riya" in say(pipeline, "Who is my daughter?")
-    say(pipeline, "My daughter's name is Priya")
+    say(pipeline, "No, my daughter's name is Priya, not Riya")
     answer = say(pipeline, "Who is my daughter?")
     assert "Priya" in answer and "Riya" not in answer.replace("Priya", "")
 

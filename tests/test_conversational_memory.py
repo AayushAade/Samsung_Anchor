@@ -51,14 +51,62 @@ def test_category_questions(mem):
     assert "coffee" in mem.respond("What do I usually drink?")
 
 
-def test_relation_fact_and_correction_supersedes_with_history(mem):
+def test_second_daughter_is_kept_and_conflict_surfaced(mem):
+    """People can have more than one daughter: never silently replace one with another."""
     mem.respond("My daughter is Riya")
     assert mem.respond("Who is my daughter?") == "You told me today that your daughter is Riya."
     reply = mem.respond("My daughter's name is Priya")
-    assert "updated" in reply and "Riya" in reply
-    assert mem.respond("Who is my daughter?") == "You told me today that your daughter's name is Priya."
-    statuses = sorted(f.status for f in mem.all_facts())
-    assert statuses == ["active", "superseded"], "old fact is kept for history, not deleted"
+    assert "more than one daughter" in reply and "Riya" in reply and "Priya" in reply
+    answer = mem.respond("Who is my daughter?")
+    assert answer.startswith("You've told me about more than one daughter") and "Riya" in answer and "Priya" in answer
+
+
+def test_explicit_correction_retracts_with_history(mem):
+    mem.respond("My daughter is Riya")
+    mem.respond("My daughter is Priya")
+    assert "won't say your daughter is Riya" in mem.respond("My daughter is not Riya")
+    assert mem.respond("Who is my daughter?") == "You told me today that your daughter is Priya."
+    assert sorted(f.status for f in mem.all_facts()) == ["active", "retracted"], "history is kept"
+
+
+def test_combined_correction_and_single_valued_relations(mem):
+    mem.respond("My son is Arjun")
+    reply = mem.respond("No, my son's name is Leo, not Arjun")
+    assert "won't say your son is Arjun" in reply and "your son is Leo" in reply
+    assert mem.respond("Who is my son?") == "You told me today that your son is Leo."
+    mem.respond("My wife is Meera")
+    assert "updated" in mem.respond("My wife is Anita")
+
+
+def test_negated_relation_is_never_stored_as_a_name(mem):
+    mem.respond("My daughter is not Riya")
+    assert all("not" not in f.value for f in mem.all_facts())
+
+
+def test_have_two_relations(mem):
+    assert mem.respond("I have two daughters, Riya and Priya") == "I'll remember that your daughters are Riya and Priya."
+    assert "more than one daughter" in mem.respond("Who is my daughter?")
+
+
+def test_pronouns_are_not_stored_or_looked_up_blindly(mem):
+    assert "What do you mean by 'it'" in mem.respond("I like it")
+    assert mem.all_facts() == []
+    assert mem.respond("Have you seen them?").startswith("Which item do you mean?")
+    mem.respond("Where are my keys?")
+    assert "keys" in mem.respond("Have you seen them?")
+
+
+def test_forget_and_name_controls(mem):
+    mem.respond("I like tea")
+    assert "won't use that any more" in mem.respond("Forget that I like tea")
+    assert "tea" not in (mem.respond("What do I like?") or "")
+    assert "/delete-all" in mem.respond("Forget everything")
+    assert "couldn't find that" in mem.respond("Forget that I like opera")
+    assert mem.respond("What's my name?").startswith("You haven't told me your name")
+    mem.respond("My name is Sid")
+    assert mem.respond("Who am I?") == "You told me your name is Sid."
+    mem.respond("My name is not Sid")
+    assert not mem.get_preferred_name()
 
 
 def test_negation_supersedes_positive_preference(mem):

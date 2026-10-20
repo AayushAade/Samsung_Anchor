@@ -70,10 +70,13 @@ def test_memories_listing_and_forget(db_path, log_path):
 
 def test_superseded_facts_are_marked_in_listing(db_path, log_path):
     s = _session(db_path, tmp_log=log_path)
-    s.handle("My daughter is Riya")
-    s.handle("My daughter's name is Priya")
+    s.handle("My wife is Meera")
+    s.handle("My wife is Anita")          # single-valued relation: replaces
+    s.handle("I like tea")
+    s.handle("Forget that I like tea")    # retraction
     listing = s.handle("/memories")
     assert "replaced by a newer statement" in listing
+    assert "you asked me to stop using this" in listing
     s.close()
 
 

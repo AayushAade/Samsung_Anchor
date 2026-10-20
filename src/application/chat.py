@@ -131,7 +131,8 @@ class ChatSession:
             rows = []
             for i, f in enumerate(self._numbered_facts, 1):
                 when = (f["recorded_at"] or "")[:16].replace("T", " ")
-                note = "" if f["status"] == "active" else "   (replaced by a newer statement)"
+                note = {"active": "", "superseded": "   (replaced by a newer statement)",
+                        "retracted": "   (you asked me to stop using this)"}.get(f["status"], f"   ({f['status']})")
                 rows.append(f"  {i}. \"{f['statement']}\" - you told me {when}{note}")
             return "What you've told me:\n" + "\n".join(rows) + "\nUse /forget N to delete one."
         if cmd == "/forget":
