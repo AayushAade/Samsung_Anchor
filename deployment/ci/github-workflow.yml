@@ -1,3 +1,4 @@
+# TEMPLATE ONLY: copy to .github/workflows/ to activate (consumes GitHub Actions minutes).
 name: Memora CI/CD Pipeline
 
 on:
@@ -20,12 +21,15 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest ruff
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -r requirements-dev.txt
 
-      - name: Run Pytest Suite
+      - name: Run Pytest Suite (core dependencies only; hardware/cloud tests skip)
         run: |
-          pytest tests/ -v
+          pytest tests/ -q
+
+      - name: Diagnostics smoke test
+        run: |
+          MEMORA_DB_PATH=/tmp/ci/memora.sqlite python app.py --check
 
       - name: Build Docker Image
         run: |

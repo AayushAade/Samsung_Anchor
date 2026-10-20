@@ -1,10 +1,41 @@
 import json
+import os
 import re
-from google import genai
-from google.genai import types
+
+try:  # Cloud SDK is optional: local-only operation must not require it.
+    from google import genai
+    from google.genai import types
+    HAS_GENAI = True
+except ImportError:  # pragma: no cover - exercised only when the SDK is absent
+    genai = None
+    types = None
+    HAS_GENAI = False
 
 # Import settings
 from config import settings
+
+# Model id is configurable because hosted model generations are retired over time.
+GEMINI_MODEL = os.environ.get("MEMORA_GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_TIMEOUT_MS = int(os.environ.get("MEMORA_GEMINI_TIMEOUT_MS", "10000"))
+
+_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z' .-]{0,40}$")
+_RELATIONSHIPS = {"daughter", "son", "spouse", "wife", "husband", "partner", "friend", "caregiver", "doctor",
+                  "nurse", "grandson", "granddaughter", "brother", "sister", "mother", "father", "neighbor",
+                  "neighbour", "niece", "nephew", "cousin", "visitor"}
+
+
+def _validated_identity(result):
+    """
+    Treat model output as untrusted: accept only a short plain name and a known
+    relationship word; anything else is discarded.
+    """
+    if not isinstance(result, dict):
+        return {"extracted_name": None, "relationship": None}
+    name = result.get("extracted_name")
+    rel = result.get("relationship")
+    name = name.strip() if isinstance(name, str) and _NAME_RE.match(name.strip() or "") and name.lower() != "null" else None
+    rel = rel.strip().capitalize() if isinstance(rel, str) and rel.strip().lower() in _RELATIONSHIPS else None
+    return {"extracted_name": name, "relationship": rel}
 
 class MemoraContextBinder:
     def __init__(self, api_key=None):
@@ -14,9 +45,13 @@ class MemoraContextBinder:
         if not self.api_key:
             print("[Context Binder Warning] GEMINI_API_KEY is not set. Context Binder will run in local rule-based fallback mode.")
             self.use_api = False
+        elif not HAS_GENAI:
+            print("[Context Binder Warning] google-genai is not installed. Context Binder will run in local rule-based fallback mode.")
+            self.use_api = False
         else:
             try:
-                self.client = genai.Client(api_key=self.api_key)
+                self.client = genai.Client(api_key=self.api_key,
+                                           http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS))
             except Exception as e:
                 print(f"[Context Binder Warning] Failed to configure Gemini API client: {e}. Enabling local fallback.")
                 self.use_api = False
@@ -53,7 +88,7 @@ class MemoraContextBinder:
                 
                 # Request JSON format using the modern Client.models.generate_content API
                 response = self.client.models.generate_content(
-                    model="gemini-1.5-flash",
+                    model=GEMINI_MODEL,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json"
@@ -62,16 +97,12 @@ class MemoraContextBinder:
                 
                 if response and response.text:
                     try:
-                        result = json.loads(response.text.strip())
-                        return {
-                            "extracted_name": result.get("extracted_name"),
-                            "relationship": result.get("relationship")
-                        }
+                        return _validated_identity(json.loads(response.text.strip()))
                     except json.JSONDecodeError:
                         # Fallback for minor formatting edge cases
                         text = response.text.strip()
                         text = re.sub(r"```json|```", "", text).strip()
-                        return json.loads(text)
+                        return _validated_identity(json.loads(text))
             except Exception as e:
                 print(f"[Context Binder Warning] Gemini API call failed: {e}. Falling back to local heuristics.")
 
@@ -224,9 +255,11 @@ class MemoraContextBinder:
                   "target_object": "extracted object name or null"
                 }}
                 """
-                response = self.model.generate_content(
-                    prompt,
-                    generation_config={"response_mime_type": "application/json"}
+                # (Previously called a non-existent self.model, so this path always failed.)
+                response = self.client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(response_mime_type="application/json"),
                 )
                 
                 if response and response.text:

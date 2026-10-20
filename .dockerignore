@@ -1,0 +1,19 @@
+# Never send personal data, environments, or large weights to the build context.
+.git
+.venv
+venv
+**/__pycache__
+*.sqlite
+*.sqlite3
+*.db
+*.faces.index
+*.faces.json
+face_embeddings.index
+face_mapping.json
+data/
+*.pt
+.env
+.env.*
+validation/artifacts/
+scratch/
+archive/

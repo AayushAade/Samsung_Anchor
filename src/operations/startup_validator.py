@@ -163,13 +163,66 @@ class StartupValidator:
             remediation="Kill existing server process or connect to active dashboard",
         )
 
-    def run_all_checks(self) -> list[HealthCheckItem]:
-        """Execute all pre-demo health check items."""
-        return [
+    def check_user_database(self) -> HealthCheckItem:
+        """Open the configured user database and cross-check identities against face embeddings."""
+        from config import settings
+        try:
+            from src.memory.database import MemoraDatabase
+            with MemoraDatabase(settings.DB_PATH) as db:
+                report = db.check_integrity()
+                path = db.db_path
+        except Exception as e:
+            return HealthCheckItem(component="User Memory Database", status="FAIL",
+                                   message=f"Cannot open {settings.DB_PATH}: {e}",
+                                   remediation="Check the path (MEMORA_DB_PATH) and file permissions; "
+                                               "restore from backup if the file is corrupt")
+        if report["ok"]:
+            return HealthCheckItem(component="User Memory Database", status="PASS",
+                                   message=f"{path}: {report['identities']} people, consistent")
+        problems = []
+        if report["identities_without_embeddings"]:
+            problems.append(f"{len(report['identities_without_embeddings'])} people have no face data")
+        if report["orphan_embedding_identities"]:
+            problems.append("face data for unknown people")
+        problems += [report[k] for k in ("vector_store_load_error", "vector_store_save_error") if report[k]]
+        return HealthCheckItem(component="User Memory Database", status="WARNING",
+                               message=f"{path}: " + "; ".join(problems),
+                               remediation="Run `python inspect_database.py` for details; re-enrol affected people")
+
+    def check_optional_capabilities(self) -> HealthCheckItem:
+        """Report which optional sensor/model/cloud packages are installed (not whether they work)."""
+        import importlib.util
+        optional = {"faster_whisper": "speech-to-text", "pyaudio": "microphone", "pyttsx3": "voice output",
+                    "insightface": "face recognition", "mediapipe": "face landmarks", "google.genai": "Gemini"}
+        missing = []
+        for mod, label in optional.items():
+            try:
+                found = importlib.util.find_spec(mod) is not None
+            except (ImportError, ValueError):
+                found = False
+            if not found:
+                missing.append(label)
+        if not missing:
+            return HealthCheckItem(component="Optional Capabilities", status="PASS",
+                                   message="All optional packages installed (functionality not tested here)")
+        return HealthCheckItem(component="Optional Capabilities", status="WARNING",
+                               message="Not installed: " + ", ".join(missing),
+                               remediation="pip install -r requirements-hardware.txt / requirements-cloud.txt if needed")
+
+    def run_all_checks(self, include_camera: bool = True) -> list[HealthCheckItem]:
+        """
+        Execute all health check items. include_camera=False avoids opening the
+        physical camera (which activates it and may prompt for permission).
+        """
+        checks = [
             self.check_python_version(),
             self.check_dependencies(),
             self.check_database(),
             self.check_vector_store(),
-            self.check_camera_hardware(),
-            self.check_dashboard_port(),
+            self.check_user_database(),
+            self.check_optional_capabilities(),
         ]
+        if include_camera:
+            checks.append(self.check_camera_hardware())
+        checks.append(self.check_dashboard_port())
+        return checks

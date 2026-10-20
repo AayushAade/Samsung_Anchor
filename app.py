@@ -285,6 +285,7 @@ def cli():
     parser.add_argument("--max-cycles", type=int, default=None, help="Maximum execution cycles (default: continuous)")
     parser.add_argument("--vision-standalone", action="store_true", help="Run standalone OpenCV vision detection and tracking loop")
     parser.add_argument("--show-memory", action="store_true", help="Print memory timeline, visitors, conversations, objects, facts, and DB stats")
+    parser.add_argument("--check", action="store_true", help="Run diagnostics (dependencies, user database integrity, optional capabilities) without opening the camera; exit 1 on failure")
     parser.add_argument("--chat", action="store_true", help="Talk to MEMORA by typing (camera and microphone off); manage stored memories")
     parser.add_argument("--validate-runtime", action="store_true", help="Run runtime stability monitoring and output measured Runtime Report")
 
@@ -297,6 +298,10 @@ def cli():
     if args.show_memory:
         show_memory_timeline()
         return
+
+    if args.check:
+        from health_check import main as run_health_check
+        sys.exit(run_health_check(include_camera=False))
 
     if args.chat:
         from src.application.chat import run_chat

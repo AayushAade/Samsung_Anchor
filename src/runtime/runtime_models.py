@@ -42,11 +42,14 @@ class HardwareConfig:
 
 @dataclass
 class HealthMetrics:
-    cpu_usage_pct: float = 12.5
-    ram_usage_pct: float = 34.2
-    camera_fps: float = 30.0
-    audio_latency_ms: float = 14.2
-    connected_devices_count: int = 5
+    # Zero means "not measured"; see metrics_measured. (Defaults used to be
+    # plausible-looking constants that could be mistaken for measurements.)
+    cpu_usage_pct: float = 0.0
+    ram_usage_pct: float = 0.0
+    camera_fps: float = 0.0
+    audio_latency_ms: float = 0.0
+    connected_devices_count: int = 0
+    metrics_measured: bool = False
 
 
 @dataclass

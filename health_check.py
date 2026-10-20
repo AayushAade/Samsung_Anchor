@@ -10,13 +10,13 @@ import sys
 from src.operations.startup_validator import StartupValidator
 
 
-def main() -> int:
+def main(include_camera: bool = True) -> int:
     print("======================================================================")
     print("MEMORA (Samsung Anchor) — Pre-Demo Diagnostic Health Check")
     print("======================================================================")
 
     validator = StartupValidator()
-    results = validator.run_all_checks()
+    results = validator.run_all_checks(include_camera=include_camera)
 
     has_fail = False
     has_warning = False
@@ -40,11 +40,11 @@ def main() -> int:
         print("----------------------------------------------------------------------\n")
         return 1
     elif has_warning:
-        print("OVERALL DIAGNOSTIC RESULT: ⚠️ PASS WITH WARNINGS — Operational with fallbacks")
+        print("OVERALL DIAGNOSTIC RESULT: ⚠️ PASS WITH WARNINGS — review the warnings above")
         print("----------------------------------------------------------------------\n")
         return 0
     else:
-        print("OVERALL DIAGNOSTIC RESULT: ✅ PASS — System fully operational for live demo")
+        print("OVERALL DIAGNOSTIC RESULT: ✅ PASS — all checks above passed")
         print("----------------------------------------------------------------------\n")
         return 0
 

@@ -374,8 +374,8 @@ class CognitiveStream:
         if runtime_summary:
             event.runtime_mode = runtime_summary.get("mode", "Simulation Mode")
             event.device_statuses = runtime_summary.get("device_statuses", {})
-            event.cpu_usage_pct = runtime_summary.get("cpu_usage_pct", 14.2)
-            event.ram_usage_pct = runtime_summary.get("ram_usage_pct", 36.8)
+            event.cpu_usage_pct = runtime_summary.get("cpu_usage_pct", 0.0)
+            event.ram_usage_pct = runtime_summary.get("ram_usage_pct", 0.0)
             event.connected_devices_count = runtime_summary.get("connected_devices", 5)
 
         # Operations & Observability Context

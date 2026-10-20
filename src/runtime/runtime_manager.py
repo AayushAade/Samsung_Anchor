@@ -20,6 +20,11 @@ class RuntimeManager:
         self.config = config or HardwareConfig()
         self.sensor_bus = SensorBus()
         self.hardware_manager = HardwareManager()
+        try:
+            import psutil
+            psutil.cpu_percent(interval=None)  # prime: later calls report usage since now
+        except Exception:
+            pass
 
         # Instantiate Adapters based on RuntimeMode
         if self.config.mode != RuntimeMode.SIMULATION:
@@ -97,23 +102,24 @@ class RuntimeManager:
         self.hardware_manager.register_device("SpeakerAdapter", self.speaker.get_status())
 
     def get_health_metrics(self) -> HealthMetrics:
-        cpu = 14.2
-        ram = 36.8
+        cpu, ram, measured = 0.0, 0.0, False
         try:
             import psutil
+            # Usage since the previous call (primed in __init__); the very first
+            # sample after start-up can legitimately be 0.0.
             cpu = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory().percent
+            measured = True
         except Exception:
             pass
-
-        cam_fps = getattr(self.camera, "actual_fps", 30.0) or 30.0
 
         return HealthMetrics(
             cpu_usage_pct=cpu,
             ram_usage_pct=ram,
-            camera_fps=cam_fps,
-            audio_latency_ms=11.8,
+            camera_fps=float(getattr(self.camera, "actual_fps", 0.0) or 0.0),
+            audio_latency_ms=0.0,  # not measured by any adapter
             connected_devices_count=len(self.hardware_manager.get_all_statuses()),
+            metrics_measured=measured,
         )
 
     def generate_diagnostic_report(self) -> str:
