@@ -225,3 +225,35 @@ def test_conflicting_introduction_creates_no_episode_under_the_confirmed_name(tm
     assert done.wait(10)
     assert results[0]["reason"] == "Name conflict"
     assert db.episode_repo.count() == 0
+
+
+def test_identity_learning_stores_no_inferred_knowledge_by_default(tmp_path):
+    """The memory consolidator only stores facts a language model extracts; with the
+    default (mock) client nothing is inferred, so no 'semantic' knowledge can be presented
+    as something the person said. Guard against that changing silently."""
+    import sqlite3
+    import threading
+    import time
+    from src.cognition.cognitive_memory_manager import CognitiveMemoryManager
+    from src.integration.async_identity_learning import start_identity_learning
+    from src.llm.reasoning_client import MockReasoningClient
+    from src.reasoning.context_binder import MemoraContextBinder
+    db, face = _consenting_db(tmp_path)
+    manager = CognitiveMemoryManager(db.SessionFactory, MockReasoningClient())
+
+    class Listener:
+        def listen_and_transcribe(self):
+            return "Hi, I'm Bob, your son. I love fishing on Sundays."
+
+    done = threading.Event()
+    start_identity_learning(face_id=face, listener=Listener(), binder=MemoraContextBinder(), database=db,
+                            memory_manager=manager, speaker=None, on_finished=lambda f, r: done.set())
+    assert done.wait(10)
+    manager.executor.shutdown(wait=True)
+    time.sleep(0.05)
+    con = sqlite3.connect(db.db_path)
+    try:
+        assert con.execute("select count(*) from semantic_nodes").fetchone()[0] == 0
+        assert con.execute("select count(*) from episodes").fetchone()[0] == 1
+    finally:
+        con.close()

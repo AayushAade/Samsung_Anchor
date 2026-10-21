@@ -176,3 +176,39 @@ def test_export_contains_every_stored_personal_row(tmp_path):
     assert {t: len(data["all_records"][t]) for t in PERSONAL_TABLES} == counts
     assert counts["identity_evidence"] == 1 and f"{TOKEN}-intro" in out.read_text()
     assert data["consent_decisions"]["CONVERSATION_STORAGE"].startswith("granted")
+
+
+def test_delete_all_after_identity_learning_removes_faces_evidence_and_embeddings_on_disk(tmp_path):
+    """Adversarial journey: a face was learned with consent, then everything is deleted.
+    Nothing biometric or personal may survive, including in the face-embedding files."""
+    import numpy as np
+    from src.clinical.clinical_models import ConsentFeature
+    from src.memory.database import vector_store_paths
+    s = _session(tmp_path, "yes")
+    coord = s.coordinator
+    coord.pipeline.consent_mgr.update_consent(ConsentFeature.FACE_RECOGNITION, True)
+    face = s.db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))
+    coord.process_transcript(face, f"Hi, I'm Bob, your son. {TOKEN}-face")
+    s.handle("I put my keys in the drawer")
+    db_path = s.db.db_path
+    assert "All your data has been deleted" in s.handle("/delete-all")
+    s.close()
+    assert all(v == 0 for v in _counts(db_path).values())
+    reopened = MemoraDatabase(db_path)
+    assert len(reopened.vector_store) == 0 and reopened.get_all_identities() == {}
+    reopened.close()
+    for path in vector_store_paths(db_path):
+        if os.path.exists(path):
+            assert TOKEN.encode() not in Path(path).read_bytes() and b"Anonymous_ID" not in Path(path).read_bytes()
+    assert _state_keys(db_path) <= {"current_room", "next_anon_index", "schema_version"}
+
+
+def test_revoking_face_consent_says_what_happens_to_stored_face_data(tmp_path):
+    import numpy as np
+    s = _session(tmp_path, "yes")
+    assert s.handle("/consent faces off") == "Face recognition is off: faces will not be matched or stored."
+    s.handle("/consent faces on")
+    s.db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))
+    reply = s.handle("/consent faces off")
+    assert "Face data already stored for 1 person is kept" in reply and "/delete-all" in reply
+    s.close()

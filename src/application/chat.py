@@ -251,8 +251,13 @@ class ChatSession:
                 return ("Listening with the microphone is allowed. Note: transcription uses Google's online "
                         "service and stays off unless MEMORA_ALLOW_CLOUD_ASR=1 is also set."
                         if on else "Listening with the microphone is off.")
-            return ("Face recognition is allowed. It only works with a camera and is not verified on real hardware."
-                    if on else "Face recognition is off: faces will not be matched or stored.")
+            if on:
+                return ("Face recognition is allowed. It only works with a camera (--live-hardware) and "
+                        "face-recognition models provided by the owner, and it is not verified on real hardware.")
+            stored = len(self.db.vector_store.identity_ids()) if getattr(self.db, "vector_store", None) else 0
+            kept = (f" Face data already stored for {stored} {'person is' if stored == 1 else 'people are'} kept "
+                    "until you remove it with /delete-all.") if stored else ""
+            return "Face recognition is off: faces will not be matched or stored." + kept
         return "\n".join(self._consent_lines()) + "\nChange with: /consent memory|faces|voice on|off"
 
     def _consent_lines(self) -> list[str]:
