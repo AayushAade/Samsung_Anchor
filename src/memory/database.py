@@ -339,6 +339,26 @@ class MemoraDatabase:
 
         return None, None, None
 
+    def match_face(self, query_embedding: Any, tolerance: float, ambiguity_margin: float = 0.0) -> dict[str, Any]:
+        """
+        Classify a face embedding against stored identities.
+
+        Returns {"status": "match" | "ambiguous" | "none", "identity_id", "info", "distance"}.
+        "ambiguous" means a second, different identity is also within tolerance and within
+        ambiguity_margin of the best one: the face must not be named or enrolled.
+        """
+        with self.lock:
+            nearest = [n for n in self.vector_store.nearest_identities(query_embedding, k=2) if n[1] < tolerance]
+            if not nearest:
+                return {"status": "none", "identity_id": None, "info": None, "distance": None}
+            best_id, best_dist = nearest[0]
+            if len(nearest) > 1 and nearest[1][1] - best_dist <= ambiguity_margin:
+                return {"status": "ambiguous", "identity_id": None, "info": None, "distance": best_dist}
+            info = self.identity_repo.get_by_id(best_id)
+            if info:
+                info["embeddings"] = self.vector_store.get_embeddings_for_identity(best_id)
+            return {"status": "match", "identity_id": best_id, "info": info, "distance": best_dist}
+
     def register_anonymous(self, embedding: Any) -> str:
         """
         Register a new anonymous identity with embedding vector.

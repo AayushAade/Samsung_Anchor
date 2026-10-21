@@ -14,8 +14,10 @@ Verified:  text conversation with consent, memory with provenance and
            install (Python 3.11-3.13), Docker, CI (Linux)
 Not yet verified: real camera, microphone, voice output, object
            detection, live Gemini API, long-duration stability
-Not working:  real face recognition (no working backend with the pinned
-           hardware packages; see docs/LICENSING_REVIEW.md D3)
+Face recognition: OpenCV YuNet + SFace backend implemented and tested with
+           synthetic stand-ins; inactive until the owner provisions model files
+           (none shipped or downloaded); never tested on a camera
+           (docs/FACE_RECOGNITION.md)
 ```
 
 MEMORA is **not a medical device**. It does not diagnose, give medication advice,

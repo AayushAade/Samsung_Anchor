@@ -253,6 +253,22 @@ class FaissVectorStore:
                 return self.id_mapping.get(faiss_id), faiss_id, dist
             return None, None, None
 
+    def nearest_identities(self, query_embedding: np.ndarray, k: int = 5) -> list[tuple[str, float]]:
+        """The nearest distinct identities as (identity_id, L2 distance), closest first."""
+        query = self._validate(query_embedding).reshape(1, -1)
+        with self._lock:
+            if self.index.ntotal == 0:
+                return []
+            distances, indices = self.index.search(query, min(max(k * 4, k), self.index.ntotal))
+            out: list[tuple[str, float]] = []
+            for d, i in zip(distances[0], indices[0]):
+                iid = self.id_mapping.get(int(i)) if i >= 0 else None
+                if iid is not None and all(iid != o[0] for o in out):
+                    out.append((iid, float(np.sqrt(max(d, 0.0)))))
+                if len(out) == k:
+                    break
+            return out
+
     def get_embeddings_for_identity(self, identity_id: str):
         """
         Returns a list of embeddings associated with a given identity_id.

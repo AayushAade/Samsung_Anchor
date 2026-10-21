@@ -265,6 +265,17 @@ class StartupValidator:
                      "libavdevice. Text chat is unaffected; voice mode loads both (not yet hardware-tested)"),
             remediation="Before relying on voice mode, follow docs/HARDWARE_TEST_CHECKLIST.md section R-09")
 
+    def check_face_models(self) -> HealthCheckItem:
+        """Face-recognition model files (optional; provisioned by the owner, never downloaded)."""
+        from src.vision.face_models import verify_models, model_dir
+        status = verify_models()
+        if status.ready:
+            return HealthCheckItem(component="Face Recognition Models", status="PASS",
+                                   message=f"{status.reason()} in {model_dir()} (not yet tested on a real camera)")
+        return HealthCheckItem(component="Face Recognition Models", status="WARNING",
+                               message="Face recognition unavailable: " + status.reason(),
+                               remediation="Optional. See docs/FACE_RECOGNITION.md before provisioning models")
+
     def run_all_checks(self, include_camera: bool = True) -> list[HealthCheckItem]:
         """
         Execute all health check items. include_camera=False avoids opening the
@@ -279,6 +290,7 @@ class StartupValidator:
             self.check_optional_capabilities(),
             self.check_network_use(),
             self.check_media_library_conflict(),
+            self.check_face_models(),
         ]
         if include_camera:
             checks.append(self.check_camera_hardware())
