@@ -31,7 +31,7 @@ class CognitiveEvent:
     face_id: Optional[str] = None
     name: Optional[str] = None
     relationship: Optional[str] = None
-    identity_confidence: float = 0.0
+    identity_confidence: Optional[float] = None
     is_known: bool = False
 
     # Temporal
@@ -298,7 +298,8 @@ class CognitiveStream:
             event.face_id = ident.face_id
             event.name = ident.name
             event.relationship = ident.relationship
-            event.identity_confidence = ident.confidence
+            # Only real recognition scores are shown; placeholders are not measurements.
+            event.identity_confidence = ident.confidence if getattr(ident, "confidence_measured", False) else None
             event.is_known = ident.is_known
 
         # Temporal
@@ -352,8 +353,8 @@ class CognitiveStream:
 
         # Clinical Ecosystem Context
         if clinical_context:
-            event.patient_name = clinical_context.get("patient_name", "Eleanor")
-            event.primary_caregiver = clinical_context.get("primary_caregiver", "Sarah Jenkins")
+            event.patient_name = clinical_context.get("patient_name")
+            event.primary_caregiver = clinical_context.get("primary_caregiver")
             event.pending_medications = clinical_context.get("pending_medications", [])
             event.upcoming_appointments = clinical_context.get("upcoming_appointments", [])
             event.consent_granted = clinical_context.get("consent_granted", True)
@@ -374,8 +375,8 @@ class CognitiveStream:
         if runtime_summary:
             event.runtime_mode = runtime_summary.get("mode", "Simulation Mode")
             event.device_statuses = runtime_summary.get("device_statuses", {})
-            event.cpu_usage_pct = runtime_summary.get("cpu_usage_pct", 14.2)
-            event.ram_usage_pct = runtime_summary.get("ram_usage_pct", 36.8)
+            event.cpu_usage_pct = runtime_summary.get("cpu_usage_pct", 0.0)
+            event.ram_usage_pct = runtime_summary.get("ram_usage_pct", 0.0)
             event.connected_devices_count = runtime_summary.get("connected_devices", 5)
 
         # Operations & Observability Context

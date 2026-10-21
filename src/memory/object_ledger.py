@@ -72,6 +72,14 @@ class MemoraObjectTracker:
         self.model = None
 
         if not self.mock_mode:
+            import os
+            from src.network_policy import model_download_allowed
+            # Ultralytics downloads missing weights from the internet; only a local file is
+            # used unless downloads are explicitly allowed. (YOLO weights are AGPL-3.0.)
+            if not os.path.exists(settings.YOLO_MODEL_NAME) and not model_download_allowed():
+                print("[Object Ledger] YOLO weights not present locally and downloads are disabled; using mock mode.")
+                self.mock_mode = True
+        if not self.mock_mode:
             try:
                 # Load the pre-trained YOLOv8-nano model (lightweight for edge/local usage)
                 self.model = YOLO(settings.YOLO_MODEL_NAME)

@@ -25,6 +25,10 @@ class ContextFusionEngine:
         self.timeout_sec = timeout_sec
         # Allow enough workers for all active providers
         self.executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="ContextFusion")
+
+    def close(self) -> None:
+        """Release the worker threads (each pipeline owns one pool)."""
+        self.executor.shutdown(wait=True, cancel_futures=True)
         
     def fuse_context(self, event: PresenceEvent) -> CognitiveContext:
         """

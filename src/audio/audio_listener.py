@@ -1,14 +1,30 @@
-import speech_recognition as sr
+import os
 import sys
+
+try:  # optional: only needed for real microphone capture
+    import speech_recognition as sr
+    HAS_SPEECH_RECOGNITION = True
+except ImportError:
+    sr = None
+    HAS_SPEECH_RECOGNITION = False
 import struct
 from src.utils.event_logger import log_event
 from config import settings
 
+def cloud_asr_allowed() -> bool:
+    """
+    Real-microphone transcription here uses Google's online speech service, which
+    sends the recorded audio to Google. It is off unless explicitly enabled.
+    """
+    from src.network_policy import cloud_asr_allowed as _allowed
+    return _allowed()
+
+
 class MemoraAudioListener:
     def __init__(self, duration_sec=5, mock_mode=False, device_index=None):
         self.duration_sec = duration_sec
-        self.mock_mode = mock_mode
-        self.recognizer = sr.Recognizer()
+        self.mock_mode = mock_mode or not HAS_SPEECH_RECOGNITION
+        self.recognizer = sr.Recognizer() if HAS_SPEECH_RECOGNITION else None
         self.device_index = device_index
         
         # Test if microphone is accessible
@@ -61,15 +77,24 @@ class MemoraAudioListener:
         if self.mock_mode:
             log_event("audio_start", "Audio listening started (typing simulation)...")
             try:
+                if not sys.stdin or not sys.stdin.isatty():
+                    return None
                 text = input("> ")
                 if not text.strip():
                     return None
-                log_event("transcript", f"Transcript received: \"{text}\"")
+                log_event("transcript", f'Transcript received: "{text}"')
                 return text
-            except (KeyboardInterrupt, EOFError):
+            except (KeyboardInterrupt, EOFError, OSError, ValueError):
                 return None
 
-        # Real microphone capture
+        # Real microphone capture would send the audio to Google's online service.
+        # Never record unless that has been explicitly allowed.
+        if not cloud_asr_allowed():
+            log_event("audio_blocked", "Online speech recognition is disabled (MEMORA_ALLOW_CLOUD_ASR is not set); "
+                                       "not recording. Falling back to typing.")
+            self.mock_mode = True
+            return self.listen_and_transcribe()
+
         try:
             with sr.Microphone(device_index=self.device_index) as source:
                 self.recognizer.energy_threshold = 150

@@ -63,6 +63,10 @@ class GoalManager:
                 goal.completed_at_iso = datetime.now().isoformat()
             return goal
 
+    def mark_completed(self, goal_id: str) -> Optional[Goal]:
+        """Explicitly transition goal to COMPLETED status."""
+        return self.transition_status(goal_id, GoalStatus.COMPLETED)
+
     def get_active_goals(self) -> List[Goal]:
         """
         Return non-archived goals sorted by priority descending.

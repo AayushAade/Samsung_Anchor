@@ -57,7 +57,8 @@ class VoiceActivityDetector:
 
         num_samples = len(raw_audio) // 2
         try:
-            samples = struct.unpack(f"<{num_samples}h", raw_audio)
+            # A trailing odd byte (truncated chunk) is ignored rather than discarding the chunk.
+            samples = struct.unpack(f"<{num_samples}h", raw_audio[:num_samples * 2])
         except Exception:
             samples = tuple()
 

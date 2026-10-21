@@ -165,18 +165,12 @@ class PersonalisationProfile:
     patient_id: str = "P1"
     preferred_reminder_style: str = "Gentle Cue"  # Gentle Cue, Direct Instruction, Audible Chime
     preferred_verbosity: str = "CONCISE"          # CONCISE, DETAILED, MINIMAL
-    frequently_contacted: List[str] = field(default_factory=lambda: ["Sarah (Daughter)", "Dr. Aris"])
-    preferred_object_locations: Dict[str, str] = field(default_factory=lambda: {
-        "reading glasses": "bedside table",
-        "keys": "entryway hook",
-        "wallet": "dresser drawer",
-    })
+    # Learned or caregiver-entered only; empty until there is real data
+    # (defaults used to name fictional contacts and object locations).
+    frequently_contacted: List[str] = field(default_factory=list)
+    preferred_object_locations: Dict[str, str] = field(default_factory=dict)
     effective_care_strategies: List[str] = field(default_factory=lambda: ["Validation Therapy", "Gentle Orientation"])
-    typical_schedule: Dict[str, str] = field(default_factory=lambda: {
-        "Morning": "Breakfast & Morning Walk",
-        "Afternoon": "Reading & Rest",
-        "Evening": "Family Visit & Quiet Wind-down",
-    })
+    typical_schedule: Dict[str, str] = field(default_factory=dict)
     caregiver_overrides: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:

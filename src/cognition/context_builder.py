@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List, Optional
 from src.cognition.memory_models import RelevantMemory
 from src.interaction.events import PresenceEvent
 
@@ -20,10 +20,14 @@ class ContextBuilder:
         assistance: Optional[Any] = None,
         conversation: Optional[Any] = None,
         clinical: Optional[Any] = None,
-        perception: Optional[Any] = None
+        perception: Optional[Any] = None,
+        goals: Optional[Any] = None,
+        working_memory: Optional[Any] = None,
+        patient_profile: Optional[Any] = None,
+        attention_priorities: Optional[Any] = None,
     ) -> str:
         """
-        Builds the context string matching the rigorous spec.
+        Builds the context string matching the rigorous spec, assembling ONE structured prompt object.
         """
         
         # 1. Current Situation
@@ -36,7 +40,7 @@ class ContextBuilder:
         else:
             for mem in memories:
                 line = f"- {mem.summary}"
-                if mem.commitments:
+                if getattr(mem, "commitments", None):
                     line += f" (Commitments: {', '.join(mem.commitments)})"
                 memory_lines.append(line)
                 
@@ -44,12 +48,41 @@ class ContextBuilder:
         
         # 3. User Profile
         relationship = event.relationship or "Unknown"
-        profile = f"- {event.name} is {relationship}."
-        
-        # 4. Current Environment
+        profile_str = f"- {event.name} is {relationship}."
+        if patient_profile:
+            if isinstance(patient_profile, dict):
+                p_items = [f"{k}: {v}" for k, v in patient_profile.items()]
+                profile_str += "\n- Profile: " + ", ".join(p_items)
+            else:
+                profile_str += f"\n- Profile: {str(patient_profile)}"
+
+        # 4. Current Goals
+        goals_section = ""
+        if goals:
+            g_lines = [f"- {g.name} [{getattr(g, 'state', 'ACTIVE')}]" if hasattr(g, 'name') else f"- {str(g)}" for g in (goals if isinstance(goals, list) else [goals])]
+            goals_section = "\nCurrent Patient Goals:\n" + "\n".join(g_lines) + "\n"
+
+        # 5. Working Memory Slots
+        wm_section = ""
+        if working_memory:
+            if hasattr(working_memory, "snapshot"):
+                snap = working_memory.snapshot().get("slots", {})
+                wm_lines = [f"- {k}: {v.get('value')}" for k, v in snap.items()]
+            elif isinstance(working_memory, dict):
+                wm_lines = [f"- {k}: {v}" for k, v in working_memory.items()]
+            else:
+                wm_lines = [f"- {str(working_memory)}"]
+            wm_section = "\nWorking Memory Active Slots:\n" + "\n".join(wm_lines) + "\n"
+
+        # 6. Attention Priorities
+        attention_section = ""
+        if attention_priorities:
+            attention_section = f"\nExecutive Attention Focus:\n- Priorities: {str(attention_priorities)}\n"
+
+        # 7. Current Environment
         environment = f"- {current_location}"
         
-        # 5. Orientation Anchor
+        # 8. Orientation Anchor
         orientation_section = ""
         if orientation:
             stage = getattr(orientation, "routine_stage", "Daytime Routine")
@@ -62,7 +95,7 @@ class ContextBuilder:
                 orientation_section += f"\n- Next Activity: {upcoming}"
             orientation_section += "\n"
 
-        # 6. Relationship Context
+        # 9. Relationship Context
         relationship_section = ""
         if social and getattr(social, "active_profile", None):
             prof = social.active_profile
@@ -74,7 +107,7 @@ class ContextBuilder:
                 relationship_section += f"\n- Milestones: {', '.join(dates)}"
             relationship_section += "\n"
 
-        # 7. Assistance Constraint
+        # 10. Assistance Constraint
         assistance_constraint = ""
         if assistance:
             lvl_code = getattr(assistance, "level_code", 3)
@@ -91,7 +124,7 @@ class ContextBuilder:
             elif lvl_code == 5:
                 assistance_constraint += "\n- Provide a direct, gentle safety instruction."
 
-        # 8. Conversation Strategy Constraint
+        # 11. Conversation Strategy Constraint
         conversation_section = ""
         if conversation:
             state_val = getattr(getattr(conversation, "state", None), "value", "Responding")
@@ -100,7 +133,7 @@ class ContextBuilder:
             conversation_section = f"\nConversation Context:\n- State: {state_val}\n- Active Speaker: {speaker_val}\n- Selected Response Strategy: {strat_val}\n"
             assistance_constraint += f"\n- MANDATORY RESPONSE STRATEGY: {strat_val}. Strictly generate text matching this strategy."
 
-        # 9. Clinical & Medication Context
+        # 12. Clinical & Medication Context
         clinical_section = ""
         if clinical:
             pref = getattr(clinical, "communication_preferences", "")
@@ -114,7 +147,7 @@ class ContextBuilder:
                 clinical_section += f"- EMERGENCY OVERRIDE: {getattr(emergency, 'trigger_reason', 'Active Emergency')}\n"
                 assistance_constraint += f"\n- CLINICAL SAFETY OVERRIDE: Deliver immediate safety guidance calmly and directly."
 
-        # 10. Edge Perception Context
+        # Perception Context
         perception_section = ""
         if perception:
             room = getattr(getattr(perception, "current_room", None), "value", "Living Room")
@@ -135,11 +168,11 @@ Relevant Memories:
 {memories_str}
 
 User Profile:
-{profile}
+{profile_str}
 
 Current Environment:
 {environment}
-{orientation_section}{relationship_section}{conversation_section}{clinical_section}{perception_section}
+{goals_section}{wm_section}{attention_section}{orientation_section}{relationship_section}{conversation_section}{clinical_section}{perception_section}
 Task:
 Generate one short, natural memory cue to help the user remember the context of this person and preserve their warm relationship.
 CRITICAL HUMAN-CENTERED GUIDELINES (DIGNITY FILTER):

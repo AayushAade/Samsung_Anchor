@@ -10,7 +10,7 @@ Executes deterministic archiving of expired memories according to retention poli
 from __future__ import annotations
 
 import time
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from src.memory.memory_models import MemoryRecord
 from src.memory.memory_repository import MemoryRepository

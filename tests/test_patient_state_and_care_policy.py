@@ -40,20 +40,26 @@ def test_care_policy_framework_dementia_principles():
     anxious_state = evaluator.evaluate(user_speech="I am scared")
     decision1 = framework.evaluate_policy(anxious_state, patient_name="Eleanor", location="Living Room")
     assert decision1.principle == CarePrinciple.VALIDATION_THERAPY
-    assert "safe here at home" in decision1.message_override
+    # Validate feelings without asserting safety/location MEMORA cannot verify
+    assert "here with you" in decision1.message_override
+    assert "safe here at home" not in decision1.message_override
 
     # Repetitive Query Redirection
     evaluator.evaluate(user_speech="When is lunch?")
     rep_state = evaluator.evaluate(user_speech="When is lunch?")
     decision2 = framework.evaluate_policy(rep_state, patient_name="Eleanor")
     assert decision2.principle == CarePrinciple.REPETITIVE_REDIRECTION
-    assert "everything is taken care of" in decision2.message_override
+    assert "fine to ask again" in decision2.message_override
+    assert "taken care of" not in decision2.message_override
 
     # Emergency Escalation
     emerg_state = evaluator.evaluate(emergency_active=True)
     decision3 = framework.evaluate_policy(emerg_state)
     assert decision3.principle == CarePrinciple.EMERGENCY_ESCALATION
     assert decision3.action_type == "ESCALATE"
+    assert decision3.caregiver_notified is False
+    assert "notified" not in decision3.message_override.lower()
+    assert "emergency number" in decision3.message_override
 
 
 def test_cognitive_pipeline_integration_with_care_policy():

@@ -11,6 +11,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Any, Dict
 
+from src.clinical.urgent_safety import detect_urgent_concern
+
 
 class PatientStateMode(Enum):
     CALM = "Calm"
@@ -61,17 +63,21 @@ class PatientStateEvaluator:
                 last_updated=now_iso,
             )
 
-        # 2. Missed Medication Priority
-        if missed_medications and len(missed_medications) > 0:
-            med_names = ", ".join(missed_medications)
+        # 2. Urgent concern in what the user just said (fall, chest pain, breathing...).
+        #    Evaluated before anything else so it can never be masked by a
+        #    reminder, a repetition rule, or a memory recall.
+        concern = detect_urgent_concern(user_speech)
+        if concern is not None:
             return PatientState(
-                mode=PatientStateMode.AWAITING_REMINDER,
-                confidence=0.95,
-                primary_need=f"Gentle reminder for missed medication: {med_names}",
+                mode=PatientStateMode.EMERGENCY,
+                confidence=0.9,
+                primary_need=f"Direct the person to human help: {concern.concern_type.value}",
                 last_updated=now_iso,
+                details={"urgent_concern": concern.concern_type.value, "matched_text": concern.matched_text},
             )
 
-        # 3. Speech Transcript Analysis
+        # 3. Speech Transcript Analysis (what the person is saying now outranks
+        #    background schedule state such as medication reminders)
         if user_speech:
             speech_clean = user_speech.lower().strip()
             self._query_history.append(speech_clean)
@@ -107,7 +113,9 @@ class PatientStateEvaluator:
                 )
 
             # Anxiety keywords
-            if any(w in speech_clean for w in ["scared", "worried", "anxious", "help me", "frightened"]):
+            if any(w in speech_clean for w in ["scared", "worried", "anxious", "help me", "frightened",
+                                                "forgetting", "can't remember", "cannot remember",
+                                                "losing my mind", "what's wrong with me", "upset"]):
                 return PatientState(
                     mode=PatientStateMode.ANXIOUS,
                     confidence=0.92,
@@ -115,7 +123,19 @@ class PatientStateEvaluator:
                     last_updated=now_iso,
                 )
 
-        # 4. Cognitive Context Evaluation
+        # 4. Scheduled medication reminder (a delivered reminder is never treated
+        #    as evidence that the medication was taken)
+        if missed_medications and len(missed_medications) > 0:
+            med_names = ", ".join(missed_medications)
+            return PatientState(
+                mode=PatientStateMode.AWAITING_REMINDER,
+                confidence=0.95,
+                primary_need=f"Gentle reminder for scheduled medication: {med_names}",
+                last_updated=now_iso,
+                details={"medications": list(missed_medications)},
+            )
+
+        # 5. Cognitive Context Evaluation
         if cognitive_context and getattr(cognitive_context, "temporal", None):
             time_str = str(getattr(cognitive_context.temporal, "time_of_day", "Day"))
             return PatientState(

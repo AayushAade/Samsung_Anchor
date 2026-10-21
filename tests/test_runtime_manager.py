@@ -9,7 +9,8 @@ def test_runtime_manager_lifecycle():
 
     assert summary["mode"] == RuntimeMode.SIMULATION.value
     assert summary["connected_devices"] >= 5
-    assert summary["cpu_usage_pct"] > 0
+    # psutil's first cpu_percent sample may legitimately be 0.0; it must be a real percentage.
+    assert 0.0 <= summary["cpu_usage_pct"] <= 100.0
     assert summary["ram_usage_pct"] > 0
 
     mgr.shutdown_hardware()

@@ -5,12 +5,13 @@ import time
 import numpy as np
 from typing import Optional, Any
 
-try:
-    from faster_whisper import WhisperModel
-    HAS_FASTER_WHISPER = True
-except ImportError:
-    WhisperModel = None
-    HAS_FASTER_WHISPER = False
+import importlib.util
+
+# faster-whisper is imported only when a transcription is actually requested. Importing it
+# pulls in PyAV, whose bundled FFmpeg libavdevice duplicates OpenCV's on macOS (Objective-C
+# duplicate-class warning; docs/HARDWARE_TEST_CHECKLIST.md). Text chat, simulation and
+# diagnostics therefore never load PyAV.
+HAS_FASTER_WHISPER = importlib.util.find_spec("faster_whisper") is not None
 
 
 @dataclass
@@ -35,15 +36,38 @@ class SpeechRecognitionEngine:
         self.device = device
         self.compute_type = compute_type
         self.model: Optional[Any] = None
-        self._initialize_engine()
+        self.load_error: Optional[str] = None
+        self._load_attempted = False
+        # The model is loaded lazily, on the first real transcription request, so that
+        # constructing a pipeline (chat, simulation) never touches the model cache or network.
+
+    def availability(self) -> tuple[bool, str]:
+        """(usable, plain-language reason), without loading the model or touching the network."""
+        if not HAS_FASTER_WHISPER:
+            return False, "speech-to-text is not installed (faster-whisper, requirements-hardware.txt)"
+        if self.load_error:
+            return False, self.load_error
+        if self.model is not None:
+            return True, f"local speech model '{self.model_size}' loaded"
+        from src.network_policy import model_download_allowed
+        where = "may be downloaded on first use" if model_download_allowed() else "must already be on this computer"
+        return True, f"local speech model '{self.model_size}' loads on first use ({where})"
 
     def _initialize_engine(self) -> None:
-        if HAS_FASTER_WHISPER:
-            try:
-                # Load offline Whisper model on CPU using int8 quantization for high-speed edge execution
-                self.model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
-            except Exception:
-                self.model = None
+        self._load_attempted = True
+        if not HAS_FASTER_WHISPER:
+            self.load_error = "faster-whisper is not installed (requirements-hardware.txt)"
+            return
+        from src.network_policy import model_download_allowed
+        try:
+            from faster_whisper import WhisperModel
+            # Offline by default: only a model already on disk is used unless downloads are allowed.
+            self.model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type,
+                                      local_files_only=not model_download_allowed())
+        except Exception as e:
+            self.model = None
+            self.load_error = (f"speech model '{self.model_size}' is not available locally "
+                               f"(set MEMORA_ALLOW_MODEL_DOWNLOAD=1 to download it): {e}")
 
     def _clean_transcript(self, raw_text: str) -> str:
         if not raw_text:
@@ -75,11 +99,18 @@ class SpeechRecognitionEngine:
             )
 
         # Convert 16-bit PCM bytes to float32 NumPy array normalized to [-1.0, 1.0]
-        audio_np = np.frombuffer(raw_pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        # 16-bit samples: a trailing odd byte (truncated chunk) cannot form a sample.
+        usable = len(raw_pcm_bytes) - (len(raw_pcm_bytes) % 2)
+        audio_np = np.frombuffer(raw_pcm_bytes[:usable], dtype=np.int16).astype(np.float32) / 32768.0
 
         transcript_text = ""
         avg_confidence = 0.95
         detected_language = "en"
+
+        if self.model is None and not self._load_attempted:
+            self._initialize_engine()
+        if self.model is None:
+            avg_confidence = 0.0  # nothing was transcribed; do not report a confidence
 
         if self.model is not None:
             try:

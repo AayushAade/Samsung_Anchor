@@ -18,11 +18,14 @@ class EntityRegistry:
     Thread-safe registry for world entities.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False) -> None:
         self._entities: Dict[str, Entity] = {}
         self._name_index: Dict[str, str] = {}
         self._lock = threading.Lock()
-        self._seed_baseline_entities()
+        # Fictional sample data: opt-in only (demos/tests), never in real use.
+        self.seed_demo_data = seed_demo_data
+        if seed_demo_data:
+            self._seed_baseline_entities()
 
     def register_entity(self, entity: Entity) -> Entity:
         with self._lock:

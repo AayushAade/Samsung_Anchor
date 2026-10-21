@@ -15,6 +15,7 @@ from src.cognition.goals.models import (
     EvidenceSignal,
     GoalCategory,
     GoalHypothesis,
+    GoalState,
 )
 
 
@@ -41,6 +42,43 @@ class HeuristicGoalReasoner:
     def infer(self, context: CognitiveContext) -> List[GoalHypothesis]:
         now = datetime.now()
         hypotheses: List[GoalHypothesis] = []
+
+        # ------------------------------------------------------------------
+        # 0. Conversational User Signals -> Explicit Goal Hypotheses
+        # ------------------------------------------------------------------
+        user_text = ""
+        if hasattr(context, "working_memory") and context.working_memory:
+            user_text = context.working_memory.get("previous_user_message", "") or ""
+        elif getattr(context, "conversation", None):
+            user_text = getattr(context.conversation, "transcript", "") or ""
+
+        if user_text:
+            text_lower = user_text.lower()
+            goal_patterns = [
+                (["medicine", "medication", "pill"], "Take Medicine", GoalCategory.MEDICAL),
+                (["glasses", "spectacles"], "Locate Glasses", GoalCategory.SEARCH),
+                (["call", "daughter", "son", "phone"], "Call Family", GoalCategory.SOCIAL),
+                (["water", "drink", "thirsty"], "Get Water", GoalCategory.DAILY_ROUTINE),
+            ]
+            for keywords, goal_name, category in goal_patterns:
+                if any(kw in text_lower for kw in keywords):
+                    evidence = [
+                        EvidenceSignal(
+                            source="ConversationalProvider",
+                            signal=f"user_utterance='{user_text}'",
+                            weight=0.85,
+                            timestamp=now,
+                        )
+                    ]
+                    h = GoalHypothesis(
+                        name=goal_name,
+                        category=category,
+                        confidence=0.85,
+                        state=GoalState.DETECTED,
+                        supporting_evidence=evidence,
+                    )
+                    h.recalculate_confidence()
+                    hypotheses.append(h)
 
         # ------------------------------------------------------------------
         # 1. Temporal + Memory signals → Medical goals

@@ -1,0 +1,3 @@
+# Optional: Gemini (used only for name extraction during identity learning).
+-r requirements.txt
+google-genai==2.10.0

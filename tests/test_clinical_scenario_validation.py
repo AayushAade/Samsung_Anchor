@@ -48,7 +48,7 @@ def test_run_all_10_clinical_scenarios(scenario_specs):
 
     results = validator.run_all_scenarios(scenario_specs)
 
-    assert len(results) == 10
+    assert len(results) == len(scenario_specs)
     passed_count = sum(1 for r in results if r.passed)
     assert passed_count >= 9  # High reliability across all 10 clinical scenarios
 

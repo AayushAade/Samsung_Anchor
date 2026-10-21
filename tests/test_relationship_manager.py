@@ -3,7 +3,7 @@ from src.cognition.relationships.models import RelationshipProfile
 
 
 def test_relationship_manager_get_seeded_profile():
-    manager = RelationshipManager()
+    manager = RelationshipManager(seed_demo_data=True)
     profile = manager.get_profile("Face_1", name="Sarah", relationship="Daughter")
 
     assert profile is not None
@@ -14,7 +14,7 @@ def test_relationship_manager_get_seeded_profile():
 
 
 def test_relationship_manager_dynamic_fallback():
-    manager = RelationshipManager()
+    manager = RelationshipManager(seed_demo_data=True)
     profile = manager.get_profile("Face_99", name="Bob", relationship="Neighbor")
 
     assert profile is not None
@@ -24,7 +24,7 @@ def test_relationship_manager_dynamic_fallback():
 
 
 def test_relationship_manager_register_profile():
-    manager = RelationshipManager()
+    manager = RelationshipManager(seed_demo_data=True)
     new_profile = RelationshipProfile(
         person_id="Face_42",
         name="Grandson Tim",

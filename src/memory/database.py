@@ -25,7 +25,7 @@ from src.memory.repositories.episode_repository import DatabaseEpisodeRepository
 from src.memory.repositories.identity_repository import IdentityRepository
 from src.memory.repositories.memory_repository import DatabaseMemoryRepository
 from src.memory.repositories.object_repository import ObjectRepository
-from src.memory.vector_store import FaissVectorStore
+from src.memory.vector_store import FaissVectorStore, VectorStoreError
 
 logger = logging.getLogger(__name__)
 
@@ -71,19 +71,83 @@ def resolve_db_url(db_path: str | None = None) -> tuple[str, str | None]:
     if "://" in raw_path:
         prefix = "sqlite:///"
         if raw_path.startswith(prefix):
-            fs_target = raw_path[len(prefix):]
-            if not fs_target.endswith(DB_MIGRATION_SUFFIX):
-                fs_target = fs_target.replace(".sqlite", DB_MIGRATION_SUFFIX) if ".sqlite" in fs_target else f"{fs_target}{DB_MIGRATION_SUFFIX}"
+            fs_target = _v2_filesystem_target(raw_path[len(prefix):])
             return f"{prefix}{fs_target}", fs_target
         return raw_path, None
 
-    # Treat as filesystem path
-    if not raw_path.endswith(DB_MIGRATION_SUFFIX):
-        fs_target = raw_path.replace(".sqlite", DB_MIGRATION_SUFFIX) if ".sqlite" in raw_path else f"{raw_path}{DB_MIGRATION_SUFFIX}"
-    else:
-        fs_target = raw_path
-
+    fs_target = _v2_filesystem_target(raw_path)
     return f"sqlite:///{fs_target}", fs_target
+
+
+def _v2_filesystem_target(path: str) -> str:
+    """
+    Map a database path onto the schema-v2 file name.
+
+    "memora_db.sqlite" historically maps to "memora_db_v2.sqlite". That mapping
+    is applied only when the requested file does not already exist on its own;
+    an existing database file passed explicitly is opened as-is rather than
+    being silently replaced by a new, empty "_v2" sibling.
+    """
+    if path.endswith(DB_MIGRATION_SUFFIX):
+        return path
+    v2 = path.replace(".sqlite", DB_MIGRATION_SUFFIX) if ".sqlite" in path else f"{path}{DB_MIGRATION_SUFFIX}"
+    if os.path.exists(path) and not os.path.exists(v2):
+        return path
+    return v2
+
+
+class DatabaseUnavailableError(RuntimeError):
+    """The configured memory database could not be opened; nothing was changed."""
+
+
+def open_user_database(db_path: str | None = None) -> "MemoraDatabase":
+    """
+    Open the configured database, turning low-level failures (corrupt file,
+    unwritable location, locked file) into one actionable error.
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+
+    target = db_path or settings.DB_PATH
+    try:
+        return MemoraDatabase(target)
+    except (SQLAlchemyError, OSError, RuntimeError) as e:
+        resolved = resolve_db_url(target)[1] or target
+        reason = str(getattr(e, "orig", None) or e).split("\n")[0]
+        raise DatabaseUnavailableError(
+            f"MEMORA could not open its memory file at {resolved} ({reason}). Nothing was changed.\n"
+            "What you can do:\n"
+            "  - If the file is damaged, restore a backup: python app.py --restore <backup folder>\n"
+            "  - If the folder is not writable, fix its permissions or set MEMORA_DB_PATH to another location\n"
+            "  - To start fresh, move the file somewhere safe first (do not delete it until you are sure)"
+        ) from e
+
+
+def restrict_permissions(path: str) -> None:
+    """Personal data files are readable and writable by their owner only (0600)."""
+    try:
+        if os.path.exists(path):
+            os.chmod(path, 0o600)
+    except OSError as e:  # e.g. a file owned by another user on a shared volume
+        logger.warning("Could not restrict permissions on %s: %s", path, e)
+
+
+def vector_store_paths(db_path: str) -> tuple[str, str]:
+    """Face-embedding files that belong to the database file at db_path."""
+    base = os.path.splitext(os.path.abspath(db_path))[0]
+    return f"{base}.faces.index", f"{base}.faces.json"
+
+
+def _legacy_vector_store_paths(db_path: str) -> tuple[str, str] | None:
+    """
+    Older releases stored embeddings as face_embeddings.index / face_mapping.json
+    next to the default database. They are adopted (read-only) only when the
+    default database itself is opened.
+    """
+    default_fs = resolve_db_url(settings.DB_PATH)[1]
+    if default_fs is None or os.path.abspath(db_path) != os.path.abspath(default_fs):
+        return None
+    directory = os.path.dirname(os.path.abspath(db_path))
+    return os.path.join(directory, "face_embeddings.index"), os.path.join(directory, "face_mapping.json")
 
 
 def _build_engine(url: str) -> Engine:
@@ -141,12 +205,23 @@ class MemoraDatabase:
 
         self.engine = _build_engine(self.db_url)
         Base.metadata.create_all(self.engine)
+        from src.memory.migrations import migrate
+        self.migrations_applied = migrate(self.engine)
+        if self.db_path is not None:
+            restrict_permissions(self.db_path)
 
         self.SessionFactory = sessionmaker(bind=self.engine)
         self.lock = threading.Lock()
 
         # Initialize Sub-Repositories
-        self.vector_store = FaissVectorStore()
+        if self.db_path is not None:
+            index_path, mapping_path = vector_store_paths(self.db_path)
+            self.vector_store = FaissVectorStore(
+                index_path, mapping_path, legacy_paths=_legacy_vector_store_paths(self.db_path)
+            )
+        else:
+            # In-memory databases get an in-memory vector store: no filesystem access.
+            self.vector_store = FaissVectorStore()
         self.identity_repo = IdentityRepository(self.SessionFactory)
         self.object_repo = ObjectRepository(self.SessionFactory)
         self.episode_repo = DatabaseEpisodeRepository(self.SessionFactory)
@@ -154,6 +229,10 @@ class MemoraDatabase:
 
         self._init_system_state()
         logger.info("MemoraDatabase initialized successfully with URL: %s", self.db_url)
+
+    @property
+    def session_factory(self):
+        return self.SessionFactory
 
     def __enter__(self) -> "MemoraDatabase":
         return self
@@ -260,6 +339,26 @@ class MemoraDatabase:
 
         return None, None, None
 
+    def match_face(self, query_embedding: Any, tolerance: float, ambiguity_margin: float = 0.0) -> dict[str, Any]:
+        """
+        Classify a face embedding against stored identities.
+
+        Returns {"status": "match" | "ambiguous" | "none", "identity_id", "info", "distance"}.
+        "ambiguous" means a second, different identity is also within tolerance and within
+        ambiguity_margin of the best one: the face must not be named or enrolled.
+        """
+        with self.lock:
+            nearest = [n for n in self.vector_store.nearest_identities(query_embedding, k=2) if n[1] < tolerance]
+            if not nearest:
+                return {"status": "none", "identity_id": None, "info": None, "distance": None}
+            best_id, best_dist = nearest[0]
+            if len(nearest) > 1 and nearest[1][1] - best_dist <= ambiguity_margin:
+                return {"status": "ambiguous", "identity_id": None, "info": None, "distance": best_dist}
+            info = self.identity_repo.get_by_id(best_id)
+            if info:
+                info["embeddings"] = self.vector_store.get_embeddings_for_identity(best_id)
+            return {"status": "match", "identity_id": best_id, "info": info, "distance": best_dist}
+
     def register_anonymous(self, embedding: Any) -> str:
         """
         Register a new anonymous identity with embedding vector.
@@ -280,7 +379,12 @@ class MemoraDatabase:
 
             self._set_system_state(KEY_NEXT_ANON_INDEX, str(anon_index + 1))
             self.identity_repo.register_anonymous(anon_id)
-            self.vector_store.add_embedding(anon_id, embedding)
+            try:
+                self.vector_store.add_embedding(anon_id, embedding)
+            except VectorStoreError:
+                # Never leave an identity row without the embedding that defines it.
+                self._delete_identity_rows(anon_id)
+                raise
             logger.info("Registered new anonymous identity: %s", anon_id)
 
             return anon_id
@@ -331,6 +435,46 @@ class MemoraDatabase:
                 logger.info("Bound name '%s' (relationship: %s) to identity %s", name, relationship, identity_id)
             return True
 
+    def _delete_identity_rows(self, identity_id: str) -> bool:
+        with self._session_scope() as session:
+            session.query(IdentityEvidence).filter_by(identity_id=identity_id).delete()
+            deleted = session.query(Identity).filter_by(identity_id=identity_id).delete()
+        return bool(deleted)
+
+    def delete_identity(self, identity_id: str) -> dict[str, Any]:
+        """
+        Permanently delete an identity, its name evidence, and its face embeddings.
+
+        Returns a report of what was removed so callers can confirm deletion.
+        """
+        with self.lock:
+            embeddings_removed = self.vector_store.remove_identity(identity_id)
+            row_removed = self._delete_identity_rows(identity_id)
+        return {"identity_id": identity_id, "record_deleted": row_removed,
+                "embeddings_deleted": embeddings_removed}
+
+    def check_integrity(self) -> dict[str, Any]:
+        """
+        Cross-check SQLite identities against the face-embedding store.
+
+        Returns a dict with ``ok`` plus the specific inconsistencies found.
+        """
+        identity_ids = {i["identity_id"] for i in self.identity_repo.get_all()}
+        embedded_ids = self.vector_store.identity_ids()
+        report = {
+            "identities": len(identity_ids),
+            "embeddings": len(self.vector_store),
+            "vector_store_persistent": self.vector_store.persistent,
+            "vector_store_path": self.vector_store.mapping_path,
+            "identities_without_embeddings": sorted(identity_ids - embedded_ids),
+            "orphan_embedding_identities": sorted(embedded_ids - identity_ids),
+            "vector_store_load_error": self.vector_store.load_error,
+            "vector_store_save_error": self.vector_store.last_save_error,
+        }
+        report["ok"] = not (report["identities_without_embeddings"] or report["orphan_embedding_identities"]
+                            or report["vector_store_load_error"] or report["vector_store_save_error"])
+        return report
+
     def get_identity(self, identity_id: str) -> dict[str, Any] | None:
         """
         Fetch identity dictionary payload by identity ID.
@@ -358,12 +502,15 @@ class MemoraDatabase:
         y: float,
         room: str,
         bounding_box: Any = None,
+        source: str | None = None,
+        when: Any = None,
     ) -> Any:
         """
-        Log an observed physical object location to spatial memory.
+        Log an observed physical object location to spatial memory, with where
+        the observation came from (e.g. REAL_CAMERA, SIMULATED_CAMERA).
         """
         with self.lock:
-            return self.object_repo.log_object(object_name, x, y, room, bounding_box)
+            return self.object_repo.log_object(object_name, x, y, room, bounding_box, source=source, when=when)
 
     def get_last_known_location(self, object_name: str) -> dict[str, Any] | None:
         """
@@ -412,7 +559,16 @@ class MemoraDatabase:
     ) -> Any:
         """
         Record identity speech evidence candidate.
+
+        The evidence holds what was said and a name tied to a face, so it is stored only
+        when both storage and face-recognition consent are recorded in this database
+        (persistence-layer backstop for every caller; docs/PRIVACY_AND_CONSENT.md).
         """
+        missing = [f for f in ("CONVERSATION_STORAGE", "FACE_RECOGNITION")
+                   if not (self._get_system_state(f"consent:{f}") or "").startswith("granted")]
+        if missing:
+            from src.clinical.consent_manager import ConsentRequiredError
+            raise ConsentRequiredError(f"Identity evidence not stored: consent missing for {', '.join(missing)}")
         with self.lock:
             return self.identity_repo.add_evidence(identity_id, name, relationship, raw_transcript)
 

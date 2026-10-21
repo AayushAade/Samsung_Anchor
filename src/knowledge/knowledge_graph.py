@@ -22,9 +22,10 @@ class KnowledgeGraph:
         self,
         entity_registry: Optional[EntityRegistry] = None,
         relationship_registry: Optional[RelationshipRegistry] = None,
+        seed_demo_data: bool = False,
     ) -> None:
-        self.entities = entity_registry or EntityRegistry()
-        self.relationships = relationship_registry or RelationshipRegistry()
+        self.entities = entity_registry or EntityRegistry(seed_demo_data=seed_demo_data)
+        self.relationships = relationship_registry or RelationshipRegistry(seed_demo_data=seed_demo_data)
 
     def add_entity(self, entity: Entity) -> Entity:
         return self.entities.register_entity(entity)

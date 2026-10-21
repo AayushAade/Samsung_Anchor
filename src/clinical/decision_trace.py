@@ -43,6 +43,25 @@ class ClinicalDecisionTrace:
     cos_reasoning_path: Optional[str] = None
     cos_action_type: Optional[str] = None
 
+    def to_explainable_cognitive_trace(self) -> str:
+        """
+        Renders developer-facing Explainable Cognitive Trace:
+        Intent -> Retrieved Memory -> Retrieved Objects -> Working Memory -> Goals Used -> Context Used -> Reasoning Output -> Conversation Output
+        """
+        wm_keys = list(self.working_memory_snapshot.get("slots", {}).keys()) if self.working_memory_snapshot else []
+        return (
+            f"[COGNITIVE TRACE {self.timestamp}]\n"
+            f"  1. Intent/State      : {self.patient_state} ({self.patient_state_evidence})\n"
+            f"  2. Memory Retrieval  : {self.memory_retrieval_summary}\n"
+            f"  3. Goals Considered  : {', '.join(self.goal_hypotheses_considered[:3]) or 'None'}\n"
+            f"  4. Working Memory    : {len(wm_keys)} active slots ({', '.join(wm_keys[:5])})\n"
+            f"  5. Attention Focus   : {self.attention_focus.get('target', 'None') if self.attention_focus else 'None'}\n"
+            f"  6. Care Policy Used  : {self.selected_care_policy}\n"
+            f"  7. Reasoning Path    : {self.cos_reasoning_path or 'Standard'}\n"
+            f"  8. Output Response   : '{self.final_response}'"
+        )
+
+
 
 
 class ClinicalDecisionTraceLogger:

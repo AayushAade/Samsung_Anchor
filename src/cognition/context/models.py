@@ -23,6 +23,8 @@ class IdentityContext:
     relationship: Optional[str]
     confidence: float
     is_known: bool
+    # False when `confidence` is a placeholder rather than a recognition score.
+    confidence_measured: bool = False
 
 @dataclass
 class MemoryContext:

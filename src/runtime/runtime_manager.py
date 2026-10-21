@@ -20,6 +20,11 @@ class RuntimeManager:
         self.config = config or HardwareConfig()
         self.sensor_bus = SensorBus()
         self.hardware_manager = HardwareManager()
+        try:
+            import psutil
+            psutil.cpu_percent(interval=None)  # prime: later calls report usage since now
+        except Exception:
+            pass
 
         # Instantiate Adapters based on RuntimeMode
         if self.config.mode != RuntimeMode.SIMULATION:
@@ -40,15 +45,23 @@ class RuntimeManager:
     def initialize_hardware(self) -> bool:
         cam_ok = self.camera.initialize()
         if not cam_ok and isinstance(self.camera, OpenCVCameraAdapter):
-            # Graceful fallback to simulation if physical camera unavailable
-            self.camera = SimulatedCameraAdapter(self.config.camera_device)
-            cam_ok = self.camera.initialize()
+            reason = getattr(self.camera, "failure_reason", None) or "OpenCV camera device failed to open."
+            print(f"❌ [Hardware Camera Failure] {reason}")
+            self.fallback_camera(reason=reason)
+            cam_ok = False
 
         mic_ok = self.microphone.initialize()
         if not mic_ok and isinstance(self.microphone, PyAudioMicrophoneAdapter):
-            # Graceful fallback to simulation if physical microphone unavailable
-            self.microphone = SimulatedMicrophoneAdapter(self.config.audio_input_device)
-            mic_ok = self.microphone.initialize()
+            reason = getattr(self.microphone, "failure_reason", None) or "PyAudio microphone stream failed to initialize."
+            print(f"❌ [Hardware Microphone Failure] {reason}")
+            self.fallback_microphone(reason=reason)
+            mic_ok = False
+
+        spk_status = self.speaker.get_status()
+        if spk_status == DeviceStatus.FAULTED and isinstance(self.speaker, PyTTSx3SpeakerAdapter):
+            reason = getattr(self.speaker, "failure_reason", None) or "TTS audio output engine failed to initialize."
+            print(f"❌ [Hardware Speaker Failure] {reason}")
+            self.fallback_speaker(reason=reason)
 
         self.hardware_manager.register_device("CameraAdapter", self.camera.get_status())
         self.hardware_manager.register_device("MicrophoneAdapter", self.microphone.get_status())
@@ -59,14 +72,139 @@ class RuntimeManager:
 
         return cam_ok and mic_ok
 
+    def fallback_camera(self, reason: Optional[str] = None) -> None:
+        """Dynamically downgrade camera hardware to SimulatedCameraAdapter with explicit logging."""
+        r_msg = f" ({reason})" if reason else ""
+        print(f"⚠️ [Simulation Policy] Switching Camera to SIMULATION MODE{r_msg}.")
+        sim_cam = SimulatedCameraAdapter(self.config.camera_device)
+        sim_cam.failure_reason = reason
+        self.camera = sim_cam
+        self.camera.initialize()
+        self.hardware_manager.register_device("CameraAdapter", self.camera.get_status())
+
+    def fallback_microphone(self, reason: Optional[str] = None) -> None:
+        """Dynamically downgrade microphone hardware to SimulatedMicrophoneAdapter with explicit logging."""
+        r_msg = f" ({reason})" if reason else ""
+        print(f"⚠️ [Simulation Policy] Switching Microphone to SIMULATION MODE{r_msg}.")
+        sim_mic = SimulatedMicrophoneAdapter(self.config.audio_input_device)
+        sim_mic.failure_reason = reason
+        self.microphone = sim_mic
+        self.microphone.initialize()
+        self.hardware_manager.register_device("MicrophoneAdapter", self.microphone.get_status())
+
+    def fallback_speaker(self, reason: Optional[str] = None) -> None:
+        """Dynamically downgrade speaker hardware to SimulatedSpeakerAdapter with explicit logging."""
+        r_msg = f" ({reason})" if reason else ""
+        print(f"⚠️ [Simulation Policy] Switching Speaker to SIMULATION MODE{r_msg}.")
+        sim_spk = SimulatedSpeakerAdapter(self.config.audio_output_device)
+        sim_spk.failure_reason = reason
+        self.speaker = sim_spk
+        self.hardware_manager.register_device("SpeakerAdapter", self.speaker.get_status())
+
     def get_health_metrics(self) -> HealthMetrics:
+        cpu, ram, measured = 0.0, 0.0, False
+        try:
+            import psutil
+            # Usage since the previous call (primed in __init__); the very first
+            # sample after start-up can legitimately be 0.0.
+            cpu = psutil.cpu_percent(interval=None)
+            ram = psutil.virtual_memory().percent
+            measured = True
+        except Exception:
+            pass
+
         return HealthMetrics(
-            cpu_usage_pct=14.2,
-            ram_usage_pct=36.8,
-            camera_fps=30.0,
-            audio_latency_ms=11.8,
+            cpu_usage_pct=cpu,
+            ram_usage_pct=ram,
+            camera_fps=float(getattr(self.camera, "actual_fps", 0.0) or 0.0),
+            audio_latency_ms=0.0,  # not measured by any adapter
             connected_devices_count=len(self.hardware_manager.get_all_statuses()),
+            metrics_measured=measured,
         )
+
+    def generate_diagnostic_report(self) -> str:
+        """
+        Generates printable MEMORA HARDWARE DIAGNOSTIC REPORT string.
+        Allows developers to diagnose system status without looking at code.
+        """
+        lines = [
+            "==================================================",
+            "MEMORA HARDWARE DIAGNOSTIC REPORT",
+            "==================================================",
+        ]
+
+        # Camera
+        cam_diag = getattr(self.camera, "get_diagnostics", lambda: {})()
+        from src.runtime.camera_adapter import SimulatedCameraAdapter as _SimCam
+        cam_st = ("SIMULATED" if isinstance(self.camera, _SimCam) else "READY") if self.camera.get_status() == DeviceStatus.HEALTHY else "FAILED"
+        cam_reason = getattr(self.camera, "failure_reason", None) or "None"
+        cam_bk = cam_diag.get("backend", "SIMULATION")
+        cam_res = cam_diag.get("resolution", "1280x720")
+        cam_fps = cam_diag.get("fps", 30.0)
+        lines.append(f"Camera")
+        lines.append(f"  Status     : {cam_st}")
+        lines.append(f"  Reason     : {cam_reason}")
+        lines.append(f"  Backend    : {cam_bk}")
+        lines.append(f"  Resolution : {cam_res} @ {cam_fps} FPS")
+
+        # Microphone
+        mic_diag = getattr(self.microphone, "get_diagnostics", lambda: {})()
+        from src.runtime.microphone_adapter import SimulatedMicrophoneAdapter as _SimMic
+        mic_st = ("SIMULATED" if isinstance(self.microphone, _SimMic) else "READY") if self.microphone.get_status() == DeviceStatus.HEALTHY else "FAILED"
+        mic_reason = getattr(self.microphone, "failure_reason", None) or "None"
+        mic_dev = mic_diag.get("device_name", getattr(self.microphone, "device_name", "Simulated_Mic"))
+        mic_fmt = mic_diag.get("format", "16000Hz, 1ch (int16)")
+        lines.append(f"\nMicrophone")
+        lines.append(f"  Status     : {mic_st}")
+        lines.append(f"  Reason     : {mic_reason}")
+        lines.append(f"  Device     : {mic_dev}")
+        lines.append(f"  Format     : {mic_fmt}")
+
+        # Speaker
+        spk_diag = getattr(self.speaker, "get_diagnostics", lambda: {})()
+        from src.runtime.speaker_adapter import SimulatedSpeakerAdapter as _SimSpk
+        spk_st = ("SIMULATED (console only)" if isinstance(self.speaker, _SimSpk) else "READY") if self.speaker.get_status() == DeviceStatus.HEALTHY else "FAILED"
+        spk_reason = getattr(self.speaker, "failure_reason", None) or "None"
+        spk_eng = spk_diag.get("voice_engine", "Console Fallback")
+        lines.append(f"\nSpeaker")
+        lines.append(f"  Status     : {spk_st}")
+        lines.append(f"  Reason     : {spk_reason}")
+        lines.append(f"  Voice Engine: {spk_eng}")
+
+        # The sections below used to be hard-coded "READY". They now report only
+        # what this process can actually establish.
+        from src.runtime.camera_adapter import SimulatedCameraAdapter
+        from src.runtime.microphone_adapter import SimulatedMicrophoneAdapter
+        sim_mic = isinstance(self.microphone, SimulatedMicrophoneAdapter)
+        sim_cam = isinstance(self.camera, SimulatedCameraAdapter)
+
+        lines.append(f"\nSpeech Recognition")
+        lines.append(f"  Status     : {'SIMULATED (typed/scripted input)' if sim_mic else 'NOT VERIFIED (no test transcription run)'}")
+        from src.audio.audio_listener import cloud_asr_allowed
+        lines.append("  Identity-learning transcription: "
+                     + ("Google online service (audio leaves this device) - ENABLED by MEMORA_ALLOW_CLOUD_ASR"
+                        if cloud_asr_allowed() else "online service disabled; typed input only"))
+
+        from config import settings
+        lines.append(f"\nMemory Database")
+        lines.append(f"  Status     : see subsystem status (integrity-checked)")
+        lines.append(f"  Path       : {settings.DB_PATH}")
+
+        lines.append(f"\nFace Database")
+        lines.append(f"  Status     : {'SIMULATED (synthetic embeddings)' if sim_cam else 'NOT VERIFIED (no enrolled-face test run)'}")
+
+        lines.append(f"\nObject Detection Model")
+        lines.append(f"  Status     : {'SIMULATED (fictional sample objects; not persisted)' if sim_cam else 'EXPERIMENTAL (contour heuristic, not a trained detector)'}")
+
+        import os
+        llm_active = bool(os.environ.get("GEMINI_API_KEY"))
+        lines.append(f"\nReasoning Engine")
+        lines.append(f"  Replies    : deterministic local rules")
+        from src.network_policy import cloud_llm_allowed
+        lines.append(f"  LLM Mode   : {'Gemini enabled (MEMORA_ALLOW_CLOUD_LLM=1): identity-learning transcripts are sent to Google' if cloud_llm_allowed() else ('GEMINI_API_KEY set but cloud use not enabled (MEMORA_ALLOW_CLOUD_LLM)' if llm_active else 'not configured')}")
+        lines.append("==================================================")
+
+        return "\n".join(lines)
 
     def get_runtime_summary(self) -> Dict[str, Any]:
         health = self.get_health_metrics()

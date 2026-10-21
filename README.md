@@ -1,203 +1,142 @@
 # MEMORA
 
-> **Samsung Solve For Tomorrow — Release Candidate 1 (RC1)**
-
-**MEMORA** is a deterministic cognitive companion architecture designed to assist individuals living with Alzheimer's disease. It continuously perceives the patient's environment, maintains long-term memory, reasons about context, and provides safe, explainable assistance — all while remaining offline-capable, hardware-agnostic, and clinically interoperable.
-
-```
-Status:           RC1 — Architecture Frozen
-Tests:            479 passing (100%)
-Production LOC:   27,423
-Subsystems:       19
-Phases:           21–40 complete
-```
-
----
-
-## Architecture
+MEMORA is a privacy-first memory assistant for people with memory difficulties,
+with Alzheimer's care as a central use case. It remembers what a person tells it,
+answers questions about it honestly (with when it was told), keeps a history of
+corrections, and directs the person to human help when something sounds urgent.
 
 ```
-                    Patient
-                        │
-           Alzheimer's Assistance (Phase 37)
-                        │
-         Caregiver Intelligence (Phase 38)
-                        │
-      Clinical Interoperability (Phase 36)
-                        │
-         Unified I/O Framework (Phase 35)
-                        │
- Edge Runtime & Device Integration (Phase 39)
-                        │
-                Security (Phase 34)
-                        │
-             Configuration (Phase 33)
-                        │
-                Sessions (Phase 31)
-                        │
-                 Runtime (Phase 30)
-                        │
-                Integrity (Phase 32)
-                        │
-                Executive (Phase 25)
-                        │
-                Reasoning (Phase 24)
-                        │
-                Knowledge (Phase 28)
-                        │
-             Long-Term Memory (Phase 29)
-                        │
-                Experience (Phase 26)
-                        │
-                Behaviour (Phase 23)
-                        │
-                  Trust (Phase 22)
-                        │
-             Cognitive OS (Phase 21)
-                        │
-                Perception
+Stage:     Development (not yet internal alpha)
+Verified:  text conversation with consent, memory with provenance and
+           corrections, reminders/appointments, restart persistence, data
+           view/export/delete, backup/restore, urgent-statement guidance,
+           where you said you put things, 20 simulated journeys, clean
+           install (Python 3.11-3.13), Docker, CI (Linux)
+Not yet verified: real camera, microphone, voice output, object
+           detection, live Gemini API, long-duration stability
+Face recognition: OpenCV YuNet + SFace backend implemented and tested with
+           synthetic stand-ins; inactive until the owner provisions model files
+           (none shipped or downloaded); never tested on a camera
+           (docs/FACE_RECOGNITION.md)
 ```
 
----
+MEMORA is **not a medical device**. It does not diagnose, give medication advice,
+monitor emergencies, or contact anyone. See
+[CAPABILITY_VERIFICATION_MATRIX.md](CAPABILITY_VERIFICATION_MATRIX.md) for exactly
+what has been verified and how.
 
-## Subsystem Overview
+## Quick start
 
-| Phase | Subsystem | Package | Responsibility |
-| :--- | :--- | :--- | :--- |
-| 21 | Cognitive Operating System | `src/cognition/cos/` | Working memory, attention, decision engine |
-| 22 | Trust & Safety | `src/trust/` | Content safety, PII protection, degradation management |
-| 23 | Behaviour Intelligence | `src/behaviour/` | Routine learning, drift monitoring |
-| 24 | Cognitive Reasoning | `src/reasoning/` | Evidence fusion, conflict resolution |
-| 25 | Executive Function | `src/executive/` | Goal planning, task execution |
-| 26 | Experience Learning | `src/experience/` | Execution history, pattern recognition |
-| 27 | Architectural Core | `src/core/` | `ICognitiveSubsystem`, `UnifiedEvent` |
-| 28 | Semantic Knowledge | `src/knowledge/` | Entity-relationship world model |
-| 29 | Long-Term Memory | `src/memory/` | Memory encoding, recall, retention |
-| 30 | Clinical Runtime | `src/runtime/` | Service lifecycle, fault isolation |
-| 31 | Cognitive Sessions | `src/session/` | Session lifecycle, execution traces |
-| 32 | Integrity | `src/integrity/` | Cross-subsystem health validation |
-| 33 | Configuration | `src/configuration/` | Centralized policy management |
-| 34 | Security | `src/security/` | RBAC, identity, audit attribution |
-| 35 | Unified I/O | `src/io/` | Technology-agnostic I/O boundary |
-| 36 | Interoperability | `src/interoperability/` | FHIR/HL7 clinical data translation |
-| 37 | Assistance | `src/assistance/` | Context restoration, routine guidance |
-| 38 | Caregiver | `src/caregiver/` | Patient timelines, escalation policies |
-| 39 | Edge Runtime | `src/edge/` | Hardware abstraction, deployment profiles |
-
----
-
-## Design Principles
-
-- **Deterministic**: Identical inputs always produce identical outputs. No randomness in cognitive paths.
-- **Offline-First**: Patient assistance continues functioning without network connectivity.
-- **Hardware-Agnostic**: Runs on phones, smartwatches, smart glasses, and edge computers through abstract capability profiles.
-- **Explainable**: Every decision, assistance response, and escalation is traceable to verified evidence.
-- **Clinically Isolated**: Healthcare protocols (FHIR/HL7) are contained in adapter layers — the cognitive core never sees protocol details.
-- **Safe by Design**: Trust validation, content safety, and escalation policies are architectural invariants, not afterthoughts.
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.11+
-- Virtual environment
-
-### Setup
+Requires Python 3.11, 3.12 or 3.13 (core install verified on all three).
 
 ```bash
-git clone <repository-url>
-cd Samsung_Anchor
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python app.py --chat
 ```
 
-### Run Tests
+Example conversation:
+
+```
+MEMORA: Hello, I'm MEMORA, a memory assistant. Before we start: may I save what you
+        tell me, on this computer only, so I can remind you later? ... Please answer yes or no.
+You: yes
+MEMORA: Thank you. I'll save what you tell me on this computer. What would you like me to call you?
+You: My name is Sid
+MEMORA: Nice to meet you, Sid. I'll call you Sid.
+You: My daughter is Riya
+MEMORA: I'll remember that your daughter is Riya.
+...next day, after a restart...
+You: Who is my daughter?
+MEMORA: You told me yesterday that your daughter is Riya.
+```
+
+On first run MEMORA asks whether it may save what you tell it; nothing is stored
+until you agree (`/consent` shows or changes this at any time).
+
+Chat commands (`/help` lists them all): `/memories`, `/forget N`, `/medications`,
+`/add-medication`, `/appointments`, `/add-appointment`, `/set-emergency-number`,
+`/set-trusted-contact`, `/people`, `/objects`, `/export [file]`, `/delete-all`,
+`/consent`, `/status`, `/quit`.
+
+### A separate development database
 
 ```bash
-# Full test suite
-python -m pytest tests/ -v
+python deployment/create_dev_database.py ~/memora-data/dev
+export MEMORA_DB_PATH=~/memora-data/dev/memora.sqlite MEMORA_LOG_DIR=~/memora-data/dev/logs
+```
+The tool refuses to touch an existing database. Tests and `--simulate` always use their own
+temporary storage.
 
-# Specific phase tests
-python -m pytest tests/test_edge_framework.py -v
-python -m pytest tests/test_rc1_validation.py -v
+### Where data is stored
+
+- Default database: `memora_db_v2.sqlite` in the project folder (face data alongside as
+  `memora_db_v2.faces.json`). Override with `MEMORA_DB_PATH=/path/to/memora.sqlite`;
+  unless that exact file already exists, MEMORA stores it as `/path/to/memora_v2.sqlite`
+  (`--check` and `/status` show the file actually used).
+- `--simulation` and `--scenario` use a separate database under `data/simulation/`.
+- `--chat`, `--simulate` and the default runtime make **no network connections** (enforced by
+  `tests/test_network_policy.py`, which intercepts sockets). Features that can contact the internet
+  are off unless explicitly enabled: `MEMORA_ALLOW_MODEL_DOWNLOAD=1` (speech-model download),
+  `MEMORA_ALLOW_CLOUD_ASR=1` (Google speech recognition of microphone audio),
+  `MEMORA_ALLOW_CLOUD_LLM=1` with `GEMINI_API_KEY` (Gemini name extraction). `--check` and
+  `/status` report what is enabled. See `docs/PRIVACY_AND_CONSENT.md`.
+
+## Other commands
+
+| Command | Purpose |
+| :--- | :--- |
+| `python app.py --check` | Read-only diagnostics: dependencies, database integrity (checked on a temporary copy), optional capabilities, network use (does not open the camera) |
+| `python app.py --simulation --validate-runtime --max-cycles 25` | Run the continuous runtime with simulated sensors and print measured statistics |
+| `python app.py --scenario` | Run the synthetic clinical-behaviour scenarios against their specifications |
+| `python app.py --simulate [NAME ...]` | Run 20 deterministic simulated user journeys in isolated temporary storage (simulated clock, battery, sensors) |
+| `python app.py --backup [DIR]` / `--restore DIR` | Verified backup / restore of the memory database |
+| `python app.py --repair` | Remove people records that have no face data (asks first, backs up first) |
+| `python inspect_database.py [db]` | Inspect stored data and SQLite/face-data consistency |
+| `python app.py --live-hardware` | Continuous runtime with camera/microphone (**unverified**; requires `requirements-hardware.txt`; see [docs/HARDWARE_TEST_CHECKLIST.md](docs/HARDWARE_TEST_CHECKLIST.md)). Real devices are used **only** with this flag |
+
+Optional extras: `requirements-hardware.txt` (sensors and on-device models — check
+[licensing](docs/LICENSING_REVIEW.md) first), `requirements-cloud.txt` (Gemini, used
+only for name extraction during identity learning), `requirements-dev.txt` (tests).
+
+## Docker
+
+```bash
+docker build -t memora -f deployment/docker/Dockerfile .
+docker run -it -v memora-data:/data memora            # chat
+docker run --rm -v memora-data:/data memora python app.py --check
 ```
 
-### Run RC1 Validation
+Personal data lives only in the `/data` volume.
 
-```python
-from validation import RC1Validator
+## Tests
 
-validator = RC1Validator(root_dir=".")
-reports, cert = validator.validate_all()
-print(validator.generate_certification_text(cert))
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests/ -q
 ```
 
----
-
-## Deployment Philosophy
-
-MEMORA's architecture defines **what** the cognitive platform does and **how** subsystems interact. It does not implement platform-specific hardware drivers, mobile app UIs, or cloud infrastructure.
-
-Future deployment involves:
-1. Building mobile/wearable apps that consume MEMORA's `EdgeEngine` and `IOEngine` APIs
-2. Connecting physical sensors (cameras, microphones) to `InputGateway`
-3. Rendering assistance outputs through platform-native UI frameworks
-4. Exporting clinical data through `InteroperabilityEngine` adapters
-
----
-
-## Clinical Vision
-
-MEMORA aims to be a **cognitive companion** for Alzheimer's patients — not a replacement for human caregivers, but a reliable partner that:
-
-- **Restores context** when the patient is disoriented
-- **Guides daily routines** through gentle, evidence-backed prompts
-- **Helps find objects** using perception and memory
-- **Provides reassurance** during moments of confusion
-- **Informs caregivers** with deterministic summaries and trend analysis
-- **Interoperates with hospitals** through standardized clinical protocols
-
----
-
-## Future Roadmap
-
-```
-Product Development → Clinical Validation → Pilot Deployment → Field Trials → Production Release
-```
-
----
+The suite runs against a temporary database (see `tests/conftest.py`) and never
+touches your real data. Latest result: see [PROJECT_STATE.md](PROJECT_STATE.md).
 
 ## Documentation
 
-- [Architecture Guide](docs/ARCHITECTURE_GUIDE.md)
-- [RC1 Certification](docs/certification/RC1_CERTIFICATION.md)
-- [System Validation Report](docs/certification/SYSTEM_VALIDATION_REPORT.md)
-- [Architecture Freeze](docs/certification/ARCHITECTURE_FREEZE.md)
-- [Safety Certification](docs/certification/SAFETY_CERTIFICATION.md)
-- [Dependency Audit](docs/certification/DEPENDENCY_AUDIT.md)
-- [Final Engineering Review](docs/certification/FINAL_ENGINEERING_REVIEW.md)
-- [Production Readiness](docs/certification/PRODUCTION_READINESS.md)
+- [PROJECT_STATE.md](PROJECT_STATE.md) — current verified state, commands, test baseline, documentation index
+- [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md) — how the code actually runs
+- [CAPABILITY_VERIFICATION_MATRIX.md](CAPABILITY_VERIFICATION_MATRIX.md) — evidence per capability
+- [MASTER_ROADMAP.md](MASTER_ROADMAP.md) — prioritised next work and release stages
+- [docs/SAFETY_AND_LIMITATIONS.md](docs/SAFETY_AND_LIMITATIONS.md) — safety design, policy decisions, what is not verified
+- [docs/LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md), [docs/product/PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)
+- [docs/EXECUTION_LEDGER.md](docs/EXECUTION_LEDGER.md) — engineering findings log
+- [docs/RELEASE_GATES.md](docs/RELEASE_GATES.md) — release gates and readiness by use
+- [docs/HARDWARE_TEST_CHECKLIST.md](docs/HARDWARE_TEST_CHECKLIST.md), [docs/PILOT_CHECKLIST.md](docs/PILOT_CHECKLIST.md) — prepared, not executed
 
----
+Documents under `docs/certification/` and earlier "RC1 certified" claims are
+historical and are **not supported by current evidence**; see the documentation
+index in PROJECT_STATE.md.
 
 ## License
 
-Samsung Solve For Tomorrow Competition Entry.
-
----
-
-```
-========================================
-
-             MEMORA
-      Samsung Solve For Tomorrow
-      Release Candidate 1 (RC1)
-
-      Architecture: CERTIFIED
-      Status: ARCHITECTURE FROZEN
-
-========================================
-```
+No license has been chosen yet (originally a Samsung Solve For Tomorrow competition
+entry). See [docs/LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md).

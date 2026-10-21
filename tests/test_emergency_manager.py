@@ -11,7 +11,8 @@ def test_emergency_manager_trigger_and_clear():
     state = mgr.get_current_state()
     assert state.active is True
     assert state.priority == EmergencyPriority.CRITICAL
-    assert state.caregiver_notified is True
+    # No notification channel exists, so the state must never claim one was sent.
+    assert state.caregiver_notified is False
 
     mgr.clear_emergency()
     state = mgr.get_current_state()

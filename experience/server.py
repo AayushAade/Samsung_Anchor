@@ -57,11 +57,15 @@ class ExperienceServer:
     async def _serve(self) -> None:
         """Start both the WebSocket and HTTP server."""
         # Start WebSocket server
+        # Browsers let any website open a WebSocket to localhost; only the dashboard's
+        # own origin may read the cognitive stream (it can contain what the person said).
+        allowed_origins = [f"http://localhost:{self.port}", f"http://127.0.0.1:{self.port}"]
         async with serve(
             self._ws_handler,
             self.host,
             self.port,
             process_request=self._http_handler,
+            origins=allowed_origins,
         ):
             print(f"\n{'='*60}")
             print(f"  🧠 Memora Experience Platform")
@@ -91,7 +95,7 @@ class ExperienceServer:
         # Security: prevent path traversal
         try:
             file_path = file_path.resolve()
-            if not str(file_path).startswith(str(DASHBOARD_DIR.resolve())):
+            if not file_path.is_relative_to(DASHBOARD_DIR.resolve()):  # prefix match admitted sibling dirs
                 return Response(403, "Forbidden", websockets.Headers())
         except Exception:
             return Response(404, "Not Found", websockets.Headers())

@@ -15,6 +15,9 @@ from src.cognition.goals.models import GoalHypothesis, GoalState
 from src.cognition.goals.reasoner import GoalReasoner, HeuristicGoalReasoner
 from src.cognition.goals.repository import GoalRepository
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class GoalInferenceEngine:
     """
@@ -85,6 +88,6 @@ class GoalInferenceEngine:
             return active
 
         except Exception as e:
-            print(f"[GoalInferenceEngine] Error during goal inference: {e}")
+            logger.warning(f"[GoalInferenceEngine] Error during goal inference: {e}")
             # Graceful degradation: return whatever is already in the repository
             return self.repository.get_active_goals()

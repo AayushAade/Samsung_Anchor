@@ -60,18 +60,34 @@ class CommitmentScorer:
 
 class AdaptiveAttentionScorer:
     """
-    Adjusts attention based on the memory's historical usefulness.
+    Adjusts attention based on the memory's historical usefulness and frequency.
     Learns from user feedback over time.
     """
     def score(self, memory: RelevantMemory, state: CognitiveState) -> float:
-        # historical_usefulness defaults to 0.5.
-        # If it drops to 0.0, we penalize the score heavily.
-        # If it rises to 1.0, we boost the score.
-        
-        # We need the memory to expose historical_usefulness.
-        # In a real implementation we'd pass the full SemanticNodeModel
-        # For now, we fetch it if it's stored on RelevantMemory metadata.
         usefulness = getattr(memory, 'historical_usefulness', 0.5)
-        
-        # Scale: -15.0 to +15.0
         return (usefulness - 0.5) * 30.0
+
+
+class NoveltyScorer:
+    """
+    Evaluates the novelty of a memory or event.
+    First-time or rare events demand heightened attention.
+    """
+    def score(self, memory: RelevantMemory, state: CognitiveState) -> float:
+        access_count = getattr(memory, 'access_count', 1)
+        if access_count <= 1:
+            return 20.0
+        elif access_count <= 3:
+            return 10.0
+        return 0.0
+
+
+class ConfidenceScorer:
+    """
+    Scales attention by the upstream perceptual and retrieval confidence.
+    High-confidence memories have higher attention priority.
+    """
+    def score(self, memory: RelevantMemory, state: CognitiveState) -> float:
+        confidence = getattr(memory, 'confidence', 1.0)
+        return confidence * 15.0
+

@@ -189,7 +189,9 @@ class DeploymentValidator:
             )
 
     def _check_critical_dependencies(self) -> DiagnosticCheckItem:
-        req_pkgs = ["sqlalchemy", "speech_recognition", "pytest"]
+        # Core runtime packages only (requirements.txt). Microphone capture and the
+        # test runner are optional/dev dependencies, not deployment requirements.
+        req_pkgs = ["sqlalchemy", "numpy", "faiss"]
         missing = []
         for pkg in req_pkgs:
             try:

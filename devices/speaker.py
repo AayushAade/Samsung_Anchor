@@ -39,7 +39,8 @@ class SpeakerDevice:
             subprocess.Popen(
                 [
                     "say",
-                    action.message,
+                    # never parsed as a command-line option
+                    (" " + action.message) if action.message.startswith("-") else action.message,
                 ]
             )
         except Exception as e:

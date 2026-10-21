@@ -3,8 +3,17 @@ import numpy as np
 import time
 import os
 import threading
+from collections import deque
+
+# Rolling window of recent embeddings kept per face track. Tracks previously kept
+# every frame's embedding forever and averaged the whole history twice per frame,
+# so memory and per-frame time grew without bound while a person stayed in view.
+TRACK_EMBEDDING_WINDOW = 30
 from config import settings
 from src.utils.event_logger import log_event
+
+import logging
+logger = logging.getLogger(__name__)
 
 # Try dlib-based face_recognition
 try:
@@ -35,8 +44,7 @@ try:
 except ImportError:
     MEDIAPIPE_AVAILABLE = False
     if settings.DEBUG:
-        print("[Face Recognizer Warning] 'mediapipe' library not available.")
-
+        logger.warning("[Face Recognizer Warning] 'mediapipe' library not available.")
 def compute_iou(boxA, boxB):
     """Computes Intersection-over-Union (IoU) of two bounding boxes (top, right, bottom, left)."""
     tA, rA, bA, lA = boxA
@@ -68,6 +76,8 @@ class MemoraFaceRecognizer:
         self._lock = threading.Lock()
         self.tolerance = tolerance
         self.mock_mode = mock_mode
+        # Callable returning whether biometric (face recognition) consent is granted.
+        self.consent_check = None
         self.required_consensus_frames = required_consensus_frames
         self.face_mesh = None
         self.face_recognition_active = False
@@ -95,19 +105,29 @@ class MemoraFaceRecognizer:
         # }
         self.active_tracks = {}
 
+        # Only backends that are implemented below and importable are selected. The
+        # "mock" backend fabricates a face from the centre of every frame, so it is used
+        # only when simulation was requested: on real camera frames, with no working
+        # backend, recognition is reported unavailable and detects nothing.
+        self.unavailable_reason = None
+        self.yunet = None
+        self.sface = None
+        model_status = None
+        if not self.mock_mode:
+            from src.vision.face_models import verify_models
+            model_status = verify_models()
         if self.mock_mode:
             self.backend = "mock"
             if settings.DEBUG:
-                print("[Face Recognizer] Initialized mock simulator backend.")
+                logger.debug("[Face Recognizer] Initialized mock simulator backend.")
+        elif model_status is not None and model_status.ready and self._start_sface(model_status):
+            self.backend = "sface"
+            self.tolerance = settings.SFACE_MATCH_TOLERANCE
         elif FACE_RECOGNITION_AVAILABLE:
             self.backend = "face_recognition"
             self.face_recognition_active = True
             if settings.DEBUG:
-                print("[Face Recognizer] Initialized dlib-based 'face_recognition' backend.")
-        elif INSIGHTFACE_AVAILABLE:
-            self.backend = "insightface"
-            if settings.DEBUG:
-                print("[Face Recognizer] Initialized InsightFace backend.")
+                logger.debug("[Face Recognizer] Initialized dlib-based 'face_recognition' backend.")
         elif MEDIAPIPE_AVAILABLE:
             self.backend = "mediapipe"
             try:
@@ -119,17 +139,18 @@ class MemoraFaceRecognizer:
                     min_tracking_confidence=0.5
                 )
                 if settings.DEBUG:
-                    print("[Face Recognizer] Initialized MediaPipe FaceMesh fallback backend.")
+                    logger.debug("[Face Recognizer] Initialized MediaPipe FaceMesh fallback backend.")
             except Exception as e:
-                if settings.DEBUG:
-                    print(f"[Face Recognizer Warning] Failed to initialize MediaPipe: {e}. Enabling mock fallback.")
-                self.mock_mode = True
-                self.backend = "mock"
+                self.backend = "unavailable"
+                self.unavailable_reason = f"MediaPipe FaceMesh could not start: {e}"
         else:
-            if settings.DEBUG:
-                print("[Face Recognizer Warning] No computer vision backends available. Forcing mock fallback mode.")
-            self.mock_mode = True
-            self.backend = "mock"
+            self.backend = "unavailable"
+            self.unavailable_reason = (
+                "no working face-recognition backend: "
+                + (self.unavailable_reason or (model_status.reason() if model_status else "models not checked"))
+                + " (see docs/FACE_RECOGNITION.md); dlib 'face_recognition' and MediaPipe FaceMesh are not available")
+        if self.backend == "unavailable":
+            logger.warning("[Face Recognizer] Face recognition unavailable: %s", self.unavailable_reason)
 
         # Try loading SCRFD face detector for fast/accurate bounding box extraction
         self.scrfd_detector = None
@@ -140,10 +161,59 @@ class MemoraFaceRecognizer:
                     self.scrfd_detector = SCRFD(model_file=model_path)
                     self.scrfd_detector.prepare(ctx_id=-1) # -1 is CPU inference
                     if settings.DEBUG:
-                        print("[Face Recognizer] Loaded SCRFD face detection model.")
+                        logger.debug("[Face Recognizer] Loaded SCRFD face detection model.")
                 except Exception as e:
                     if settings.DEBUG:
-                        print(f"[Face Recognizer Warning] Failed to initialize SCRFD model: {e}")
+                        logger.warning(f"[Face Recognizer Warning] Failed to initialize SCRFD model: {e}")
+    @staticmethod
+    def _not_sure(box) -> dict:
+        return {"box": box, "face_id": None, "name": None, "relationship": None, "is_new": False,
+                "label": "Not sure who this is"}
+
+    def _start_sface(self, model_status) -> bool:
+        """Create the OpenCV YuNet detector and SFace recogniser from verified model files."""
+        try:
+            self.yunet = cv2.FaceDetectorYN.create(model_status.detector, "", (320, 320),
+                                                   settings.FACE_DETECTION_MIN_SCORE, 0.3, 50)
+            self.sface = cv2.FaceRecognizerSF.create(model_status.recognizer, "")
+            return True
+        except Exception as e:  # e.g. a model that this OpenCV build cannot run
+            self.yunet = self.sface = None
+            self.unavailable_reason = f"YuNet/SFace models could not be loaded by OpenCV {cv2.__version__}: {e}"
+            return False
+
+    def _sface_detect(self, frame, compute_embeddings: bool) -> list:
+        """YuNet detection, SFace alignment and 128-D L2-normalised features."""
+        h, w = frame.shape[:2]
+        self.yunet.setInputSize((w, h))
+        _, faces = self.yunet.detect(frame)
+        out = []
+        for row in (faces if faces is not None else []):
+            x, y, fw, fh, score = float(row[0]), float(row[1]), float(row[2]), float(row[3]), float(row[-1])
+            if score < settings.FACE_DETECTION_MIN_SCORE or min(fw, fh) < settings.FACE_MIN_SIZE_PX:
+                continue
+            left, top = max(0, int(x)), max(0, int(y))
+            right, bottom = min(w - 1, int(x + fw)), min(h - 1, int(y + fh))
+            embedding = None
+            if compute_embeddings:
+                feature = np.asarray(self.sface.feature(self.sface.alignCrop(frame, row)), dtype=np.float32).reshape(-1)
+                norm = float(np.linalg.norm(feature))
+                if feature.size != 128 or norm == 0:
+                    continue
+                embedding = feature / norm
+            out.append({"box": (top, right, bottom, left), "center": ((left + right) // 2, (top + bottom) // 2),
+                        "embedding": embedding, "score": score})
+        return out
+
+    def get_diagnostics(self) -> dict:
+        return {
+            "backend": self.backend,
+            "unavailable_reason": self.unavailable_reason,
+            "mock_mode": self.mock_mode,
+            "scrfd_active": self.scrfd_detector is not None,
+            "tolerance": self.tolerance,
+            "active_tracks_count": len(self.active_tracks),
+        }
 
     def _compute_geometric_embedding(self, landmarks, w, h):
         """
@@ -187,7 +257,7 @@ class MemoraFaceRecognizer:
         
         embedding = np.concatenate([distances, np.array(extra_distances)])
         if settings.DEBUG:
-            print(f"[Debug Embedding] First 5 values: {embedding[:5]}")
+            logger.debug(f"[Debug Embedding] First 5 values: {embedding[:5]}")
         return embedding
 
     def _update_missed_tracks(self, now_time, database, associated_tracks=set()):
@@ -200,11 +270,11 @@ class MemoraFaceRecognizer:
                 last_seen_diff = now_time - track.get("last_seen_time", now_time)
                 if mf <= 30 and last_seen_diff <= 60.0:
                     if settings.DEBUG:
-                        print(f"Keeping [{track_id}] alive: missed_frames = {mf}/30")
+                        logger.debug(f"Keeping [{track_id}] alive: missed_frames = {mf}/30")
                 else:
                     info_t = database.get_identity(track_id)
                     disp_t = info_t["display_name"] if (info_t and info_t.get("status") == "confirmed") else track_id
-                    print(f"Removing [{track_id}] because: missed_frames = {mf} - timeout exceeded")
+                    logger.debug(f"Removing [{track_id}] because: missed_frames = {mf} - timeout exceeded")
                     log_event("face_leave", f"Face leaves scene: [{disp_t}]")
                     stale_keys.append(track_id)
         for k in stale_keys:
@@ -240,10 +310,15 @@ class MemoraFaceRecognizer:
         h, w, _ = frame.shape
         now_time = time.time()
 
-        # 1. Detect faces using active backend
+        # 1. Detect faces using active backend. Without biometric consent no face
+        # embedding is computed at all (sface backend): faces are only located.
+        consent_ok = self.consent_check is None or bool(self.consent_check())
         detected_faces = []
 
-        if self.backend == "mock":
+        if self.backend == "sface":
+            detected_faces = self._sface_detect(frame, compute_embeddings=consent_ok)
+
+        elif self.backend == "mock":
             top, right, bottom, left = h // 4, 3 * w // 4, 3 * h // 4, w // 4
             mock_embedding = np.zeros(128)
             face_region = frame[top:bottom, left:right]
@@ -279,7 +354,7 @@ class MemoraFaceRecognizer:
                             face_locations.append((top, right, bottom, left))
                 except Exception as e:
                     if settings.DEBUG:
-                        print(f"[Face Recognizer Warning] SCRFD detection failed: {e}. Falling back to dlib.")
+                        logger.warning(f"[Face Recognizer Warning] SCRFD detection failed: {e}. Falling back to dlib.")
                     face_locations = face_recognition.face_locations(rgb_frame)
             else:
                 face_locations = face_recognition.face_locations(rgb_frame)
@@ -320,6 +395,15 @@ class MemoraFaceRecognizer:
             self._update_missed_tracks(now_time, database)
             return results
 
+        # Biometric consent: without it, faces are neither matched against stored
+        # identities nor enrolled, and no embeddings are written. The runtime
+        # assembly (AnchorCoordinator) sets consent_check; standalone library use
+        # leaves it unset.
+        if not consent_ok:
+            return [{"box": d["box"], "face_id": None, "name": None, "relationship": None,
+                     "is_new": False, "label": "Face recognition is off (no consent)"}
+                    for d in detected_faces]
+
         # Frame counter increment
         if not hasattr(self, "frame_counter"):
             self.frame_counter = 0
@@ -338,7 +422,7 @@ class MemoraFaceRecognizer:
             best_det_score = -1.0
             
             if settings.DEBUG:
-                print(f"\n--- Association Check for Track [{track_id}] (Frame {self.frame_counter}) ---")
+                logger.debug(f"\n--- Association Check for Track [{track_id}] (Frame {self.frame_counter}) ---")
             
             for idx, det in enumerate(unassociated_detections):
                 iou = compute_iou(det["box"], track_box)
@@ -360,11 +444,11 @@ class MemoraFaceRecognizer:
                     score = 1.0 / (dist + 1)
                 
                 if settings.DEBUG:
-                    print(f"Detection {idx}:")
-                    print(f"  IoU = {iou:.3f}")
-                    print(f"  Center Distance = {dist:.1f}px")
-                    print(f"  Embedding Distance = {emb_dist:.3f}")
-                    print(f"  Spatial Match = {is_match} (score = {score:.3f})")
+                    logger.debug(f"Detection {idx}:")
+                    logger.debug(f"  IoU = {iou:.3f}")
+                    logger.debug(f"  Center Distance = {dist:.1f}px")
+                    logger.debug(f"  Embedding Distance = {emb_dist:.3f}")
+                    logger.debug(f"  Spatial Match = {is_match} (score = {score:.3f})")
                     
                 if is_match and score > best_det_score:
                     best_det_score = score
@@ -385,29 +469,38 @@ class MemoraFaceRecognizer:
                 # Compute embedding distance for the associated detection
                 emb_dist = 999.0
                 if len(track["embeddings"]) > 1 and len(det["embedding"]) > 0:
-                    track_avg_emb = np.mean(track["embeddings"][:-1], axis=0)
+                    track_avg_emb = np.mean(list(track["embeddings"])[:-1], axis=0)
                     emb_dist = float(np.linalg.norm(det["embedding"] - track_avg_emb))
 
                 # Print exact requested format
                 if settings.DEBUG:
-                    print(f"\nFrame {self.frame_counter}")
-                    print(f"Detection {best_det_idx}")
-                    print(f"\nAssociated with:")
-                    print(f"{track_id}")
-                    print(f"\nIoU = {compute_iou(det['box'], track_box):.3f}")
-                    print(f"\nCenter Distance = {np.hypot(det['center'][0] - track_center[0], det['center'][1] - track_center[1]):.1f}")
-                    print(f"\nEmbedding Distance = {emb_dist:.3f}")
-                    print(f"\nmatched = True")
-                    print(f"\nReset missed_frames = 0\n")
+                    logger.debug(f"\nFrame {self.frame_counter}")
+                    logger.debug(f"Detection {best_det_idx}")
+                    logger.debug(f"\nAssociated with:")
+                    logger.debug(f"{track_id}")
+                    logger.debug(f"\nIoU = {compute_iou(det['box'], track_box):.3f}")
+                    logger.debug(f"\nCenter Distance = {np.hypot(det['center'][0] - track_center[0], det['center'][1] - track_center[1]):.1f}")
+                    logger.debug(f"\nEmbedding Distance = {emb_dist:.3f}")
+                    logger.debug(f"\nmatched = True")
+                    logger.debug(f"\nReset missed_frames = 0\n")
                 
                 # State transitions
                 if track["state"] == "STABILIZING" or track["state"] == "UNKNOWN":
                     track["state"] = "STABILIZING"
                     if track["frames_seen"] >= 15:
                         avg_embedding = np.mean(track["embeddings"], axis=0)
-                        new_id = database.register_anonymous(avg_embedding)
+                        # Re-check before enrolling: the averaged face may match a known person
+                        # (join that identity) or resemble several (never enrol a duplicate).
+                        margin = settings.SFACE_AMBIGUITY_MARGIN if self.backend == "sface" else 0.0
+                        recheck = database.match_face(avg_embedding, self.tolerance, margin)
+                        if recheck["status"] == "ambiguous":
+                            track["state"] = "AMBIGUOUS"
+                            results.append(self._not_sure(track["box"]))
+                            continue
+                        is_new_identity = recheck["status"] != "match"
+                        new_id = database.register_anonymous(avg_embedding) if is_new_identity else recheck["identity_id"]
                         info = database.get_identity(new_id)
-                        
+
                         log_event("cand_promote", f"Unknown candidate [{track_id}] promoted to [{new_id}] after 15 stable frames")
                         log_event("face_enter", f"Face enters scene: [{new_id}]")
                         
@@ -416,7 +509,7 @@ class MemoraFaceRecognizer:
                             "state": "RECOGNIZED",
                             "box": track["box"],
                             "center": track["center"],
-                            "embeddings": track["embeddings"],
+                            "embeddings": track["embeddings"],  # keep the bounded deque
                             "frames_seen": track["frames_seen"],
                             "missed_frames": 0,
                             "last_seen_time": now_time,
@@ -429,9 +522,9 @@ class MemoraFaceRecognizer:
                         results.append({
                             "box": track["box"],
                             "face_id": new_id,
-                            "name": None,
-                            "relationship": None,
-                            "is_new": True,
+                            "name": None if is_new_identity else (info or {}).get("display_name"),
+                            "relationship": None if is_new_identity else (info or {}).get("relationship"),
+                            "is_new": is_new_identity,
                             "embedding": avg_embedding
                         })
                     else:
@@ -445,6 +538,9 @@ class MemoraFaceRecognizer:
                             "label": f"Detecting... ({track['frames_seen']}/15)"
                         })
                         
+                elif track["state"] == "AMBIGUOUS":
+                    results.append(self._not_sure(track["box"]))
+
                 elif track["state"] == "RECOGNIZED":
                     # Known tracked identity: check database match to apply reinforcement/EMA
                     face_id, info, d = database.find_match(det["embedding"], self.tolerance)
@@ -494,8 +590,23 @@ class MemoraFaceRecognizer:
 
         # Step 2: Create new tracks for unassociated detections
         for det in unassociated_detections:
-            face_id, info, dist = database.find_match(det["embedding"], self.tolerance)
-            
+            margin = settings.SFACE_AMBIGUITY_MARGIN if self.backend == "sface" else 0.0
+            match = database.match_face(det["embedding"], self.tolerance, margin)
+            face_id, info, dist = match["identity_id"], match["info"], match["distance"]
+
+            if match["status"] == "ambiguous":
+                cand_id = f"Ambiguous_{self.next_candidate_index}"
+                self.next_candidate_index += 1
+                self.active_tracks[cand_id] = {
+                    "state": "AMBIGUOUS", "box": det["box"], "center": det["center"],
+                    "embeddings": deque([det["embedding"]], maxlen=TRACK_EMBEDDING_WINDOW),
+                    "frames_seen": 1, "missed_frames": 0, "last_seen_time": now_time,
+                    "recognized_logged": False, "confirmed_logged": False}
+                associated_tracks.add(cand_id)
+                log_event("ambiguous", f"Face resembles more than one known person [{cand_id}]; not named")
+                results.append(self._not_sure(det["box"]))
+                continue
+
             if face_id is not None:
                 is_confirmed = info.get("status") == "confirmed" if info else False
                 best_match_name = info.get("display_name") if (info and info.get("display_name")) else face_id
@@ -514,7 +625,7 @@ class MemoraFaceRecognizer:
                     "state": initial_state,
                     "box": det["box"],
                     "center": det["center"],
-                    "embeddings": [det["embedding"]],
+                    "embeddings": deque([det["embedding"]], maxlen=TRACK_EMBEDDING_WINDOW),
                     "frames_seen": 1,
                     "consensus_count": 1,
                     "missed_frames": 0,
@@ -541,7 +652,7 @@ class MemoraFaceRecognizer:
                         "state": "RECOGNIZED",
                         "box": det["box"],
                         "center": det["center"],
-                        "embeddings": [det["embedding"]],
+                        "embeddings": deque([det["embedding"]], maxlen=TRACK_EMBEDDING_WINDOW),
                         "frames_seen": 1,
                         "missed_frames": 0,
                         "last_seen_time": now_time,
@@ -566,7 +677,7 @@ class MemoraFaceRecognizer:
                         "state": "UNKNOWN",
                         "box": det["box"],
                         "center": det["center"],
-                        "embeddings": [det["embedding"]],
+                        "embeddings": deque([det["embedding"]], maxlen=TRACK_EMBEDDING_WINDOW),
                         "frames_seen": 1,
                         "missed_frames": 0,
                         "last_seen_time": now_time,
@@ -578,9 +689,9 @@ class MemoraFaceRecognizer:
                     
                     # Print exact requested format
                     if settings.DEBUG:
-                        print(f"\nFrame {self.frame_counter}")
-                        print("No existing track matched.")
-                        print("\nCreating Temp_Candidate.\n")
+                        logger.debug(f"\nFrame {self.frame_counter}")
+                        logger.debug("No existing track matched.")
+                        logger.debug("\nCreating Temp_Candidate.\n")
                     
                     results.append({
                         "box": det["box"],

@@ -57,11 +57,35 @@ def test_closed_loop_cognitive_wiring_speech_transcript_and_speaker():
     pipeline.shutdown()
 
 
-def test_pyttsx3_speaker_adapter_interface():
+class _FakeEngine:
+    """Stands in for pyttsx3 so the test suite never produces real audio."""
+    def __init__(self):
+        self.said = []
+
+    def setProperty(self, *a):
+        pass
+
+    def say(self, text):
+        self.said.append(text)
+
+    def runAndWait(self):
+        pass
+
+
+def test_pyttsx3_speaker_adapter_interface(monkeypatch):
+    engine = _FakeEngine()
+    monkeypatch.setattr(PyTTSx3SpeakerAdapter, "_init_tts_engine", lambda self: setattr(self, "engine", engine))
     speaker = PyTTSx3SpeakerAdapter(device_name="TestSpeaker")
-    assert speaker.get_status().value in ["Healthy", "Connected"]
-
-    ok = speaker.speak("Testing closed loop audio output")
-    assert ok is True
-
+    assert speaker.get_status().value == "Healthy"
+    assert speaker.speak("Testing closed loop audio output") is True
+    assert engine.said == ["Testing closed loop audio output"]
     speaker.shutdown()
+
+
+def test_speaker_without_audio_backend_reports_failure(monkeypatch):
+    import src.runtime.speaker_adapter as sa
+    monkeypatch.setattr(PyTTSx3SpeakerAdapter, "_init_tts_engine", lambda self: setattr(self, "engine", None))
+    monkeypatch.setattr(sa.sys, "platform", "unknown-os")
+    speaker = PyTTSx3SpeakerAdapter(device_name="NoAudio")
+    assert speaker.get_status().value == "Faulted"
+    assert speaker.speak("Hello") is False  # shown on console, but not spoken aloud

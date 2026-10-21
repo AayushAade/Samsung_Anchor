@@ -16,6 +16,9 @@ from src.interaction.events import (
     PresenceEventType,
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class InteractionManager:
     """
@@ -44,7 +47,7 @@ class InteractionManager:
         
         if recall is not None and not recall.should_greet:
             # The Executive Function decided on cognitive silence.
-            print(f"[InteractionManager] Cognitive silence. Suppressing interaction for {event.name}.")
+            logger.debug(f"[InteractionManager] Cognitive silence. Suppressing interaction for {event.name}.")
             return None
 
         # --------------------------------------------------

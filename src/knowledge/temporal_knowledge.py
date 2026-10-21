@@ -28,10 +28,13 @@ class TemporalKnowledgeManager:
     Manages location transition timelines for entities over time.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False) -> None:
         self._transitions: List[TemporalLocationTransition] = []
         self._lock = threading.Lock()
-        self._seed_baseline_transitions()
+        # Fictional sample data: opt-in only (demos/tests), never in real use.
+        self.seed_demo_data = seed_demo_data
+        if seed_demo_data:
+            self._seed_baseline_transitions()
 
     def record_transition(self, entity_id: str, entity_name: str, from_room: str, to_room: str) -> TemporalLocationTransition:
         t = TemporalLocationTransition(

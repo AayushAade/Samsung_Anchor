@@ -46,16 +46,16 @@ def test_end_to_end_10_clinical_scenarios():
     specs = get_all_clinical_scenario_specs()
     results = validator.run_all_scenarios(specs)
 
-    assert len(results) == 10
+    assert len(results) == len(specs)
     passed_count = sum(1 for r in results if r.passed)
-    assert passed_count == 10
+    assert passed_count == len(specs)
 
     pipeline.shutdown()
 
 
 def test_visual_episodic_memory_recall():
     """Verify visual episodic memory engine stores and recalls item locations accurately."""
-    engine = VisualEpisodicMemoryEngine()
+    engine = VisualEpisodicMemoryEngine(seed_demo_data=True)
 
     # Query reading glasses
     res_glasses = engine.recall_object_location("Where are my reading glasses?", "Eleanor")

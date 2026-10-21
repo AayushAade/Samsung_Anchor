@@ -1,0 +1,13 @@
+# Optional: physical sensors and on-device models. Each is imported behind a
+# guard; MEMORA reports the capability as unavailable when a package is missing.
+# NOTE: model weights (insightface, YOLO) carry their own licences - review
+# before any commercial use (see docs/LICENSING_REVIEW.md).
+-r requirements.txt
+PyAudio==0.2.14
+SpeechRecognition==3.17.0
+pyttsx3==2.99
+faster-whisper==1.2.1
+insightface==1.0.1
+onnxruntime==1.27.0
+mediapipe==0.10.35
+ultralytics==8.4.87

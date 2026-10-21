@@ -16,6 +16,7 @@ Hardware-specific logic belongs in the subsystem modules.
 from __future__ import annotations
 
 import time
+import threading
 from typing import Any, Dict, Optional
 
 from src.coordinator.anchor_coordinator import AnchorCoordinator
@@ -61,6 +62,17 @@ class AnchorRuntime:
         self.coordinator.shutdown()
         self.running = False
 
+    def print_diagnostic_report(self) -> None:
+        """
+        Print the MEMORA HARDWARE DIAGNOSTIC REPORT.
+        """
+        try:
+            rm = getattr(self.coordinator.pipeline, "runtime_manager", None)
+            if rm and hasattr(rm, "generate_diagnostic_report"):
+                print("\n" + rm.generate_diagnostic_report() + "\n")
+        except Exception:
+            pass
+
     # ---------------------------------------------------------
     # Subsystem Introspection & Observability
     # ---------------------------------------------------------
@@ -70,17 +82,15 @@ class AnchorRuntime:
         Inspect all application subsystems and return Phase 6 status map:
         READY | WARNING | DISABLED | FAILED
         """
+        # Nothing is reported READY unless it was actually checked below.
         statuses = {
-            "Runtime": "READY",
-            "Camera": "READY",
-            "Audio": "READY",
-            "Speech Recognition": "READY",
-            "Memory": "READY",
-            "Perception": "READY",
-            "Cognition": "READY",
-            "Care Policy": "READY",
-            "Decision Trace": "READY",
-            "Speaker": "READY",
+            "Runtime": "READY" if self.coordinator is not None else "FAILED",
+            "Camera": "NOT CHECKED",
+            "Audio": "NOT CHECKED",
+            "Speech Recognition": "NOT CHECKED",
+            "Memory": "NOT CHECKED",
+            "Cognition": "READY" if getattr(self.coordinator, "pipeline", None) is not None else "FAILED",
+            "Speaker": "NOT CHECKED",
         }
 
         try:
@@ -93,6 +103,8 @@ class AnchorRuntime:
                     statuses["Camera"] = "FAILED"
                 elif isinstance(rm.camera, SimulatedCameraAdapter):
                     statuses["Camera"] = "WARNING (Simulated)"
+                else:
+                    statuses["Camera"] = "READY"
 
                 # Audio / Mic status
                 mic_status = rm.microphone.get_status()
@@ -101,6 +113,8 @@ class AnchorRuntime:
                     statuses["Audio"] = "FAILED"
                 elif isinstance(rm.microphone, SimulatedMicrophoneAdapter):
                     statuses["Audio"] = "WARNING (Simulated)"
+                else:
+                    statuses["Audio"] = "READY"
 
                 # Speaker status
                 spk_status = rm.speaker.get_status()
@@ -109,15 +123,59 @@ class AnchorRuntime:
                     statuses["Speaker"] = "FAILED"
                 elif isinstance(rm.speaker, SimulatedSpeakerAdapter):
                     statuses["Speaker"] = "WARNING (Simulated)"
-        except Exception:
-            pass
+                else:
+                    statuses["Speaker"] = "READY"
+        except Exception as e:
+            statuses["Runtime"] = f"WARNING (device status unavailable: {e})"
 
-        # Memory status
+        # Derived statuses
+        pipeline = getattr(self.coordinator, "pipeline", None)
+        statuses["Perception"] = statuses["Camera"] if pipeline is not None and hasattr(pipeline, "perception_manager") else "FAILED"
+        if "Simulated" in statuses["Audio"]:
+            statuses["Speech Recognition"] = "WARNING (Simulated - typed or scripted input only)"
+        elif pipeline is not None:
+            engine = getattr(getattr(getattr(pipeline, "perception_manager", None), "audio_pipeline", None),
+                             "speech_engine", None)
+            if engine is not None and hasattr(engine, "availability"):
+                usable, reason = engine.availability()
+                statuses["Speech Recognition"] = (f"WARNING ({reason}; not verified on real speech)" if usable
+                                                  else f"FAILED ({reason})")
+        # Face recognition: report the backend actually in use; never imply real recognition.
+        recognizer = getattr(self.coordinator, "recognizer", None)
+        backend = getattr(recognizer, "backend", None)
+        if backend == "mock":
+            statuses["Face Recognition"] = "WARNING (Simulated)"
+        elif backend == "unavailable":
+            statuses["Face Recognition"] = f"FAILED ({getattr(recognizer, 'unavailable_reason', 'no backend')})"
+        elif backend:
+            statuses["Face Recognition"] = f"WARNING (backend '{backend}', not verified on real faces)"
+        # Deterministic rule modules: available when constructed.
+        statuses["Care Policy"] = "READY" if pipeline is not None and hasattr(pipeline, "care_policy_framework") else "FAILED"
+        statuses["Decision Trace"] = "READY" if pipeline is not None and hasattr(pipeline, "clinical_trace_logger") else "FAILED"
+
+        battery = getattr(pipeline, "battery", None) if pipeline is not None else None
+        if battery is not None:
+            r = battery.reading()
+            statuses["Battery"] = (f"WARNING (Simulated, {r.level_pct:.0f}%, {r.state}"
+                                   f"{', charging' if r.charging else ''})")
+
+        # Memory: the database must answer an integrity check, not merely exist.
         try:
-            if not self.coordinator.database:
+            db = self.coordinator.database
+            if not db:
                 statuses["Memory"] = "FAILED"
-        except Exception:
-            statuses["Memory"] = "WARNING"
+            else:
+                report = db.check_integrity()
+                if report["ok"]:
+                    statuses["Memory"] = "READY"
+                else:
+                    missing = len(report["identities_without_embeddings"])
+                    detail = (f"{missing} identities lack face embeddings" if missing
+                              else report.get("vector_store_load_error") or report.get("vector_store_save_error")
+                              or "identity/embedding mismatch")
+                    statuses["Memory"] = f"WARNING ({detail})"
+        except Exception as e:
+            statuses["Memory"] = f"FAILED ({e})"
 
         return statuses
 
@@ -201,22 +259,110 @@ class AnchorRuntime:
         print("⚡ MEMORA Active Processing Loop Started.")
         try:
             while self.running:
+                t0 = time.perf_counter()
                 try:
                     frame, results = self.run_once(camera)
+                    t_lat = (time.perf_counter() - t0) * 1000.0
+                    fps = 1000.0 / (t_lat + 1e-3)
 
-                    # Consume and dispatch any pending interaction actions
-                    actions = self.coordinator.consume_actions()
-                    for action in actions:
-                        if hasattr(self.coordinator.speaker, "execute"):
-                            self.coordinator.speaker.execute(action)
-                        elif hasattr(self.coordinator.speaker, "speak") and getattr(action, "message", None):
-                            self.coordinator.speaker.speak(action.message)
+                    # Drain pending actions. Speech was already delivered once by the
+                    # pipeline through the speaker HAL; dispatching again here caused
+                    # every reply to be spoken twice (and real `say` audio in simulation).
+                    self.coordinator.consume_actions()
 
                     if self.cycle_count % 10 == 0 or self.cycle_count == 1:
-                        print(f"💓 [Heartbeat] Runtime cycle #{self.cycle_count} completed successfully.")
+                        # Extract comprehensive telemetry metrics
+                        faces_cnt = 0
+                        faces_identities = []
+                        if isinstance(results, list):
+                            faces_cnt = len(results)
+                            for r in results:
+                                if isinstance(r, dict):
+                                    name = r.get("name") or r.get("face_id") or "Face"
+                                    faces_identities.append(name)
+
+                        obj_cnt = 0
+                        obj_names = []
+                        mem_hits = 0
+                        speech_cnt = 0
+                        dropped_frames = 0
+                        proc_frames = self.cycle_count
+                        cpu_pct = 0.0
+                        ram_pct = 0.0
+                        q_depth = 0
+                        t_cnt = threading.active_count()
+                        sys_health = "READY"
+
+                        try:
+                            q_depth = self.coordinator._cognitive_queue.qsize()
+                        except Exception:
+                            pass
+
+                        try:
+                            rm = getattr(self.coordinator.pipeline, "runtime_manager", None)
+                            if rm:
+                                hm = rm.get_health_metrics()
+                                cpu_pct = hm.cpu_usage_pct
+                                ram_pct = hm.ram_usage_pct
+                                dropped_frames = getattr(rm.camera, "dropped_frames", 0)
+                                proc_frames = getattr(rm.camera, "frame_count", self.cycle_count)
+                        except Exception:
+                            pass
+
+                        try:
+                            pm = getattr(self.coordinator.pipeline, "perception_manager", None)
+                            if pm:
+                                recent_audio = pm.audio_pipeline.get_recent_audio_events()
+                                speech_cnt = sum(1 for e in recent_audio if getattr(e, "event_type", None) and "SPEECH" in str(e.event_type))
+                                recent_objs = pm.object_detector.get_all_objects()
+                                obj_cnt = len(recent_objs)
+                                obj_names = [o.object_name for o in recent_objs[:3]]
+                        except Exception:
+                            pass
+
+                        try:
+                            trace = getattr(self.coordinator.pipeline, "latest_clinical_trace", None)
+                            if trace and hasattr(trace, "cognitive_context") and trace.cognitive_context:
+                                if trace.cognitive_context.memory:
+                                    mem_hits = len(trace.cognitive_context.memory.memories)
+                        except Exception:
+                            pass
+
+                        statuses = self.get_subsystem_statuses()
+                        if any("FAILED" in s for s in statuses.values()):
+                            sys_health = "FAILED"
+                        elif any("WARNING" in s for s in statuses.values()):
+                            sys_health = "WARNING (Simulated Fallback)"
+
+                        f_str = f" [{', '.join(faces_identities[:2])}]" if faces_identities else ""
+                        o_str = f" [{', '.join(obj_names[:2])}]" if obj_names else ""
+
+                        print(
+                            f"💓 [Heartbeat] Cycle #{self.cycle_count} | "
+                            f"Latency: {t_lat:.1f}ms ({fps:.1f} FPS) | "
+                            f"CPU: {cpu_pct:.1f}% | RAM: {ram_pct:.1f}% | "
+                            f"Threads: {t_cnt} | QDepth: {q_depth} | "
+                            f"Frames: {proc_frames} (Dropped: {dropped_frames}) | "
+                            f"Faces: {faces_cnt}{f_str} | Objects: {obj_cnt}{o_str} | "
+                            f"Memories: {mem_hits} | Speech Evts: {speech_cnt} | "
+                            f"Health: {sys_health}"
+                        )
 
                 except Exception as e:
-                    print(f"⚠️ [Runtime Warning] Cycle iteration error: {e}")
+                    print(f"⚠️ [Runtime Recovery] Hardware iteration notice: {e}. Executing synthetic fallback cycle...")
+                    # Trigger hardware manager fallback if available
+                    try:
+                        rm = self.coordinator.pipeline.runtime_manager
+                        if hasattr(rm, "fallback_camera"):
+                            rm.fallback_camera()
+                    except Exception:
+                        pass
+
+                    fallback_frame = {"frame_id": self.cycle_count, "timestamp": time.time(), "fallback": True}
+                    try:
+                        self.process_frame(fallback_frame)
+                    except Exception as fallback_err:
+                        print(f"⚠️ [Runtime Warning] Fallback processing notice: {fallback_err}")
 
                 if max_cycles is not None and self.cycle_count >= max_cycles:
                     print(f"🛑 Max execution cycles ({max_cycles}) reached.")

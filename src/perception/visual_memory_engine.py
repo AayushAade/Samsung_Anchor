@@ -38,13 +38,17 @@ class VisualEpisodicMemoryEngine:
     calm natural language retrieval for Alzheimer's patient queries.
     """
 
-    def __init__(self, db_instance: Optional[Any] = None) -> None:
+    def __init__(self, db_instance: Optional[Any] = None, seed_demo_data: bool = False) -> None:
         self.db = db_instance
         self._visual_memories: Dict[str, VisualMemoryEntry] = {}
-        self._seed_default_memories()
+        # The seeded objects are fictional demo data. Loading them outside an
+        # explicit demo would make MEMORA claim to have seen objects it never saw.
+        if seed_demo_data:
+            self._seed_default_memories()
 
     def _seed_default_memories(self) -> None:
         now_iso = datetime.now().isoformat()
+        source = "SYNTHETIC_DEMO_DATA"
         # Seed 5 meaningful personal objects
         self._visual_memories["reading glasses"] = VisualMemoryEntry(
             object_category="reading glasses",
@@ -53,6 +57,7 @@ class VisualEpisodicMemoryEngine:
             timestamp=now_iso,
             room="Living Room",
             associated_patient="Eleanor",
+            observation_source=source,
         )
         self._visual_memories["medication bottle"] = VisualMemoryEntry(
             object_category="medication bottle",
@@ -61,6 +66,7 @@ class VisualEpisodicMemoryEngine:
             timestamp=now_iso,
             room="Kitchen",
             associated_patient="Eleanor",
+            observation_source=source,
         )
         self._visual_memories["walking cane"] = VisualMemoryEntry(
             object_category="walking cane",
@@ -69,6 +75,7 @@ class VisualEpisodicMemoryEngine:
             timestamp=now_iso,
             room="Living Room",
             associated_patient="Eleanor",
+            observation_source=source,
         )
         self._visual_memories["keys"] = VisualMemoryEntry(
             object_category="keys",
@@ -77,6 +84,7 @@ class VisualEpisodicMemoryEngine:
             timestamp=now_iso,
             room="Entryway",
             associated_patient="Eleanor",
+            observation_source=source,
         )
         self._visual_memories["television remote"] = VisualMemoryEntry(
             object_category="television remote",
@@ -85,6 +93,7 @@ class VisualEpisodicMemoryEngine:
             timestamp=now_iso,
             room="Dining Room",
             associated_patient="Eleanor",
+            observation_source=source,
         )
 
     def record_observation(
@@ -131,7 +140,7 @@ class VisualEpisodicMemoryEngine:
             return {
                 "found": False,
                 "confidence": 0.0,
-                "response": f"I haven't seen that item recently, {patient_name}.",
+                "response": "I have never observed that object.",
                 "entry": None,
             }
 

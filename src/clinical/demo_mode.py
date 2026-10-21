@@ -7,7 +7,11 @@ explainability strings, caregiver mode reports, and visual console outputs.
 
 from __future__ import annotations
 
+import os
+import tempfile
 import time
+from typing import Any, Optional
+
 import numpy as np
 
 from src.memory.database import MemoraDatabase
@@ -22,7 +26,9 @@ class AutomaticDemoRunner:
     Automatic Demo Runner executing end-to-end clinical demonstration scenarios.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, report_path: Optional[str] = None) -> None:
+        # Reports are synthetic demo output; keep them out of the tracked docs tree.
+        self.report_path = report_path or os.path.join(tempfile.gettempdir(), "memora_demo_clinical_report.md")
         self.db = MemoraDatabase("sqlite:///:memory:")
         self.recognizer = MemoraFaceRecognizer(mock_mode=True)
         self.explain_engine = ExplainabilityEngine()
@@ -34,6 +40,8 @@ class AutomaticDemoRunner:
         """
         print("\n======================================================================")
         print("     MEMORA (Samsung Anchor) — AUTOMATIC DEMO MODE (RC1 BUILD)")
+        print("  SCRIPTED PRESENTATION: responses, confidences and stage timings below")
+        print("  are illustrative and synthetic, not live output from sensors or models.")
         print("======================================================================\n")
 
         # Scenario 1: Family Member Identity Recognition
@@ -127,15 +135,15 @@ class AutomaticDemoRunner:
         print("SCENARIO 5: Automated Caregiver Report & Clinical Evaluation")
         print("----------------------------------------------------------------------")
 
-        report_md = self.caregiver_reporter.generate_clinical_evaluation_report("docs/clinical/clinical_evaluation_report.md")
-        print("✅ Generated Clinical Evaluation Report -> docs/clinical/clinical_evaluation_report.md")
+        report_md = self.caregiver_reporter.generate_clinical_evaluation_report(self.report_path)
+        print(f"✅ Generated synthetic demo report -> {self.report_path}")
 
         print("\n======================================================================")
-        print("     ALL 5 DEMONSTRATION SCENARIOS EXECUTED WITH 100% SUCCESS")
+        print("     ALL 5 SCRIPTED DEMONSTRATION SCENARIOS COMPLETED")
         print("======================================================================\n")
 
         return {
             "status": "PASS",
             "timelines": [timeline_1.to_dict(), timeline_2.to_dict(), timeline_3.to_dict()],
-            "report_path": "docs/clinical/clinical_evaluation_report.md",
+            "report_path": self.report_path,
         }

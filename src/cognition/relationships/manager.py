@@ -7,9 +7,12 @@ class RelationshipManager:
     Manages relationship profiles and performs shared memory ranking for the patient.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed_demo_data: bool = False) -> None:
         self._profiles: Dict[str, RelationshipProfile] = {}
-        self._seed_default_profiles()
+        # Fictional sample data: opt-in only (demos/tests), never in real use.
+        self.seed_demo_data = seed_demo_data
+        if seed_demo_data:
+            self._seed_default_profiles()
 
     def _seed_default_profiles(self) -> None:
         """Seed default relationship profiles (e.g., Sarah)."""
@@ -61,8 +64,9 @@ class RelationshipManager:
                 name=name or "Family Member",
                 relationship=relationship or "Loved One",
                 preferred_greeting=f"Hello {name}" if name else "Hello",
-                visit_frequency="Regular visitor",
-                last_interaction="Recently",
+                # Unknown, not invented: there is no visit history for this person yet.
+                visit_frequency="Not yet known",
+                last_interaction="Not recorded",
                 shared_memories=[],
                 important_dates=[],
                 communication_preferences="Warm and calm",

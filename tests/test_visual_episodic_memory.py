@@ -22,8 +22,17 @@ def test_visual_memory_entry_attributes():
     assert entry.observation_source == "Camera HAL (OpenCV)"
 
 
-def test_visual_memory_recall_confidence_thresholds():
+def test_no_object_sightings_without_observations():
+    """Without real observations MEMORA must not claim to have seen anything."""
     engine = VisualEpisodicMemoryEngine()
+    for item in ("keys", "reading glasses", "walking cane"):
+        res = engine.recall_object_location(f"Where are my {item}?", "Eleanor")
+        assert res["found"] is False
+        assert "last saw" not in res["response"].lower()
+
+
+def test_visual_memory_recall_confidence_thresholds():
+    engine = VisualEpisodicMemoryEngine(seed_demo_data=True)
 
     # 1. High Confidence (Reading Glasses)
     res_high = engine.recall_object_location("Where are my reading glasses?", "Eleanor")
@@ -38,11 +47,11 @@ def test_visual_memory_recall_confidence_thresholds():
     # 3. Low Confidence / Unknown Item
     res_unk = engine.recall_object_location("Where is my wallet?", "Eleanor")
     assert res_unk["found"] is False
-    assert "I haven't seen that item recently" in res_unk["response"]
+    assert "never observed" in res_unk["response"].lower() or "haven't seen" in res_unk["response"].lower()
 
 
 def test_visual_memory_scenarios_for_five_meaningful_items():
-    engine = VisualEpisodicMemoryEngine()
+    engine = VisualEpisodicMemoryEngine(seed_demo_data=True)
 
     items = [
         ("reading glasses", "coffee table"),
@@ -60,7 +69,7 @@ def test_visual_memory_scenarios_for_five_meaningful_items():
 
 def test_cognitive_pipeline_integration_visual_episodic_memory():
     db = MemoraDatabase("sqlite:///:memory:")
-    pipeline = CognitivePipeline(db)
+    pipeline = CognitivePipeline(db, demo_data=True)
 
     for m in pipeline.medication_mgr.get_missed_medications():
         pipeline.medication_mgr.mark_taken(m.med_id)

@@ -57,6 +57,7 @@ class AnchorCoordinator:
         listener: "MemoraAudioListener",
         binder: "MemoraContextBinder",
         speaker: Any,
+        hardware_config: Any = None,
     ) -> None:
         """
         Initialize the coordinator with subsystem instances.
@@ -89,7 +90,17 @@ class AnchorCoordinator:
         # Cognitive Pipeline & Memory Manager
         # ------------------------------------------------------
 
-        self.pipeline = CognitivePipeline(self.database)
+        # Hardware selection is injected by the application factory; the default here is
+        # simulated so that no other construction path can reach real devices.
+        if hardware_config is None:
+            from src.runtime.runtime_models import HardwareConfig, RuntimeMode
+            hardware_config = HardwareConfig(mode=RuntimeMode.SIMULATION)
+        self.pipeline = CognitivePipeline(self.database, hardware_config=hardware_config)
+        # Biometric consent gates face matching/enrolment in the live runtime.
+        from src.clinical.clinical_models import ConsentFeature
+        if hasattr(self.recognizer, "consent_check"):
+            self.recognizer.consent_check = lambda: self.pipeline.consent_mgr.is_consent_granted(
+                ConsentFeature.FACE_RECOGNITION)
         self.memory_manager = CognitiveMemoryManager(self.database.SessionFactory, MockReasoningClient())
 
         self._cognitive_thread = None
@@ -134,6 +145,9 @@ class AnchorCoordinator:
         self.running = False
         if self._cognitive_thread is not None:
             self._cognitive_thread.join(timeout=2.0)
+            self._cognitive_thread = None
+        if hasattr(self.pipeline, "shutdown"):
+            self.pipeline.shutdown()
         self.memory_manager.shutdown()
 
     # ==========================================================
@@ -259,6 +273,16 @@ class AnchorCoordinator:
         """
 
         if not face_id:
+            return False
+
+        # Identity learning stores a transcript and name evidence: storage consent is required.
+        if not self.pipeline.memory_storage_allowed():
+            return False
+
+        # Listening to a real microphone requires voice-recording consent.
+        from src.clinical.clinical_models import ConsentFeature
+        if not getattr(self.listener, "mock_mode", True) and not self.pipeline.consent_mgr.is_consent_granted(
+                ConsentFeature.VOICE_RECORDING):
             return False
 
         if face_id in self._learning_faces:

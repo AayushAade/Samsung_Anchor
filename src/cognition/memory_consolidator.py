@@ -55,14 +55,39 @@ class MemoryConsolidator:
                     object_val=object_val
                 ).first()
                 
+                # Check if conflicting node exists (same subject & predicate, different object)
+                conflicting_node = session.query(SemanticNodeModel).filter(
+                    SemanticNodeModel.subject == subject,
+                    SemanticNodeModel.predicate == predicate,
+                    SemanticNodeModel.object_val != object_val
+                ).first()
+                
                 now_str = datetime.now().isoformat()
                 
                 if existing_node:
                     # Reinforce the memory! 
                     existing_node.confidence = min(1.0, existing_node.confidence + 0.2)
                     existing_node.last_reinforced = now_str
-                    # If this memory is repeated, its importance might bump up
                     existing_node.importance = max(existing_node.importance, importance)
+                elif conflicting_node:
+                    # CONTRADICTION DETECTED! Do NOT overwrite.
+                    # Flag both nodes as Contradictions for patient clarification.
+                    conflicting_node.contradiction_count += 1
+                    conflicting_node.verification_status = "Contradiction"
+                    
+                    new_node = SemanticNodeModel(
+                        subject=subject,
+                        predicate=predicate,
+                        object_val=object_val,
+                        category=category,
+                        importance=importance,
+                        confidence=0.7,
+                        last_reinforced=now_str,
+                        contradiction_count=1,
+                        verification_status="Contradiction"
+                    )
+                    session.add(new_node)
+                    print(f"[MemoryConsolidator] CONTRADICTION DETECTED between '{conflicting_node.object_val}' and '{object_val}' for ({subject}, {predicate}). Stored both.")
                 else:
                     # Create new memory
                     new_node = SemanticNodeModel(
@@ -78,6 +103,41 @@ class MemoryConsolidator:
             
             session.commit()
             print(f"[MemoryConsolidator] Consolidated {len(extracted_facts)} facts into Semantic Memory.")
+
+    def generate_window_summary(self, window_name: str, episodes: list) -> str:
+        """
+        Generate time-window summary (Morning, Afternoon, Evening, Daily, Weekly).
+        Compresses repetitive events into structured summary stored without information loss.
+        """
+        if not episodes:
+            return f"No key events recorded during {window_name}."
+
+        summaries = [f"- {ep.summary}" if hasattr(ep, "summary") else f"- {str(ep)}" for ep in episodes]
+        episodes_text = "\n".join(summaries)
+        
+        prompt = f"""Summarize the following events for the patient's {window_name} summary in a clear, concise, clinically compassionate manner:
+{episodes_text}
+Keep all critical facts, medication events, people visited, and lost objects intact."""
+        
+        summary_res = self.llm.generate_cue(prompt)
+        
+        # Store summary node in semantic memory
+        now_str = datetime.now().isoformat()
+        with self.session_factory() as session:
+            summary_node = SemanticNodeModel(
+                subject="patient_summary",
+                predicate=window_name.lower().replace(" ", "_"),
+                object_val=summary_res[:250],
+                category=MemoryCategory.ROUTINE.value,
+                importance=3,
+                confidence=1.0,
+                last_reinforced=now_str,
+            )
+            session.add(summary_node)
+            session.commit()
+
+        print(f"[MemoryConsolidator] Generated and saved {window_name}: {summary_res[:60]}...")
+        return summary_res
 
     def _build_extraction_prompt(self, episode: Episode) -> str:
         return f"""

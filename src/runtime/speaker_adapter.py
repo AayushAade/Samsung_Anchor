@@ -1,7 +1,7 @@
 import os
 import sys
 import subprocess
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 from abc import ABC, abstractmethod
 from src.runtime.runtime_models import DeviceStatus
 
@@ -12,6 +12,11 @@ except ImportError:
     pyttsx3 = None
     HAS_PYTTSX3 = False
 
+
+
+def _as_argument(text: str) -> str:
+    """Text passed to a TTS command can never be parsed as a command-line option."""
+    return " " + text if text.startswith("-") else text
 
 class SpeakerAdapter(ABC):
     """
@@ -50,8 +55,17 @@ class SimulatedSpeakerAdapter(SpeakerAdapter):
         self.volume = 80.0
 
     def speak(self, text: str) -> bool:
+        if self.status != DeviceStatus.HEALTHY:
+            return False  # injected failure: report it, never pretend speech was delivered
         print(f"[SimulatedSpeaker] Speaking: '{text}' (Vol: {self.volume}%)")
         return True
+
+    def inject_failure(self) -> None:
+        """Simulation only: make the speaker unavailable."""
+        self.status = DeviceStatus.FAULTED
+
+    def recover(self) -> None:
+        self.status = DeviceStatus.HEALTHY
 
     def play_chime(self) -> bool:
         print(f"[SimulatedSpeaker] Play Chime (Vol: {self.volume}%)")
@@ -77,22 +91,64 @@ class PyTTSx3SpeakerAdapter(SpeakerAdapter):
 
     def __init__(self, device_name: str = "Hardware_Speaker_0") -> None:
         self.device_name = device_name
-        self.status = DeviceStatus.HEALTHY
+        self.status = DeviceStatus.DISCONNECTED
         self.volume = 80.0
         self.engine: Optional[Any] = None
+        self.voice_engine_name: str = "NONE"
+        self.failure_reason: Optional[str] = None
+        self.spoken_count = 0
+        self.initialize()
+
+    def initialize(self) -> bool:
         self._init_tts_engine()
+
+        if self.engine is not None:
+            self.voice_engine_name = "pyttsx3 (Native Speech Synthesizer)"
+            self.status = DeviceStatus.HEALTHY
+            self.failure_reason = None
+            return True
+
+        if sys.platform == "darwin":
+            # Test if system say command exists
+            try:
+                res = subprocess.run(["which", "say"], capture_output=True, text=True)
+                if res.returncode == 0:
+                    self.voice_engine_name = "macOS say CLI"
+                    self.status = DeviceStatus.HEALTHY
+                    self.failure_reason = None
+                    return True
+            except Exception:
+                pass
+
+        if sys.platform.startswith("linux"):
+            try:
+                res = subprocess.run(["which", "espeak"], capture_output=True, text=True)
+                if res.returncode == 0:
+                    self.voice_engine_name = "Linux espeak CLI"
+                    self.status = DeviceStatus.HEALTHY
+                    self.failure_reason = None
+                    return True
+            except Exception:
+                pass
+
+        self.status = DeviceStatus.FAULTED
+        self.voice_engine_name = "Console Fallback"
+        self.failure_reason = "pyttsx3 engine, macOS 'say', and Linux 'espeak' system commands are unavailable."
+        return False
 
     def _init_tts_engine(self) -> None:
         if HAS_PYTTSX3:
             try:
                 self.engine = pyttsx3.init()
-            except Exception:
+            except Exception as e:
                 self.engine = None
+                self.failure_reason = f"pyttsx3.init() exception: {e}"
 
     def speak(self, text: str) -> bool:
         if not text or not text.strip():
             return False
 
+        self.spoken_count += 1
         print(f"[HardwareSpeaker] Speaking: '{text}' (Vol: {self.volume}%)")
 
         # 1. Try pyttsx3 if initialized
@@ -102,26 +158,29 @@ class PyTTSx3SpeakerAdapter(SpeakerAdapter):
                 self.engine.say(text)
                 self.engine.runAndWait()
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                self.failure_reason = f"pyttsx3 speak error: {e}"
 
         # 2. System Fallback: macOS native `say` command
         if sys.platform == "darwin":
             try:
-                subprocess.run(["say", text], check=True)
+                subprocess.run(["say", _as_argument(text)], check=True)
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                self.failure_reason = f"macOS say CLI error: {e}"
 
         # 3. Linux Fallback: espeak
         if sys.platform.startswith("linux"):
             try:
-                subprocess.run(["espeak", text], check=False)
+                subprocess.run(["espeak", _as_argument(text)], check=True)
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                self.failure_reason = f"Linux espeak CLI error: {e}"
 
-        return True
+        # No audio backend worked: the text is shown on the console, but it was NOT
+        # spoken aloud, so report failure rather than success.
+        print(f"[ConsoleSpeaker Fallback] (not spoken aloud) '{text}'")
+        return False
 
     def play_chime(self) -> bool:
         print(f"[HardwareSpeaker] Play Chime (Vol: {self.volume}%)")
@@ -137,6 +196,15 @@ class PyTTSx3SpeakerAdapter(SpeakerAdapter):
 
     def get_status(self) -> DeviceStatus:
         return self.status
+
+    def get_diagnostics(self) -> Dict[str, Any]:
+        return {
+            "status": self.status.value,
+            "voice_engine": self.voice_engine_name,
+            "volume_pct": self.volume,
+            "spoken_count": self.spoken_count,
+            "failure_reason": self.failure_reason,
+        }
 
     def shutdown(self) -> None:
         if self.engine is not None:

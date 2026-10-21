@@ -14,16 +14,30 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Any
+from datetime import datetime
+
 from src.clinical.patient_state import PatientState, PatientStateMode
+from src.clinical.urgent_safety import UrgentConcern, UrgentConcernType, urgent_guidance
+
+
+def _addr(name: Optional[str]) -> str:
+    """", Name" when a name is known, else nothing (never a placeholder name)."""
+    return f", {name}" if name else ""
 
 
 class CarePrinciple(Enum):
     VALIDATION_THERAPY = "Validation Therapy"
+    REALITY_ORIENTATION = "Reality Orientation"
+    GENTLE_CUEING = "Gentle Cueing"
+    REASSURANCE = "Reassurance"
+    DISTRACTION = "Distraction"
+    CAREGIVER_ESCALATION = "Caregiver Escalation"
+    EMERGENCY_ESCALATION = "Emergency Safety Escalation"
+    MINIMAL_INTERVENTION = "Minimal Intervention"
     GENTLE_ORIENTATION = "Gentle Orientation"
     SUPPORTIVE_SILENCE = "Supportive Silence"
     ONE_STEP_GUIDANCE = "One-Step Guidance"
     REPETITIVE_REDIRECTION = "Repetitive Query Redirection"
-    EMERGENCY_ESCALATION = "Emergency Safety Escalation"
 
 
 @dataclass
@@ -48,60 +62,84 @@ class CarePolicyFramework:
         current_message: Optional[str] = None,
         patient_name: str = "Eleanor",
         location: str = "Living Room",
+        emergency_number: Optional[str] = None,
+        trusted_contact: Optional[str] = None,
     ) -> CareDecision:
 
         # Rule 1: Emergency Safety Escalation
+        # MEMORA has no caregiver/emergency notification channel, so it directs the
+        # person to human help and never claims that anyone has been contacted.
         if patient_state.mode == PatientStateMode.EMERGENCY:
+            concern_value = patient_state.details.get("urgent_concern")
+            if concern_value:
+                concern = UrgentConcern(UrgentConcernType(concern_value), patient_state.details.get("matched_text", ""))
+                message = urgent_guidance(concern, name=patient_name, emergency_number=emergency_number,
+                                          trusted_contact=trusted_contact)
+            else:
+                call = emergency_number or "your local emergency number"
+                message = (f"{patient_name + ', if' if patient_name else 'If'} you need help, please call {call} "
+                           "or press your help button, or call out to someone nearby. "
+                           "I can't contact anyone myself."
+                           + (f" You can also call {trusted_contact}." if trusted_contact else ""))
             return CareDecision(
                 principle=CarePrinciple.EMERGENCY_ESCALATION,
                 action_type="ESCALATE",
-                message_override="Emergency safety trigger active. Primary caregiver and clinical team notified.",
+                message_override=message,
                 dignity_preserved=True,
-                caregiver_notified=True,
-                reasoning="Emergency state requires immediate clinical escalation.",
+                caregiver_notified=False,
+                reasoning="Possible emergency: direct the person to human help immediately.",
             )
 
         # Rule 2: Repetitive Queries (Validation Therapy + Warm Consistency)
+        # Reassure without claiming that the underlying matter has been resolved.
         if patient_state.mode == PatientStateMode.REPETITIVE:
-            repeated_q = patient_state.details.get("repeated_query", "your request")
             return CareDecision(
                 principle=CarePrinciple.REPETITIVE_REDIRECTION,
                 action_type="SPEAK",
-                message_override=f"Don't worry, {patient_name}. I am right here with you. Regarding {repeated_q}, everything is taken care of.",
+                message_override=f"That's alright{_addr(patient_name)}, it's fine to ask again. I'm right here with you.",
                 dignity_preserved=True,
                 caregiver_notified=False,
-                reasoning="Validation therapy for repeated query: provide warm, identical reassurance without correcting.",
+                reasoning="Validation therapy for repeated query: warm, consistent reassurance without correcting.",
             )
 
         # Rule 3: Anxious / Agitated State (Validation Therapy & Calm Reassurance)
+        # Validate the feeling; do not assert safety or location MEMORA cannot verify.
         if patient_state.mode == PatientStateMode.ANXIOUS:
             return CareDecision(
                 principle=CarePrinciple.VALIDATION_THERAPY,
                 action_type="SPEAK",
-                message_override=f"You are safe here at home in your {location}, {patient_name}. Everything is okay.",
+                message_override=(f"I'm here with you{_addr(patient_name)}. It's okay to feel worried. "
+                                  "Let's take a slow breath together. If something is wrong, "
+                                  "please tell someone you trust."),
                 dignity_preserved=True,
                 caregiver_notified=False,
-                reasoning="Validation therapy for anxiety: ground in current safety.",
+                reasoning="Validation therapy for anxiety: acknowledge feelings, offer calm grounding.",
             )
 
         # Rule 4: Time/Spatial Disorientation (Gentle Orientation)
+        # Orient with the system clock (verified); location is not asserted.
         if patient_state.mode == PatientStateMode.DISORIENTED:
+            now = datetime.now()
             return CareDecision(
                 principle=CarePrinciple.GENTLE_ORIENTATION,
                 action_type="SPEAK",
-                message_override=f"You are home in your {location}, {patient_name}. Take your time, everything is on schedule.",
+                message_override=(f"It's {now.strftime('%A')}, {now.strftime('%B')} {now.day}, "
+                                  f"around {now.strftime('%I:%M %p').lstrip('0')}. Take your time{_addr(patient_name)}."),
                 dignity_preserved=True,
                 caregiver_notified=False,
-                reasoning="Gentle orientation: soft location and time grounding.",
+                reasoning="Gentle orientation: soft time grounding from the system clock.",
             )
 
         # Rule 5: Missed Medication / Routine (One-Step Guidance)
         if patient_state.mode == PatientStateMode.AWAITING_REMINDER:
-            need_desc = patient_state.primary_need
+            meds = patient_state.details.get("medications") or []
+            what = " and ".join(meds) if meds else "your scheduled medication"
             return CareDecision(
                 principle=CarePrinciple.ONE_STEP_GUIDANCE,
                 action_type="SPEAK",
-                message_override=f"Here is a gentle reminder, {patient_name}: {need_desc}.",
+                # A reminder is not evidence the dose was taken; MEMORA asks rather than assumes.
+                message_override=(f"A gentle reminder{_addr(patient_name)}: it's past the time for {what}. "
+                                  "If you haven't taken it yet, please check with your medication plan."),
                 dignity_preserved=True,
                 caregiver_notified=False,
                 reasoning="One-step guidance: single clear prompt.",
@@ -112,7 +150,7 @@ class CarePolicyFramework:
             return CareDecision(
                 principle=CarePrinciple.ONE_STEP_GUIDANCE,
                 action_type="SPEAK",
-                message_override=current_message or f"Let's look around your {location} together.",
+                message_override=current_message or "Let's look for it together. Where do you usually keep it?",
                 dignity_preserved=True,
                 caregiver_notified=False,
                 reasoning="One-step guidance for locating misplaced items.",

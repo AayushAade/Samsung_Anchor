@@ -1,0 +1,9 @@
+# Bug-focused static analysis gate (not a style guide).
+# Run: ruff check .   (ruff is listed in requirements-dev.txt)
+target-version = "py311"
+extend-exclude = ["archive", "scratch", "venv", ".venv", "validation/artifacts"]
+
+[lint]
+# E9: syntax errors; F63/F7/F82: invalid comparisons, misplaced statements,
+# undefined names. These indicate code that fails when executed.
+select = ["E9", "F63", "F7", "F82"]
