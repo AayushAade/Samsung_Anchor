@@ -180,3 +180,48 @@ def test_invalid_parser_response():
 
     assert result["success"] is False
     assert result["reason"] == "Invalid parser response"
+
+def _consenting_db(tmp_path):
+    import numpy as np
+    from src.memory.database import MemoraDatabase
+    db = MemoraDatabase(str(tmp_path / "id.sqlite"))
+    for feature in ("CONVERSATION_STORAGE", "FACE_RECOGNITION"):
+        db._set_system_state(f"consent:{feature}", "granted@2026-10-21T00:00:00")
+    return db, db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))
+
+
+def test_confirmed_identity_is_not_renamed_and_conflict_is_reported(tmp_path):
+    from src.reasoning.context_binder import MemoraContextBinder
+    db, face = _consenting_db(tmp_path)
+    binder = MemoraContextBinder()
+    assert process_identity_learning(face, "Hi, I'm Bob, your son.", db, binder)["success"] is True
+    result = process_identity_learning(face, "I'm Tom, your neighbour.", db, binder)
+    assert result["success"] is False and result["reason"] == "Name conflict"
+    assert result["name"] == "Bob" and result["heard_name"] == "Tom"
+    assert process_identity_learning(face, "I'm Bob.", db, binder)["success"] is True
+
+
+def test_conflicting_introduction_creates_no_episode_under_the_confirmed_name(tmp_path):
+    """Found in review: Tom's words were saved as an episode with Bob."""
+    import threading
+    from src.integration.async_identity_learning import start_identity_learning
+    from src.reasoning.context_binder import MemoraContextBinder
+    db, face = _consenting_db(tmp_path)
+    binder = MemoraContextBinder()
+    process_identity_learning(face, "Hi, I'm Bob, your son.", db, binder)
+
+    class Listener:
+        def listen_and_transcribe(self):
+            return "I'm Tom, your neighbour."
+
+    class MemoryManager:
+        def process_episode(self, episode):
+            raise AssertionError("no episode should be consolidated")
+
+    done, results = threading.Event(), []
+    start_identity_learning(face_id=face, listener=Listener(), binder=binder, database=db,
+                            memory_manager=MemoryManager(), speaker=None,
+                            on_finished=lambda f, r: (results.append(r), done.set()))
+    assert done.wait(10)
+    assert results[0]["reason"] == "Name conflict"
+    assert db.episode_repo.count() == 0

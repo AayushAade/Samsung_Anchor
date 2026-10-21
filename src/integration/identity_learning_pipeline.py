@@ -96,17 +96,34 @@ def process_identity_learning(
     # Record evidence in the Memory subsystem
     # ---------------------------------------------------------
 
-    result = database.add_evidence(
-        identity_id=face_id,
-        name=name,
-        relationship=relationship,
-        raw_transcript=transcript,
-    )
+    from src.clinical.consent_manager import ConsentRequiredError
+    try:
+        result = database.add_evidence(
+            identity_id=face_id,
+            name=name,
+            relationship=relationship,
+            raw_transcript=transcript,
+        )
+    except ConsentRequiredError:
+        return {
+            "success": False,
+            "reason": "Consent required",
+        }
 
     if result is None:
         return {
             "success": False,
             "reason": "Failed to record evidence",
+        }
+
+    if result.get("conflict"):
+        return {
+            "success": False,
+            "reason": "Name conflict",
+            "identity_id": face_id,
+            "name": result["name"],
+            "heard_name": result["heard_name"],
+            "is_confirmed": True,
         }
 
     # ---------------------------------------------------------

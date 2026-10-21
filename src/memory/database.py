@@ -539,7 +539,16 @@ class MemoraDatabase:
     ) -> Any:
         """
         Record identity speech evidence candidate.
+
+        The evidence holds what was said and a name tied to a face, so it is stored only
+        when both storage and face-recognition consent are recorded in this database
+        (persistence-layer backstop for every caller; docs/PRIVACY_AND_CONSENT.md).
         """
+        missing = [f for f in ("CONVERSATION_STORAGE", "FACE_RECOGNITION")
+                   if not (self._get_system_state(f"consent:{f}") or "").startswith("granted")]
+        if missing:
+            from src.clinical.consent_manager import ConsentRequiredError
+            raise ConsentRequiredError(f"Identity evidence not stored: consent missing for {', '.join(missing)}")
         with self.lock:
             return self.identity_repo.add_evidence(identity_id, name, relationship, raw_transcript)
 

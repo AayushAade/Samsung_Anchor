@@ -89,11 +89,17 @@ class IdentityRepository:
                 return None
             
             if identity.status == "confirmed":
+                # A confirmed identity is never renamed by what is overheard. A different
+                # name is reported as a conflict so that nothing is attributed to the wrong
+                # person (e.g. an episode of Tom's words saved under Bob).
+                conflict = (identity.display_name or "").lower() != name.lower()
                 return {
                     "name": identity.display_name,
                     "relationship": identity.relationship,
                     "confidence": 1.0,
-                    "is_confirmed": True
+                    "is_confirmed": True,
+                    "conflict": conflict,
+                    "heard_name": name,
                 }
 
             evidence = session.query(IdentityEvidence).filter(

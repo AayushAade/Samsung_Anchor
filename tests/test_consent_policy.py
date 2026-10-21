@@ -129,3 +129,24 @@ def test_identity_learning_requires_storage_consent(tmp_path):
     assert coord.start_identity_learning("face_1") is False      # memory consent missing
     coord.pipeline.consent_mgr.update_consent(ConsentFeature.CONVERSATION_STORAGE, True)
     assert coord.start_identity_learning("face_1") is True
+
+
+def test_identity_evidence_needs_consent_at_the_storage_layer(tmp_path):
+    """Every caller (coordinator.process_transcript, services, demos) is covered, not just async learning."""
+    from src.clinical.clinical_models import ConsentFeature
+    coord = build_application(live_hardware=False, database=MemoraDatabase(str(tmp_path / "f.sqlite")))
+    db = coord.database
+    with pytest.raises(ConsentRequiredError):
+        db.add_evidence("face_1", "Bob", "Son", f"I'm Bob, {TOKEN}")
+    result = coord.process_transcript("face_1", f"Hi, I'm Bob, your son. {TOKEN}")
+    assert result == {"success": False, "reason": "Consent required"}
+    coord.pipeline.consent_mgr.update_consent(ConsentFeature.CONVERSATION_STORAGE, True)
+    with pytest.raises(ConsentRequiredError):            # faces consent still missing
+        db.add_evidence("face_1", "Bob", "Son", "I'm Bob")
+    assert _counts(db.db_path)["identity_evidence"] == 0
+    assert TOKEN.encode() not in open(db.db_path, "rb").read()
+    coord.pipeline.consent_mgr.update_consent(ConsentFeature.FACE_RECOGNITION, True)
+    import numpy as np
+    face = db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))
+    assert coord.process_transcript(face, "Hi, I'm Bob, your son.")["success"] is True
+    assert _counts(db.db_path)["identity_evidence"] == 1
