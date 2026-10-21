@@ -1,116 +1,116 @@
-# Licensing and Commercial-Readiness Review (engineering notes — not legal advice)
+# Licensing and Asset-Provenance Review (engineering findings — not legal advice)
 
-_Updated 2026-10-21 (remediation mission); first written 2026-10-20. Sources: installed package metadata (`importlib.metadata`) and
-the projects' own published terms (fetched 2026-10-20). Every item marked
-**review** needs confirmation by qualified counsel before any commercial
-distribution. MEMORA is **not** cleared for commercial distribution._
+_Updated 2026-10-21 (final completion mission). Method: tracked files (`git ls-files`),
+dependency manifests, installed package metadata (`importlib.metadata`), wheel contents
+(inspected with `pip download`, not installed), model-loading code, the Docker build context,
+and the publishers' own pages (read 2026-10-21). "Verified" means the term is quoted from
+the publisher's page or file. "Interpretation" marks an engineering reading that counsel must
+confirm. **MEMORA is not cleared for commercial distribution.**_
 
-## 1. The repository itself
-- **Public** GitHub repository (verified with `gh`, 2026-10-20). Everything committed —
-  code, documents, and the tracked model file below — has been publicly disclosed.
-- **No LICENSE file.** The README describes it as a Samsung Solve For Tomorrow
-  competition entry. Ownership of contributions from several contributors and any
-  competition terms must be clarified before choosing a licence — **review**.
-- Public disclosure may affect the ability to patent any mechanism described in the
-  repository; see `docs/product/PRODUCT_SPEC.md`. No filing or legal decision has been made.
-
-## 2. Dependency inventory
-
-### Core runtime (`requirements.txt`) — needed for text conversation, memory, diagnostics
-| Package | Version | Declared licence | Commercial use | Obligations |
-| :--- | :--- | :--- | :--- | :--- |
-| numpy | 2.4.6 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | Permitted | Keep notices |
-| SQLAlchemy | 2.0.51 | MIT | Permitted | Keep notice |
-| faiss-cpu | 1.14.3 | MIT | Permitted | Keep notice |
-| opencv-python | 5.0.0.93 | Apache-2.0 | Permitted | Notice; bundled codecs (FFmpeg, LGPL) — **review** for binary redistribution |
-| psutil | 7.2.2 | BSD-3-Clause | Permitted | Notice |
-| pydantic | 2.13.4 | MIT | Permitted | Notice |
-| websockets | 16.0 | BSD-3-Clause | Permitted | Notice |
-
-All core dependencies are permissive. A product built from `requirements.txt` only,
-**without** `assets/models/` or `yolov8n.pt`, uses no copyleft or non-commercial
-component that we have identified. (The Docker image is built this way.)
-
-### Optional: sensors and on-device models (`requirements-hardware.txt`)
-| Package / asset | Licence evidence | Commercial implication | Options |
-| :--- | :--- | :--- | :--- |
-| ultralytics 8.4.87 | Metadata: AGPL-3.0. Ultralytics licence page: YOLO models are AGPL-3.0 by default; closed-source/commercial use requires a paid Enterprise licence | Closed-source distribution **not permitted** without an Enterprise licence; network use triggers AGPL source obligations | Keep optional; obtain Enterprise licence, or replace with a permissively licensed detector |
-| `yolov8n.pt` (local, git-ignored, not tracked) | Ultralytics weights, AGPL-3.0 per Ultralytics | As above; not downloaded unless the file already exists or `MEMORA_ALLOW_MODEL_DOWNLOAD=1` | Do not ship |
-| insightface 1.0.1 (code) | README: code under MIT, "no limitation for both academic and commercial usage"; metadata declares no licence | Code permitted | — |
-| InsightFace pretrained models, incl. **`assets/models/scrfd_500m_bnkps.onnx` (tracked in git)** | README: training data "and the models trained with these data are available for non-commercial research purposes only"; commercial licensing via InsightFace (contacts listed in their README) | **Non-commercial only.** The file is publicly redistributed by this repository today | Owner decision: stop tracking/redistributing it (history keeps it), obtain a commercial licence, or replace. The main recogniser does not load it (it looks in `assets/`, not `assets/models/`); `src/vision/detector.py` does |
-| mediapipe 0.10.35 | Apache-2.0 | Permitted; check bundled model cards | Notice |
-| faster-whisper 1.2.1 | MIT | Permitted. Weights (`Systran/faster-whisper-tiny.en`, MIT per model card) are **not downloaded** unless `MEMORA_ALLOW_MODEL_DOWNLOAD=1`; otherwise only a pre-installed local copy is used (`local_files_only`) | Notice; record provenance of any bundled weights |
-| onnxruntime 1.27.0 | MIT | Permitted | Notice |
-| PyAudio 0.2.14 | MIT (links PortAudio, MIT) | Permitted | Notice |
-| SpeechRecognition 3.17.0 | BSD-3-Clause | Permitted | Notice. Imports `aifc`/`audioop`, removed from the standard library in Python 3.13 (affects the hardware install only) |
-| pyttsx3 2.99 | MPL-2.0 | Permitted; file-level copyleft on modifications to its files | Notice; publish modifications to MPL files if any |
-| face_recognition / dlib (optional fallback, not pinned) | Not installed in the verified environment | **Unverified** — check dlib model licences before use | — |
-
-### Optional: cloud (`requirements-cloud.txt`)
-| Package | Licence | Notes |
+## 1. The repository, its contributors and the competition
+| Question | Evidence | Status |
 | :--- | :--- | :--- |
-| google-genai 2.10.0 | Apache-2.0 | Use of the Gemini API is governed by Google's API terms (data handling, health-related use) — **review** before sending any personal data. MEMORA sends only transcripts for name extraction during identity learning, and only when **both** `MEMORA_ALLOW_CLOUD_LLM=1` and `GEMINI_API_KEY` are set (a key alone does nothing; commit 977d8ff) |
+| Repository licence | No `LICENSE` file; README states none has been chosen | **Open: owner decision (§5)** |
+| Visibility | Public on GitHub (checked 2026-10-20). Everything ever committed, including the files below, has been publicly distributed | Fact |
+| Contributors (commit authors, all branches) | Siddhant Patil (100 commits incl. this engineering work), Aayush Aade (17), Riddhi Gopalani (4), "Sidd_927" (1) | Each holds copyright in their own contributions unless they assigned it. **Interpretation:** relicensing needs every contributor's written agreement or an assignment |
+| Competition terms | README: "originally a Samsung Solve For Tomorrow competition entry". The programme country and edition are **not recorded**. Published terms differ by country: the US 2024/25 rules say entries "become the property of the Sponsor"; the UK terms say participants own their submissions; India's 2025 FAQ says participants remain sole owners | **Open: owner must identify the programme and read its rules** before any licence is granted |
 
-### Development only
-pytest 9.1.1 (MIT), ruff 0.14.0 (MIT) — not distributed.
+## 2. Component register
+Legend for "Reaches users": **core** = `requirements.txt` (default install and Docker image);
+**hardware** / **cloud** = optional requirements files; **repo** = redistributed as a tracked
+file in the public repository; **runtime download** = fetched while running.
 
-## 3. What can be in a core commercial build today (engineering view)
-- **Include:** text conversation, memory, reminders, data controls, diagnostics,
-  backup/restore, simulation (all core-permissive).
-- **Exclude or license first:** YOLO object detection (AGPL), InsightFace models
-  (non-commercial), any face-recognition model whose weight licence is unverified.
-- **Review:** Gemini API terms for health-adjacent data; FFmpeg components bundled
-  in OpenCV wheels if redistributing binaries.
+### 2a. Tracked assets
+| Component | Terms (source) | Reaches users | In Docker image | Restrictions / open questions | Recommended action |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `assets/models/scrfd_500m_bnkps.onnx` (InsightFace SCRFD detector, 2,524,155 bytes, SHA-256 `a3562ef6…`; added by Aayush Aade in `f7f8622`) | **Verified** (InsightFace README): code is MIT, but training data "and the models trained with these data are available for non-commercial research purposes only", including models downloaded manually. Commercial licensing via InsightFace (recognition models: `recognition-oss-pack@insightface.ai`) | **repo** (public). Code loads it only from `src/vision/detector.py` (developer diagnostic `--vision-standalone`, which requires `--live-hardware`); the live recogniser looks for `assets/scrfd_500m_bnkps.onnx`, a different path, so it never loads it | No (`assets/` is not copied) | Redistribution in a public repository is outside "non-commercial research" for any commercial actor. **Interpretation:** continuing to host it is a risk even for a non-commercial project | Owner decision D1 (§4) |
+| `assets/images/banner.png` (1024×1024 JPEG, 566,583 bytes; added by Aayush Aade, 2 Jul 2026, `575afef`) | **Verified from embedded C2PA content credentials** (read, signature not cryptographically validated): signed by Google C2PA certificates, action `c2pa.created` "Created by Google Generative AI", source type `trainedAlgorithmicMedia`, then "Applied imperceptible SynthID watermark"; timestamp 2026-07-01 | **repo** only; no longer referenced by README (its link was removed in `f7f8622`) | No | AI-generated by a Google product. Which product and account were used, and under which terms, is unknown. **Interpretation:** copyright protection for purely AI-generated images is uncertain in many jurisdictions; Google's generative-AI terms generally leave output to the user but carry use policies | D4: record which tool/account made it, or remove/replace it |
+| Dashboard web fonts (Inter, JetBrains Mono via Google Fonts) | — | Was a browser request to `fonts.googleapis.com` when `--dashboard` opened | — | Undisclosed third-party request | **Done** (`b978dfd`): removed; system fonts used |
+| `validation/artifacts/*` (tracked) | Project's own output | repo | No (`.dockerignore`) | Checked: synthetic test events only ("Test_Session") | None |
 
-## 4. Blocked or decision-required items (updated in the remediation mission)
-Nothing below has been activated, licensed, or cleared. MEMORA is not legally cleared for
-commercial distribution.
+### 2b. Core runtime (`requirements.txt`) — default install and Docker image
+| Package | Version | Terms (metadata / wheel) | Obligations / notes | Action |
+| :--- | :--- | :--- | :--- | :--- |
+| numpy | 2.4.6 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | Keep notices | Notices file at release |
+| SQLAlchemy | 2.0.51 | MIT | Notice | Notices file |
+| faiss-cpu | 1.14.3 | MIT | Notice | Notices file |
+| opencv-python | 5.0.0.93 | Apache-2.0 (OpenCV); wheel ships `LICENSE-3RD-PARTY.txt` | **Verified by wheel inspection:** the Linux wheel bundles Qt 5.15 (LGPL) and FFmpeg incl. `libavdevice` (LGPL), 40 libraries; `opencv-python-headless` bundles no Qt and no `libavdevice` (15 libraries). **Interpretation:** distributing the Docker image means honouring LGPL terms for these libraries | Before publishing any image, build it with `opencv-python-headless` (the text product needs no GUI). Not changed now: hardware dependencies (insightface, ultralytics) require `opencv-python`, and OpenCV advises one OpenCV package per environment |
+| psutil | 7.2.2 | BSD-3-Clause | Notice | Notices file |
+| pydantic | 2.13.4 | MIT | Notice | Notices file |
+| websockets | 16.0 | BSD-3-Clause | Notice | Notices file |
+| Base image `python:3.11-slim` + `libgl1`, `libglib2.0-0` | Debian packages under their own licences | Docker image | Image not published | Generate an SBOM before any publication |
 
-| Item | Where it appears | Status | Decision needed |
-| :--- | :--- | :--- | :--- |
-| `assets/models/scrfd_500m_bnkps.onnx` (InsightFace SCRFD, 2,524,155 bytes, sha256 a3562ef62592bf38…) | tracked in git (public); loaded only by `src/vision/detector.py`, used by the developer diagnostic `--vision-standalone`, which since 5583a4c refuses to run without `--live-hardware`; the main recogniser looks in `assets/` and so does not load it | **Blocked for commercial use** (non-commercial research licence per InsightFace README) | Stop tracking/redistributing (it stays in public history), obtain a commercial licence, or replace |
-| InsightFace auto-downloaded models (any `insightface` model zoo use) | `requirements-hardware.txt` path | **Blocked for commercial use** | Same as above |
-| `ultralytics` + `yolov8n.pt` | `src/memory/object_ledger.py`; weights local, untracked | **Blocked for closed-source use** (AGPL-3.0; Enterprise licence needed) | Enterprise licence, AGPL compliance, or replacement detector |
-| `Systran/faster-whisper-tiny.en` | used by `faster-whisper` (hardware install) | Model card states MIT (converted from openai/whisper-tiny.en). Download is now **off by default** and opt-in via `MEMORA_ALLOW_MODEL_DOWNLOAD=1` (C2-22 closed, 977d8ff) | Decide whether to bundle a pre-downloaded copy with recorded provenance |
-| dlib / `face_recognition` models | optional fallback, not installed | **Unverified** | Check model licences before enabling |
-| Gemini API | `requirements-cloud.txt`, identity learning only; requires `MEMORA_ALLOW_CLOUD_LLM=1` and a key | **Externally unverified**; API terms not reviewed | Counsel review before sending any personal data |
-| `assets/images/banner.png` (1024×1024 JPEG, tracked) | README banner; added in f7f8622 | **Provenance unrecorded** (author, tool or licence unknown) | Record its origin, or replace with an asset of known licence |
-| Repository licence | none | **Blocked** | Choose with all contributors' written agreement |
-| Deployment paths | Core install and the Docker image include none of the blocked assets (image copies no `assets/`) | Core path has no identified blocker beyond the repository licence | — |
+All core components carry permissive or weak-copyleft (LGPL, bundled) terms; none is
+non-commercial or AGPL. The core install and the Docker image contain none of the restricted
+components (evidence in §3).
 
-## 5. Evidence that the default build does not depend on restricted assets
-- `requirements.txt` contains only the permissive packages in section 2; `insightface`,
-  `ultralytics`, `mediapipe`, `onnxruntime`, `faster-whisper` and `google-genai` are in
-  optional files only.
-- The Docker image copies no `assets/` directory and installs `requirements.txt` only
-  (`deployment/docker/Dockerfile`); `.dockerignore` excludes `*.pt`.
-- The full test suite and all simulated journeys run in clean environments built from
-  `requirements.txt` + `requirements-dev.txt` (Python 3.11 venv; 3.12 and 3.13 containers)
-  in which none of the restricted packages is installed — see `docs/RELEASE_GATES.md`
-  for the exact commit and commands.
-- No default code path downloads model weights (socket-level tests,
-  `tests/test_network_policy.py`).
+### 2c. Optional hardware (`requirements-hardware.txt`) — never in the image
+| Component | Version | Terms (source) | Reaches users | Restrictions / notes | Action |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| ultralytics | 8.4.87 | **Verified:** metadata AGPL-3.0; Ultralytics licence page says AGPL-3.0 applies by default to code and models and that closed-source, commercial, internal-business, SaaS and embedded use need an Enterprise licence | hardware | Used only by `src/memory/object_ledger.py`, and only if installed **and** weights exist (or downloads are allowed). Ultralytics' description of AGPL obligations is their interpretation; the AGPL text governs | D2 |
+| `yolov8n.pt` | — | AGPL-3.0 per Ultralytics | local file, git-ignored, never tracked or in the image; not downloaded unless `MEMORA_ALLOW_MODEL_DOWNLOAD=1` | As above | Do not distribute (D2) |
+| insightface (code) | 1.0.1 | MIT per README (metadata declares none) | hardware | Only the SCRFD class is imported. The recogniser never had a working InsightFace backend (`b00922f`) | — |
+| mediapipe | 0.10.35 | Apache-2.0 | hardware | Its legacy FaceMesh API used by MEMORA is absent in this version, so it is unused (`b00922f`) | Remove or port (D3) |
+| onnxruntime | 1.27.0 | MIT | hardware | — | Notice |
+| faster-whisper | 1.2.1 | MIT | hardware | Imported only on first transcription (`8d4ba7d`) | Notice |
+| av (PyAV, dependency of faster-whisper) | 18.0.0 | BSD-3-Clause; bundles FFmpeg (LGPL) | hardware | Duplicate `libavdevice` with OpenCV on macOS (R-09; `docs/HARDWARE_TEST_CHECKLIST.md`) | Notice; LGPL terms if redistributed |
+| ctranslate2 / huggingface-hub / tokenizers | 4.8.1 / 1.24.0 / 0.23.1 | MIT / Apache-2.0 / (metadata empty; upstream Apache-2.0, unverified here) | hardware | — | Verify tokenizers at release |
+| Whisper model `Systran/faster-whisper-tiny.en` | — | **Verified:** model card "License: mit"; converted from `openai/whisper-tiny.en`, whose card says **apache-2.0** (the two cards disagree; both permissive) | **runtime download only with `MEMORA_ALLOW_MODEL_DOWNLOAD=1`**; otherwise a local copy only (`local_files_only`) | Apache-2.0 notice obligations if bundled | Record source and checksum if a copy is ever bundled |
+| PyAudio | 0.2.14 | MIT (PortAudio MIT) | hardware | — | Notice |
+| SpeechRecognition | 3.17.0 | BSD-3-Clause | hardware | Online recognisers (Google) only with `MEMORA_ALLOW_CLOUD_ASR=1` + voice consent; imports `aifc`/`audioop`, absent in Python 3.13 | Notice |
+| pyttsx3 | 2.99 | MPL-2.0 | hardware | File-level copyleft on modified files | Publish modifications if any |
+| dlib `face_recognition` + models (not installed; candidate backend) | — | **Verified** (dlib-models repo): `dlib_face_recognition_resnet_model_v1` and `shape_predictor_5_face_landmarks` are public domain / CC0; `shape_predictor_68_face_landmarks` is trained on iBUG 300-W, whose licence "excludes commercial use" | not installed | `face_recognition` uses the 5-point model for encodings (interpretation: avoid the 68-point model in commercial use) | Option for D3 |
+| OpenCV Zoo YuNet (detection) / SFace (recognition) (not used; candidate replacement) | — | **Verified:** YuNet directory "licensed under MIT License"; SFace directory "licensed under Apache 2.0 License". Neither page names its training data | not installed | Training-data provenance is a question for counsel | Option for D1/D3 |
 
-## 6. Repository licence: options for the owner (no choice has been made)
-A licence can only be granted by the copyright holders. The history has several
-contributors and the project began as a competition entry, so every option below
-first needs (a) agreement from all contributors (or assignment) and (b) a check of the
-competition terms.
+### 2d. Optional cloud (`requirements-cloud.txt`)
+| Component | Terms (source) | Reaches users | Restrictions | Action |
+| :--- | :--- | :--- | :--- | :--- |
+| google-genai SDK 2.10.0 | Apache-2.0 | cloud | — | Notice |
+| Gemini API service | **Verified** (Gemini API Additional Terms): users must be 18+; on Unpaid Services Google may use prompts and responses to improve products and human reviewers may read them, and the terms say "Do not submit sensitive, confidential, or personal information" there; the Services may not be used in clinical practice, to give medical advice, or where medical-device clearance is required; apps offered to users in the EEA, Switzerland or the UK may use Paid Services only | Only with `MEMORA_ALLOW_CLOUD_LLM=1` **and** a key, plus memory and faces consent; sends the introduction transcript (names, relationships) | **Interpretation:** MEMORA's Gemini use (personal names from people with memory difficulties) is incompatible with the Unpaid Services terms, and needs counsel review even on Paid Services | D5 |
+
+## 3. Evidence that the default build does not depend on restricted components
+- `requirements.txt` contains only the §2b packages. `tests/test_network_policy.py` (socket
+  interception) shows no default path downloads anything.
+- `deployment/docker/Dockerfile` installs `requirements.txt` only and copies no `assets/`;
+  `.dockerignore` excludes `*.pt`, databases, face files and validation artifacts.
+- Clean environments with core + dev dependencies only (Python 3.11 venv; 3.12/3.13
+  containers; CI on 3.11/3.12/3.13) pass the full suite and all journeys. The 3.11 venv was
+  checked to contain none of insightface, ultralytics, faster-whisper, google-genai, mediapipe
+  or SpeechRecognition (`docs/RELEASE_GATES.md`).
+- The live recogniser never loads the tracked SCRFD file (path mismatch), and the only
+  loader (`--vision-standalone`) requires `--live-hardware`.
+
+## 4. Decisions required from the owner (no option has been taken)
+| ID | Issue | Options and consequences |
+| :--- | :--- | :--- |
+| D1 | InsightFace SCRFD model publicly redistributed | (a) **Stop tracking it** in a new commit (`git rm --cached`, keep a private copy): future clones stop receiving it, but it stays in public history and existing forks. Purging history needs a force-push, which rewrites shared history and is explicitly not done without you. (b) Obtain a commercial licence from InsightFace. (c) Replace it with OpenCV YuNet (MIT); nothing in the default path depends on SCRFD. (d) Keep it, accepting the non-commercial-only risk. **Engineering recommendation: (a) and, if a detector is needed, (c).** |
+| D2 | Ultralytics YOLO (AGPL-3.0) | (a) Keep optional and never distribute it (current state; the core product does not need it). (b) Release the whole project under AGPL-3.0. (c) Buy an Enterprise licence. (d) Replace it with a permissively licensed detector. **Recommendation: (a) now; (d) if object detection becomes a product feature.** |
+| D3 | No working real face-recognition backend | (a) dlib `face_recognition` with CC0 models (avoid the 68-point model commercially). (b) OpenCV YuNet + SFace (MIT/Apache-2.0; training data unknown). (c) Licensed InsightFace models. Each needs hardware testing and a biometric-privacy review. |
+| D4 | `banner.png` provenance | (a) Ask the contributor which Google tool/account created it and record it here. (b) Remove it (it is unused). (c) Replace it with an image of known provenance. |
+| D5 | Gemini API | (a) Keep disabled (current default) and remove it from any pilot. (b) Use Paid Services only, after counsel reviews health-adjacent use and data handling. **Recommendation: (a).** |
+| D6 | Repository licence | Options in §5; needs all contributors and the competition rules (§1) |
+| D7 | Release notices | Generate `THIRD_PARTY_NOTICES` and an SBOM from the exact build before any distribution |
+
+## 5. Repository licence: options for the owner (no choice has been made)
+A licence can only be granted by the copyright holders, so every option first needs
+(a) written agreement from all contributors (or assignment) and (b) the competition rules (§1).
 
 | Option | What it allows others | Fit with current dependencies | Main trade-off |
 | :--- | :--- | :--- | :--- |
-| Keep "all rights reserved" (no licence; current state) | Viewing only; no right to use, copy or modify | No conflict | Public but unusable by others; collaborators lack clear rights |
+| Keep "all rights reserved" (current state) | Viewing only; no right to use, copy or modify | No conflict | Public but unusable by others; collaborators lack clear rights |
 | Proprietary licence / commercial EULA (optionally making the repository private) | Only what the owner grants | Requires removing or commercially licensing YOLO (AGPL) and InsightFace models | Code already published stays visible in history and forks |
-| Permissive (MIT or Apache-2.0) | Use, modify, sell, incl. closed-source | Core dependencies all compatible; AGPL/non-commercial optional components must stay optional or be replaced | Competitors may reuse the code commercially; Apache-2.0 adds an explicit patent grant |
-| Strong copyleft (GPL-3.0 or AGPL-3.0) | Use and modify if derivatives are released under the same licence | AGPL-3.0 is compatible with Ultralytics' AGPL; does not fix InsightFace's non-commercial model terms | Limits closed-source commercial partners; AGPL also covers network use |
-| Source-available, non-commercial (e.g. PolyForm Noncommercial) | Study and non-commercial use only | Matches InsightFace model terms | Not an open-source licence; commercial use requires a separate agreement |
+| Permissive (MIT or Apache-2.0) | Use, modify, sell, incl. closed-source | Core dependencies compatible; AGPL and non-commercial components must stay optional or be replaced | Competitors may reuse the code commercially; Apache-2.0 adds an explicit patent grant |
+| Strong copyleft (GPL-3.0 or AGPL-3.0) | Use and modify if derivatives use the same licence | AGPL-3.0 is compatible with Ultralytics' AGPL; does not fix InsightFace's non-commercial model terms | Limits closed-source partners; AGPL also covers network use |
+| Source-available, non-commercial (e.g. PolyForm Noncommercial) | Study and non-commercial use only | Matches InsightFace model terms | Not open source; commercial use needs a separate agreement |
 
-Patent note: public disclosure since the repository became public may affect patent
-filings for described mechanisms; this is for counsel, not engineering, to assess.
+Patent note: public disclosure may affect patent filings for described mechanisms; this is
+for counsel to assess.
 
-## 7. Recommendations
-1. Choose a repository licence or proprietary terms, with all contributors' written agreement.
-2. Decide whether to stop tracking `assets/models/scrfd_500m_bnkps.onnx` (it remains in
-   public history either way) and how to source a commercially usable face model.
-3. Generate a third-party notices file from installed metadata at release time.
-4. Have counsel confirm items marked **review** before any distribution or paid pilot.
+## 6. Sources (read 2026-10-21)
+InsightFace README (github.com/deepinsight/insightface); Ultralytics licence page
+(ultralytics.com/license); Gemini API Additional Terms (ai.google.dev/gemini-api/terms);
+Hugging Face model cards `Systran/faster-whisper-tiny.en` and `openai/whisper-tiny.en`;
+dlib-models (github.com/davisking/dlib-models); OpenCV Zoo `face_detection_yunet` and
+`face_recognition_sface`; PyAV issue #2215; Samsung Solve for Tomorrow terms (US 2024/25 rules
+PDF, UK terms, India 2025 FAQ, South Africa 2026 terms); wheel contents of opencv-python,
+opencv-python-headless and av; C2PA manifest embedded in `banner.png`.
