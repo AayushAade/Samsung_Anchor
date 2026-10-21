@@ -14,7 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# The text product needs no GUI: install the same OpenCV version as the headless build,
+# which bundles no Qt and no FFmpeg device library (fewer LGPL components to redistribute).
+RUN sed 's/^opencv-python==/opencv-python-headless==/' requirements.txt > /tmp/requirements-image.txt \
+    && pip install --no-cache-dir -r /tmp/requirements-image.txt
 
 COPY app.py health_check.py inspect_database.py ./
 COPY config/ ./config/
@@ -23,6 +26,9 @@ COPY src/ ./src/
 COPY deployment/ ./deployment/
 COPY experience/ ./experience/
 COPY validation/ ./validation/
+
+# Licence notices and a CycloneDX SBOM for exactly what is installed in the image.
+RUN python deployment/generate_notices.py /app/licenses
 
 RUN useradd --create-home --uid 10001 memora && mkdir -p /data /app/data/logs \
     && chown -R memora /data /app/data
