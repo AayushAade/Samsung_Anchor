@@ -18,9 +18,14 @@ localhost:8765, origin allow-list).
 microphone and speaker adapters are constructed only when `--live-hardware` is given;
 otherwise every construction path (factory, coordinator, pipeline defaults) uses
 `RuntimeMode.SIMULATION`, whatever `MEMORA_PROFILE` says. `--vision-standalone` also requires
-`--live-hardware`. The face recogniser selects only implemented, importable backends; on
-real frames with none available it reports `unavailable` and detects nothing (the `mock`
-backend, which fabricates a face per frame, is used only in simulation).
+`--live-hardware`. The face recogniser selects only implemented, importable backends: first
+`sface` (OpenCV YuNet detection + SFace 128-D features), used only when owner-provisioned
+model files match pinned SHA-256 values (`src/vision/face_models.py`; nothing is shipped or
+downloaded), then dlib or MediaPipe if present. On real frames with none available it reports
+`unavailable` and detects nothing; the `mock` backend, which fabricates a face per frame, is
+used only in simulation. Matching (`MemoraDatabase.match_face`) returns match, ambiguous or
+none; ambiguous faces are never named or enrolled. Without `faces` consent no embedding is
+computed.
 
 **Diagnostics** (`--check`) are read-only: the user database is checked on a temporary copy.
 Speech recognition imports faster-whisper/PyAV only on the first transcription.

@@ -4,6 +4,23 @@ Persistent record of findings and work in progress, so an interrupted session
 does not repeat work. Newest cycle first. Severity: P0 safety/data/privacy,
 P1 core product, P2 reliability, P3 usability/commercial.
 
+## Face-recognition and release-blocker mission — 2026-10-21
+
+Start: HEAD `54b6712` synced; CI green on it; product code last changed in `2990621`; 16
+untracked owner files present. No process had the owner database open.
+
+| ID | Sev | Finding | Evidence | Status | Test |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| G-01 | P1 | F-04 incident needed a verified recovery record | read-only metadata, SHA-1/SHA-256, row-level comparison on disposable copies | done `6cf2032` (`docs/DATABASE_INCIDENT_RECORD.md`); **restoration awaits owner** | — |
+| G-02 | P0 | No working face-recognition backend | F-07 | implemented `7346491`: YuNet + SFace (core OpenCV), pinned checksums, owner provisioning, consent before embedding; **inactive until D3** | test_face_recognition_sface (15) |
+| G-03 | P1 | Nearest-only matching could name the wrong person when two stored people are similar; candidates enrolled without re-checking | code review | fixed `7346491` (ambiguous → "Not sure who this is"; re-check before enrolment) | ambiguity test (mutation-checked) |
+| G-04 | P2 | Docker image bundled Qt and FFmpeg device libraries it does not need; no notices or SBOM | wheel and image inspection | fixed `067f92d` | test_generate_notices; image inspected |
+| G-05 | P2 | Odd-length PCM crashed transcription; VAD discarded such chunks; mic energy calc mismatch | probe | fixed `b1028dc` | test_voice_path_offline |
+| G-06 | P3 | Runtime status never reported speech-recognition availability with a real microphone | code review | fixed `b1028dc` | same |
+| G-07 | P3 | `/consent faces off` did not mention face data already stored | probe | fixed `5c4fdf6` | test_revoking_face_consent_says_what_happens_to_stored_face_data |
+| G-09 | P2 | After `/export` + `/delete-all` the export file (full copy of personal data) remained and the reply mentioned only `--backup` copies | Docker persistence run | fixed `7c96988` (reply names remaining export files) | test_delete_all_tells_the_person_that_their_export_file_still_exists |
+| G-08 | info | Memory consolidator stores LLM-extracted "semantic" facts; with the default mock client nothing is stored | code + test | guarded by test `5c4fdf6`; **risk if a real LLM is connected**: inferred facts would need their own label | test_identity_learning_stores_no_inferred_knowledge_by_default |
+
 ## Final completion mission — 2026-10-21 (same branch, PR #1 draft)
 
 Start: HEAD `e5c582b` synced; CI on `e5c582b` green (8/8 jobs: core 3.11/3.12/3.13 and docker,

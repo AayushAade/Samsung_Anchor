@@ -1,77 +1,93 @@
 # Hardware Test Checklist (not yet executed)
 
-_Prepared 2026-10-21. No step below has been run: real devices were not used in engineering
-work, by instruction. Run this only with the owner's explicit authorisation, on a named
-machine, with consenting adults, and with synthetic or consented data._
+_Updated 2026-10-21. No step below has been run: no camera, microphone or speaker was used
+in engineering work, by instruction. Run this only with the owner's explicit, written
+authorisation, on a named machine, with consenting adults, using a separate test database.
+Text-mode behaviour is covered by automated tests; this checklist covers only what needs
+real devices._
 
-## 0. Preconditions
-- [ ] Owner authorisation recorded (who, which machine, date).
-- [ ] Separate data location, never the project-folder database:
-      `export MEMORA_DB_PATH=~/memora-data/hwtest/memora.sqlite MEMORA_LOG_DIR=~/memora-data/hwtest/logs`
-- [ ] `pip install -r requirements-hardware.txt` in a dedicated virtual environment; record
-      `pip freeze` in the test log.
-- [ ] Licence decisions taken for any model that will be loaded (`docs/LICENSING_REVIEW.md`):
-      InsightFace models (non-commercial), YOLO (AGPL). If not decided, do not load them.
-- [ ] Network: leave every `MEMORA_ALLOW_*` unset unless that specific item is under test.
-      If the speech model is not on disk, download it once with
-      `MEMORA_ALLOW_MODEL_DOWNLOAD=1` and record its source and checksum.
-- [ ] `python app.py --check` (with the variables above): record every WARN line.
+## 0. Prerequisites
+| # | Item | Command / action | Expected |
+| :--- | :--- | :--- | :--- |
+| 0.1 | Authorisation recorded | who, which machine, date, which sections | written approval |
+| 0.2 | Licence decisions for any model to be loaded | `docs/LICENSING_REVIEW.md` D1–D3 | decided; otherwise skip §2 |
+| 0.3 | Dedicated environment | `python3.11 -m venv .venv-hw && .venv-hw/bin/pip install -r requirements-hardware.txt` | installs; save `pip freeze > hw-freeze.txt` |
+| 0.4 | Separate data folder (never the project-folder DB) | `python deployment/create_dev_database.py ~/memora-data/hwtest` then `export MEMORA_DB_PATH=~/memora-data/hwtest/memora.sqlite MEMORA_LOG_DIR=~/memora-data/hwtest/logs` | "Created and verified … 0 personal rows" |
+| 0.5 | Network stays off | leave all `MEMORA_ALLOW_*` unset | — |
+| 0.6 | Face models (only if 0.2 allows) | download the files yourself from opencv_zoo, then `python deployment/provision_face_models.py --from <folder>` | "Installed and verified …" for a detector and `face_recognition_sface_2021dec.onnx` |
+| 0.7 | Speech model (optional) | if not on disk, run once with `MEMORA_ALLOW_MODEL_DOWNLOAD=1`; record source and checksum | model in the Hugging Face cache |
+| 0.8 | Diagnostics | `python app.py --check` | Network Use: PASS "Nothing"; Face Recognition Models: PASS (if 0.6); Media Libraries: WARN on macOS (R-09) |
+| 0.9 | Baseline checksum of the test DB | `shasum -a 256 ~/memora-data/hwtest/memora_v2.sqlite` | recorded |
 
 ## 1. Device activation is explicit
-- [ ] `python app.py --chat`: macOS shows **no** camera or microphone indicator.
-- [ ] `python app.py --simulation --max-cycles 5`: no device indicator.
-- [ ] `MEMORA_PROFILE=LAPTOP python app.py --max-cycles 5`: no device indicator (profile alone must not enable devices).
-- [ ] `python app.py --vision-standalone`: exits with code 2 and opens nothing.
-- [ ] `python app.py --live-hardware --max-cycles 20`: camera indicator on during the run and
-      off afterwards; microphone only after `/consent voice on` in a prior chat session.
+| # | Command | Expected |
+| :--- | :--- | :--- |
+| 1.1 | `python app.py --chat`, type `/quit` | no camera or microphone indicator |
+| 1.2 | `python app.py --simulation --max-cycles 5` | no device indicator |
+| 1.3 | `MEMORA_PROFILE=LAPTOP python app.py --max-cycles 5` | no device indicator (a profile alone never enables devices) |
+| 1.4 | `python app.py --vision-standalone` | exits with code 2; opens nothing |
+| 1.5 | `python app.py --live-hardware --max-cycles 20` | camera indicator on during the run, off afterwards; the status table lists Camera, Audio, Speech Recognition, Face Recognition with honest states |
 
-## 2. Consent with real sensors
-- [ ] Without `/consent faces on`: a face in view is not enrolled (`python app.py --show-memory` shows no new people).
-- [ ] With faces and memory consent: one enrolment; `--show-memory` lists it; `/delete-all` in chat removes it and its face files.
-- [ ] Without `/consent voice on`: identity learning does not open the microphone.
-- [ ] With `MEMORA_ALLOW_CLOUD_ASR` unset: no connection to Google speech services (check with
-      a network monitor such as Little Snitch, or `nettop -p <pid>`).
+## 2. Face recognition (only after D3 and with consenting adults)
+| # | Step | Expected |
+| :--- | :--- | :--- |
+| 2.1 | Without `/consent faces on`, a person in view for 30 s | label "Face recognition is off (no consent)"; `python app.py --show-memory` shows no new people |
+| 2.2 | `/consent memory on` and `/consent faces on` in chat; one person in view ≥ 15 stable frames | exactly one anonymous person enrolled |
+| 2.3 | Same person leaves and returns | recognised as the same id; no new person |
+| 2.4 | A second consenting person | a different id; never named as the first |
+| 2.5 | Two people who look alike (if available) | "Not sure who this is" rather than a wrong name |
+| 2.6 | Poor light / far away | ignored or "Detecting…", never a wrong name |
+| 2.7 | `/consent faces off` | matching stops at once; reply states stored face data is kept |
+| 2.8 | `/delete-all` | `--show-memory` shows no people; face files emptied |
+| 2.9 | Record false-match and missed-match counts | input for calibrating `SFACE_MATCH_TOLERANCE` (currently 1.0, uncalibrated) |
 
-## 3. Audio and speech
-- [ ] Speech output is audible and is not spoken twice.
-- [ ] Recorded speech is transcribed locally; the transcript is shown only in the debug log when memory consent is on.
-- [ ] Urgent phrases spoken aloud ("I fell", "I can't breathe") produce urgent guidance.
+## 3. Microphone, speech and speaker
+| # | Step | Expected |
+| :--- | :--- | :--- |
+| 3.1 | `--live-hardware` without `/consent voice on` | identity learning does not open the microphone |
+| 3.2 | With voice consent, `MEMORA_ALLOW_CLOUD_ASR` unset | no connection to Google (`nettop -p <pid>` or a firewall log); typing fallback only in a terminal |
+| 3.3 | Status table with speech model absent | at start-up "Speech Recognition: WARNING (… loads on first use (must already be on this computer) …)"; after the first speech attempt "FAILED (… not available locally …)" |
+| 3.4 | With local model present, speak 10 sentences | transcripts appear in the debug log only when memory consent is on |
+| 3.5 | Spoken urgent phrases ("I fell", "I can't breathe") | urgent guidance |
+| 3.6 | Speaker output | audible once (no double speech); with no audio backend the status says so |
 
 ## R-09. PyAV / OpenCV duplicate `libavdevice` (macOS)
-**What is known.** `av` 18.0.0 bundles `libavdevice.62.3.102.dylib` and `opencv-python`
-5.0.0.93 bundles `libavdevice.61.3.100.dylib`. Both define the Objective-C classes
-`AVFFrameReceiver` and `AVFAudioReceiver`, so loading both in one process prints a
-duplicate-class warning. Upstream PyAV issue #2215 was closed "not planned". One other project
-(pollen-robotics/reachy-mini-desktop-app #176) suspected it of causing a SIGTRAP crash, but its
-maintainer later attributed that crash to code signing and bundling, and another user saw only
-the warning. No crash confirmed to come from this conflict has been found (sources read
-2026-10-21).
-`opencv-python-headless` 5.0.0.93 bundles the same `libavdevice.61.3.100.dylib`, so switching
-to it does not remove the conflict (wheel contents inspected 2026-10-21).
+**Known.** `av` 18.0.0 bundles `libavdevice.62.3.102.dylib` and `opencv-python` 5.0.0.93
+bundles `libavdevice.61.3.100.dylib`; both define `AVFFrameReceiver` and `AVFAudioReceiver`.
+Loading both prints a duplicate-class warning. PyAV issue #2215 was closed "not planned". One
+other project's crash was suspected and later attributed by its maintainer to code signing.
+`opencv-python-headless` bundles the same `libavdevice` on macOS (wheel inspected), so it does
+not help there. On Linux, the headless wheel (used in the Docker image) bundles no
+`libavdevice`.
 
-**What MEMORA does.** Text chat, simulation and `--check` never import PyAV
-(`tests/test_media_library_isolation.py`). In voice mode faster-whisper imports PyAV; MEMORA
-passes audio as NumPy arrays (PyAV's decoder is not called) and opens the camera through
-OpenCV's native AVFoundation backend first. By code reading, the duplicated classes (FFmpeg's
-AVFoundation capture device) are not used, but this is an inference, not a test result.
+**MEMORA.** Text chat, simulation and `--check` never import PyAV
+(`tests/test_media_library_isolation.py`). Voice mode imports PyAV through faster-whisper.
+MEMORA passes audio as arrays (PyAV's decoder is not called) and opens the camera through
+OpenCV's AVFoundation backend first. By code reading, the duplicated classes are unused; this
+is an inference, not a result.
 
-**What is unknown.** Whether a live session with camera and voice on the same process is
-stable on macOS.
-
-**Manual validation procedure.**
-- [ ] `python app.py --check` shows the "Media Libraries" warning (confirms both copies are present).
-- [ ] Run `python app.py --live-hardware` with camera and voice for 30 minutes, with at least
-      20 spoken turns and repeated face entry/exit. Record any `objc` messages, crashes (exit
-      code, `~/Library/Logs/DiagnosticReports/Python*.ips`) and freezes.
-- [ ] Repeat once after `pip install "av==<version whose libavdevice matches cv2>"` if such a
-      version exists (matching versions still warn, but may behave identically).
-- [ ] If any crash occurs: record it in `docs/EXECUTION_LEDGER.md` (R-09) and move speech
-      recognition into a separate process. That is a design change and needs owner approval.
+**Procedure.**
+- [ ] 0.8 shows the Media Libraries warning.
+- [ ] 30-minute `--live-hardware` run with camera and voice, ≥ 20 spoken turns, repeated face
+      entry/exit. Record `objc` messages, crashes (`~/Library/Logs/DiagnosticReports/Python*.ips`)
+      and freezes.
+- [ ] If a crash occurs: record it in `docs/EXECUTION_LEDGER.md` (R-09). Next step (needs owner
+      approval): run speech recognition in a separate process.
 
 ## 4. Stability
-- [ ] 2-hour live run; record memory use (Activity Monitor) at start, 1 h and 2 h; no growth trend.
-- [ ] Unplug or disable the camera during a run: MEMORA reports it and keeps running.
+- [ ] 2-hour `--live-hardware` run; memory use at 0, 60 and 120 minutes; no growth trend.
+- [ ] Disconnect the camera mid-run: status shows FAILED; MEMORA keeps running.
 
-## 5. Record keeping
-- [ ] Results, logs (with personal content removed), versions and dates in `docs/evidence/`.
-- [ ] Update `CAPABILITY_VERIFICATION_MATRIX.md` statuses only for what was actually observed.
+## 5. Cleanup and rollback
+- [ ] `/delete-all` in chat (test data), then remove `~/memora-data/hwtest` yourself if no longer needed.
+- [ ] Remove face models if the trial ends: delete `data/models/face/` (or `MEMORA_FACE_MODEL_DIR`).
+- [ ] Remove the environment: delete `.venv-hw`.
+- [ ] Revoke macOS camera/microphone permission for Terminal/Python if granted only for the test
+      (System Settings → Privacy & Security).
+- [ ] Rollback: nothing in the project folder or the owner's database is touched when 0.4 is
+      followed. Confirm the owner DB checksum is unchanged:
+      `shasum -a 256 memora_db_v2.sqlite` (expected value in `docs/DATABASE_INCIDENT_RECORD.md`).
+
+## 6. Recording results
+- [ ] Versions (`hw-freeze.txt`), dates, machine, results and logs (personal content removed) in `docs/evidence/`.
+- [ ] Update `CAPABILITY_VERIFICATION_MATRIX.md` only for what was actually observed.

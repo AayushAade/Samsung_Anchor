@@ -3,51 +3,39 @@
 _Last updated: 2026-10-21. This file records verified facts only. Where something
 was not run or not checked, it says so._
 
-## 0. Current state — final completion mission (2026-10-21)
+## 0. Current state — face-recognition and release-blocker mission (2026-10-21)
 
 **Git:** branch `fix/p0-data-isolation-and-safety`, pushed; no force-pushes or history
-rewrites; draft PR #1 open, not merged. Product code validated at `2990621`; later commits are
-documentation and test hygiene only. 16 untracked owner files (`validation/artifacts/session_*`)
-untouched.
+rewrites; draft PR #1 open, not merged. Final product code `7c96988`; later commits are
+documentation only. 16 untracked owner files (`validation/artifacts/session_*`) untouched.
 
-**Fixed in this mission** (`docs/EXECUTION_LEDGER.md` F-01…F-09):
-| Commit | Fix |
+**Done in this mission** (`docs/EXECUTION_LEDGER.md` G-01…G-08):
+| Commit | Change |
 | :--- | :--- |
-| `8296de8` | Identity evidence needs memory + faces consent at the storage layer; a conflicting name is never attributed to a confirmed person |
-| `64085cb` | `/export` contains every stored personal record |
-| `5f753f6` | `--check` is read-only (checks a temporary copy; never migrates or creates the database) |
-| `8d4ba7d` | Text mode never loads PyAV; macOS duplicate-`libavdevice` risk characterised; hardware checklist |
-| `b978dfd` | Dashboard loads nothing from the internet |
-| `b00922f` | Live face recogniser never fabricates faces from real frames; reports when no backend works |
-| `99ddcff` | Clean development database tool |
-| `2990621` | Where the person says they put things; places never stored as names; honest action boundaries |
-| `e1dabd3` | Licensing register with primary sources and decisions D1–D7 |
+| `6cf2032` | Database incident verified read-only; recovery decision record (`docs/DATABASE_INCIDENT_RECORD.md`) |
+| `7346491` | OpenCV YuNet + SFace face-recognition backend: pinned checksums, owner provisioning, no download, consent before any embedding, ambiguity → "Not sure who this is", no duplicate enrolment; inactive until models are provisioned (`docs/FACE_RECOGNITION.md`) |
+| `067f92d` | Docker image on headless OpenCV (no Qt, no `libavdevice`); licence notices and CycloneDX SBOM generated at build |
+| `b1028dc` | Voice path: odd-length audio no longer crashes or is dropped; speech-recognition availability in the runtime status |
+| `5c4fdf6` | Face-consent revocation states that stored face data is kept; adversarial journey tests |
+| `7c96988` | `/delete-all` names export files that still hold the person's data |
 
-**Verified** (full table and readiness by use: `docs/RELEASE_GATES.md`): dev suite 840 passed;
-fresh clone 3.11 836 passed / 4 skipped; clean 3.12 and 3.13 containers 834 passed / 6 skipped;
-journeys 20/20; ruff clean; Docker build, diagnostics and persistence; secret scan clean; CI
-green on `e5c582b`; CI on the final commit recorded in PR #1.
+**Verified:** see `docs/RELEASE_GATES.md` (dev suite 868 passed; clean 3.11 863 / 4 skipped;
+clean 3.12 and 3.13 861 / 6 skipped; journeys 20/20; Docker contents and persistence; CI on the
+final commit in PR #1).
 
-**Owner-data incident (F-04).** An engineering run of `python app.py --check` without
-`MEMORA_DB_PATH` migrated `memora_db_v2.sqlite` on 2026-10-21 06:01 (SHA-1 `26f38093…` →
-`972ed943…`; 0644 → 0600). A row-by-row comparison shows every existing row unchanged, with
-only additive changes (two empty tables, empty `source` columns, `schema_version=1`). A
-byte-identical pre-incident copy is at `~/memora_backups/20261021_pre-check-incident/`, and
-the owner backup `~/memora_backups/20261020/` is unchanged. The cause is fixed (`5f753f6`).
-**Nothing was restored.** To return the live file to its exact earlier state, run (only with
-your approval):
-`cp -p ~/memora_backups/20261021_pre-check-incident/memora_db_v2.sqlite memora_db_v2.sqlite`
+**Database (F-04):** the live `memora_db_v2.sqlite` is still in its migrated state (SHA-1
+`972ed943…`). The pre-incident copy is byte-identical to the original (SHA-1 `26f38093…`,
+matched by four independent copies), and the 29 Sep backup is unchanged. Nothing was
+restored; options and the exact procedure are in `docs/DATABASE_INCIDENT_RECORD.md`.
 
-**Open defects:** real face recognition does not work with the pinned hardware packages
-(F-07; decision D3). R-09 (macOS PyAV/OpenCV) is a known risk, not reproduced.
+**Face recognition:** implemented and tested with synthetic stand-ins. **Not active**: no
+model files are shipped, downloaded or provisioned. **Never tested** with real model files or
+a camera.
 
-**Not verified:** every real device path; Windows; live Gemini; runs longer than 20 minutes.
+**Not verified:** every real device path; Windows; live Gemini; R-09 on macOS; runs longer
+than 20 minutes.
 
-**Owner decisions** (details in `docs/LICENSING_REVIEW.md` §4 and `docs/RELEASE_GATES.md`): D1
-InsightFace model in the public repo; D2 YOLO/AGPL; D3 face-recognition backend; D4 banner
-provenance (Google generative-AI image); D5 Gemini; D6 repository licence (contributors and
-competition programme); D7 notices/SBOM; local DB (restore the pre-incident copy or keep);
-pilot and hardware-test authorisation; merging PR #1.
+**Owner decisions:** see `docs/RELEASE_GATES.md` §5 (prioritised).
 
 Software completion is not release authorisation.
 
@@ -202,6 +190,7 @@ ruff, the suite, journeys and `--check` on Python 3.11/3.12/3.13, plus a Docker 
 | `README.md` | Current (rewritten in this work) |
 | `docs/RELEASE_GATES.md`, `docs/EXECUTION_LEDGER.md`, `docs/PRIVACY_AND_CONSENT.md`, `docs/SAFETY_AND_LIMITATIONS.md` | **Current** |
 | `docs/HARDWARE_TEST_CHECKLIST.md`, `docs/PILOT_CHECKLIST.md` | **Current, prepared but not executed** |
+| `docs/DATABASE_INCIDENT_RECORD.md`, `docs/FACE_RECOGNITION.md` | **Current** |
 | `docs/certification/*` (RC1 certification, safety certification, production readiness, final engineering review) | **Historical / unsupported.** Written before this audit; claims (e.g. "479 passing", "ARCHITECTURE CERTIFIED", safety certification) were not reproducible: the suite could not run from a clean clone, the scenario validator never compared results, and safety behaviour was defective. Do not cite. |
 | `docs/clinical/clinical_evaluation_report.md` | Synthetic demo output (now labelled). Not clinical evidence. |
 | `deployment/deployment_guide.md`, `docs/DEPLOYMENT_GUIDE.md`, `docs/OPERATIONS_MANUAL.md` | Historical; not re-verified. Use README quick start. |

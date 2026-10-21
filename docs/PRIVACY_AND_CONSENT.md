@@ -7,7 +7,7 @@ _Enforced in code and verified by `tests/test_consent_policy.py`, `tests/test_co
 | Consent (`/consent …`) | Feature | Required for |
 | :--- | :--- | :--- |
 | `memory` | `CONVERSATION_STORAGE` | **Every** persistent personal record: facts and preferences, preferred name, conversation episodes, object sightings, medication schedules, appointments, reported doses, emergency number, trusted contact, identity-learning transcripts and derived knowledge |
-| `faces` | `FACE_RECOGNITION` | Matching or enrolling faces (biometric embeddings, identity records, name evidence). Identity learning also needs `memory` |
+| `faces` | `FACE_RECOGNITION` | Computing, matching or enrolling face embeddings (with the `sface` backend no embedding is even computed without it), identity records, name evidence. Identity learning also needs `memory`. Revoking it stops matching at once; face data already stored is kept until `/delete-all`, and MEMORA says so |
 | `voice` | `VOICE_RECORDING` | Recording from a real microphone. Online transcription additionally needs `MEMORA_ALLOW_CLOUD_ASR=1` |
 
 Consent is never assumed: every feature starts off. First use of `--chat` asks for `memory`

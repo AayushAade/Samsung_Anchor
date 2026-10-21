@@ -1,6 +1,6 @@
 # MEMORA — Capability Verification Matrix
 
-_Updated 2026-10-21 (final completion mission). Labels:_
+_Updated 2026-10-21 (face-recognition and release-blocker mission). Labels:_
 **IMPLEMENTED** code exists and is wired into a supported entry point ·
 **TESTED** automated tests exercise the real path with meaningful assertions ·
 **SIMULATED** verified only with simulated sensors/data ·
@@ -46,8 +46,10 @@ How to invoke: `python app.py --chat` (C), `--simulate` (S), `--check` (K), runt
 | End-to-end text product via CLI | TESTED | `app.py --chat/--backup/--check/--restore` | C | `test_cli_end_to_end.py` | Synthetic data only | Owner dogfooding |
 | Stability | SIMULATED | soak harness | `deployment/benchmarks/soak_runtime.py` | `docs/evidence/` (10–20 min soaks) | ≤ 20 min, simulated | Multi-hour soak; real hardware |
 | Clean development database | IMPLEMENTED, TESTED | `deployment/create_dev_database.py` | — | `test_create_dev_database.py` | — | — |
+| Voice-path robustness offline (odd-length audio, model failure, availability reporting) | TESTED | `speech_recognition_engine.py`, `voice_activity_detector.py`, runtime status | — | `test_voice_path_offline.py` | Offline only | Hardware checklist §3 |
+| Licence notices and SBOM in the Docker image | IMPLEMENTED, TESTED | `deployment/generate_notices.py`, Dockerfile | docker | `test_generate_notices.py`; built image inspected | Python packages only; no OS SBOM | D7 |
 | Camera, microphone, ASR, TTS | HARDWARE-UNVERIFIED | `src/runtime/*_adapter.py` | R `--live-hardware` | none on real devices (tests block real devices) | Never run on hardware in this work | Owner authorisation for device testing |
-| Face recognition (real faces) | **NOT WORKING**, BLOCKED (backend + licensing) | `face_recognizer.py` | R | `test_live_recognizer_without_a_working_backend_detects_nothing` | With `requirements-hardware.txt` no backend works (dlib not installed; the InsightFace backend was never implemented; MediaPipe 0.10.35 lacks FaceMesh). The recogniser now reports `FAILED (<reason>)` instead of fabricating faces (`b00922f`) | Owner decision D3 (`docs/LICENSING_REVIEW.md`), then hardware test |
+| Face recognition (real faces) | IMPLEMENTED (OpenCV YuNet + SFace), TESTED with synthetic stand-ins, **INACTIVE** until models are provisioned, HARDWARE-UNVERIFIED, BLOCKED (D3) | `face_recognizer.py` (`sface`), `face_models.py`, `deployment/provision_face_models.py` | R `--live-hardware` | `test_face_recognition_sface.py` (15: consent before embedding, enrolment, re-recognition, different person, weak/tiny faces, ambiguity, deletion, revocation, missing/unloadable/mismatched models, provisioning without network) | Real model files never loaded here; threshold uncalibrated; fairness unassessed. Without models: truthful `unavailable` | D3, then `docs/HARDWARE_TEST_CHECKLIST.md` §2 |
 | Object detection (real) | HARDWARE-UNVERIFIED, BLOCKED (licensing for YOLO) | `object_detector.py`, `object_ledger.py` | R | none | Contour heuristic; YOLO is AGPL-3.0 | Replace or license |
 | Gemini name extraction | EXTERNALLY-UNVERIFIED | `context_binder.py` | R (identity learning) | fake-client tests | No key; API terms need review | Owner-provided test key |
 | Dashboard (developer view) | IMPLEMENTED, TESTED (browser, synthetic events) | `experience/` | `--dashboard` | browser check with hostile input | Telemetry view, not a carer product | — |

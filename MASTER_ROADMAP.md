@@ -66,6 +66,15 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-21._
 | P2 | Clean development database tool | `99ddcff` |
 | P1 | "Where I put things", no place-as-name facts, honest action boundaries, "remind me who…" | `2990621` |
 
+## Done in the face-recognition and release-blocker mission (2026-10-21)
+| Pri | Item | Commit |
+| :--- | :--- | :--- |
+| P0 | Database incident verified read-only; recovery decision record | `6cf2032` |
+| P1 | OpenCV YuNet + SFace backend (checksum-verified, owner-provisioned, inactive by default); ambiguity handling | `7346491` |
+| P2 | Docker image on headless OpenCV; licence notices and SBOM generated at build | `067f92d` |
+| P2 | Voice path: odd-length audio, speech-recognition availability in status | `b1028dc` |
+| P2 | Face-consent revocation message; adversarial journey tests | `5c4fdf6` |
+
 ## Next
 
 ### Owner decisions (blocking)
@@ -79,8 +88,8 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-21._
 5. Merge PR #1 into `main` after review.
 
 ### P1 — product
-5a. A working, licence-cleared face-recognition backend (D3), then hardware testing
-    (`docs/HARDWARE_TEST_CHECKLIST.md`).
+5a. Decide D3, then validate the implemented YuNet + SFace backend with real model files on
+    authorised hardware (`docs/HARDWARE_TEST_CHECKLIST.md` §2) and calibrate its threshold.
 5b. Supervised technical pilot of the text product (`docs/PILOT_CHECKLIST.md`) once authorised.
 6. Voice mode end to end (local ASR, e.g. faster-whisper, instead of cloud) with consent,
    verified first with recorded audio fixtures, then on hardware.

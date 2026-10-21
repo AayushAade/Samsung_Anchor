@@ -1,19 +1,23 @@
 # Licensing and Asset-Provenance Review (engineering findings — not legal advice)
 
-_Updated 2026-10-21 (final completion mission). Method: tracked files (`git ls-files`),
+_Updated 2026-10-21 (face-recognition and release-blocker mission). Method: tracked files (`git ls-files`),
 dependency manifests, installed package metadata (`importlib.metadata`), wheel contents
 (inspected with `pip download`, not installed), model-loading code, the Docker build context,
 and the publishers' own pages (read 2026-10-21). "Verified" means the term is quoted from
 the publisher's page or file. "Interpretation" marks an engineering reading that counsel must
 confirm. **MEMORA is not cleared for commercial distribution.**_
 
+Evidence labels used below: **[F]** fact observed in this repository, its files or installed
+packages; **[U]** upstream claim (publisher's own statement, not independently verified);
+**[I]** engineering inference; **[Q]** open question for the owner or counsel.
+
 ## 1. The repository, its contributors and the competition
 | Question | Evidence | Status |
 | :--- | :--- | :--- |
 | Repository licence | No `LICENSE` file; README states none has been chosen | **Open: owner decision (§5)** |
 | Visibility | Public on GitHub (checked 2026-10-20). Everything ever committed, including the files below, has been publicly distributed | Fact |
-| Contributors (commit authors, all branches) | Siddhant Patil (100 commits incl. this engineering work), Aayush Aade (17), Riddhi Gopalani (4), "Sidd_927" (1) | Each holds copyright in their own contributions unless they assigned it. **Interpretation:** relicensing needs every contributor's written agreement or an assignment |
-| Competition terms | README: "originally a Samsung Solve For Tomorrow competition entry". The programme country and edition are **not recorded**. Published terms differ by country: the US 2024/25 rules say entries "become the property of the Sponsor"; the UK terms say participants own their submissions; India's 2025 FAQ says participants remain sole owners | **Open: owner must identify the programme and read its rules** before any licence is granted |
+| Contributors (commit authors, all branches) | [F] Siddhant Patil (111 commits incl. this engineering work), Aayush Aade (17), Riddhi Gopalani (4), "Sidd_927" (1). [F] No CONTRIBUTING, CLA, DCO or assignment file exists in the repository | Each holds copyright in their own contributions unless they assigned it. **Interpretation:** relicensing needs every contributor's written agreement or an assignment |
+| Competition terms | README: "originally a Samsung Solve For Tomorrow competition entry". [F] The programme country and edition are **not recorded** anywhere in the repository (README, `docs/competition/`, product spec searched 2026-10-21). [U] Published terms differ by country: the US 2024/25 rules say entries "become the property of the Sponsor"; the UK terms say participants own their submissions; India's 2025 FAQ says participants remain sole owners | **Open: owner must identify the programme and read its rules** before any licence is granted |
 
 ## 2. Component register
 Legend for "Reaches users": **core** = `requirements.txt` (default install and Docker image);
@@ -34,11 +38,11 @@ file in the public repository; **runtime download** = fetched while running.
 | numpy | 2.4.6 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | Keep notices | Notices file at release |
 | SQLAlchemy | 2.0.51 | MIT | Notice | Notices file |
 | faiss-cpu | 1.14.3 | MIT | Notice | Notices file |
-| opencv-python | 5.0.0.93 | Apache-2.0 (OpenCV); wheel ships `LICENSE-3RD-PARTY.txt` | **Verified by wheel inspection:** the Linux wheel bundles Qt 5.15 (LGPL) and FFmpeg incl. `libavdevice` (LGPL), 40 libraries; `opencv-python-headless` bundles no Qt and no `libavdevice` (15 libraries). **Interpretation:** distributing the Docker image means honouring LGPL terms for these libraries | Before publishing any image, build it with `opencv-python-headless` (the text product needs no GUI). Not changed now: hardware dependencies (insightface, ultralytics) require `opencv-python`, and OpenCV advises one OpenCV package per environment |
+| opencv-python (local) / opencv-python-headless (Docker image, since `067f92d`) | 5.0.0.93 | Apache-2.0 (OpenCV); wheel ships `LICENSE-3RD-PARTY.txt` | **Verified by wheel inspection:** the Linux wheel bundles Qt 5.15 (LGPL) and FFmpeg incl. `libavdevice` (LGPL), 40 libraries; `opencv-python-headless` bundles no Qt and no `libavdevice` (15 libraries). **Interpretation:** distributing the Docker image means honouring LGPL terms for these libraries | **Done for the image** (`067f92d`): [F] the built image contains no Qt and no `libavdevice`. Local installs keep `opencv-python` (hardware extras require it) |
 | psutil | 7.2.2 | BSD-3-Clause | Notice | Notices file |
 | pydantic | 2.13.4 | MIT | Notice | Notices file |
 | websockets | 16.0 | BSD-3-Clause | Notice | Notices file |
-| Base image `python:3.11-slim` + `libgl1`, `libglib2.0-0` | Debian packages under their own licences | Docker image | Image not published | Generate an SBOM before any publication |
+| Base image `python:3.11-slim` + `libgl1`, `libglib2.0-0` | Debian packages under their own licences | Docker image | Image not published. [F] The image now carries `/app/licenses/THIRD_PARTY_NOTICES.txt` and a CycloneDX `sbom.cdx.json` for its Python packages (`deployment/generate_notices.py`, `067f92d`) | Add an OS-level SBOM (e.g. Debian packages) before publication |
 
 All core components carry permissive or weak-copyleft (LGPL, bundled) terms; none is
 non-commercial or AGPL. The core install and the Docker image contain none of the restricted
@@ -60,7 +64,7 @@ components (evidence in §3).
 | SpeechRecognition | 3.17.0 | BSD-3-Clause | hardware | Online recognisers (Google) only with `MEMORA_ALLOW_CLOUD_ASR=1` + voice consent; imports `aifc`/`audioop`, absent in Python 3.13 | Notice |
 | pyttsx3 | 2.99 | MPL-2.0 | hardware | File-level copyleft on modified files | Publish modifications if any |
 | dlib `face_recognition` + models (not installed; candidate backend) | — | **Verified** (dlib-models repo): `dlib_face_recognition_resnet_model_v1` and `shape_predictor_5_face_landmarks` are public domain / CC0; `shape_predictor_68_face_landmarks` is trained on iBUG 300-W, whose licence "excludes commercial use" | not installed | `face_recognition` uses the 5-point model for encodings (interpretation: avoid the 68-point model in commercial use) | Option for D3 |
-| OpenCV Zoo YuNet (detection) / SFace (recognition) (not used; candidate replacement) | — | **Verified:** YuNet directory "licensed under MIT License"; SFace directory "licensed under Apache 2.0 License". Neither page names its training data | not installed | Training-data provenance is a question for counsel | Option for D1/D3 |
+| OpenCV Zoo YuNet `face_detection_yunet_2026may/2023mar.onnx` (detection) and SFace `face_recognition_sface_2021dec.onnx` (recognition) | — | [U] YuNet directory "licensed under MIT License"; SFace directory "licensed under Apache 2.0 License". [U] YuNet is trained on WIDER FACE (libfacedetection.train), whose dataset card declares **CC BY-NC-ND 4.0**. [U] OpenCV does not state SFace's training data; the SFace authors trained on CASIA-WebFace, VGGFace2 and MS-Celeb-1M (research-only datasets) | **Code integrated** (`sface` backend, `7346491`); **files not shipped, not downloaded**; the owner provisions them, verified against pinned SHA-256 (`src/vision/face_models.py`) | [Q] Whether non-commercial training-data terms bind use of the published weights | D3 (`docs/FACE_RECOGNITION.md`) |
 
 ### 2d. Optional cloud (`requirements-cloud.txt`)
 | Component | Terms (source) | Reaches users | Restrictions | Action |
@@ -85,11 +89,11 @@ components (evidence in §3).
 | :--- | :--- | :--- |
 | D1 | InsightFace SCRFD model publicly redistributed | (a) **Stop tracking it** in a new commit (`git rm --cached`, keep a private copy): future clones stop receiving it, but it stays in public history and existing forks. Purging history needs a force-push, which rewrites shared history and is explicitly not done without you. (b) Obtain a commercial licence from InsightFace. (c) Replace it with OpenCV YuNet (MIT); nothing in the default path depends on SCRFD. (d) Keep it, accepting the non-commercial-only risk. **Engineering recommendation: (a) and, if a detector is needed, (c).** |
 | D2 | Ultralytics YOLO (AGPL-3.0) | (a) Keep optional and never distribute it (current state; the core product does not need it). (b) Release the whole project under AGPL-3.0. (c) Buy an Enterprise licence. (d) Replace it with a permissively licensed detector. **Recommendation: (a) now; (d) if object detection becomes a product feature.** |
-| D3 | No working real face-recognition backend | (a) dlib `face_recognition` with CC0 models (avoid the 68-point model commercially). (b) OpenCV YuNet + SFace (MIT/Apache-2.0; training data unknown). (c) Licensed InsightFace models. Each needs hardware testing and a biometric-privacy review. |
+| D3 | Face-recognition models | [F] The YuNet + SFace backend is implemented and inactive until models are provisioned. Options: (a) provision the opencv_zoo files for **local, non-commercial evaluation only**, after counsel's view on the training-data terms; (b) commission or license a model with documented commercial training-data rights; (c) keep face recognition off (text product unaffected). dlib (source-only build; web-scraped training data) and InsightFace (non-commercial) were assessed and not chosen. Every option needs a biometric-privacy review and hardware testing. **Recommendation: (c) for any pilot now; (a) for an authorised internal hardware test.** |
 | D4 | `banner.png` provenance | (a) Ask the contributor which Google tool/account created it and record it here. (b) Remove it (it is unused). (c) Replace it with an image of known provenance. |
 | D5 | Gemini API | (a) Keep disabled (current default) and remove it from any pilot. (b) Use Paid Services only, after counsel reviews health-adjacent use and data handling. **Recommendation: (a).** |
 | D6 | Repository licence | Options in §5; needs all contributors and the competition rules (§1) |
-| D7 | Release notices | Generate `THIRD_PARTY_NOTICES` and an SBOM from the exact build before any distribution |
+| D7 | Release notices | [F] Python-package notices and SBOM are generated inside the image. Remaining: OS-package SBOM, and the notices for any optional/hardware build that is distributed |
 
 ## 5. Repository licence: options for the owner (no choice has been made)
 A licence can only be granted by the copyright holders, so every option first needs
@@ -111,6 +115,8 @@ InsightFace README (github.com/deepinsight/insightface); Ultralytics licence pag
 (ultralytics.com/license); Gemini API Additional Terms (ai.google.dev/gemini-api/terms);
 Hugging Face model cards `Systran/faster-whisper-tiny.en` and `openai/whisper-tiny.en`;
 dlib-models (github.com/davisking/dlib-models); OpenCV Zoo `face_detection_yunet` and
-`face_recognition_sface`; PyAV issue #2215; Samsung Solve for Tomorrow terms (US 2024/25 rules
+`face_recognition_sface` (READMEs and Git LFS pointers); libfacedetection.train; the SFace
+authors' repository (github.com/zhongyy/SFace); the WIDER FACE dataset card on Hugging Face
+(CUHK-CSE/wider_face); PyPI metadata for dlib and face-recognition; PyAV issue #2215; Samsung Solve for Tomorrow terms (US 2024/25 rules
 PDF, UK terms, India 2025 FAQ, South Africa 2026 terms); wheel contents of opencv-python,
 opencv-python-headless and av; C2PA manifest embedded in `banner.png`.

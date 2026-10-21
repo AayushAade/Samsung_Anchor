@@ -1,6 +1,6 @@
 # Supervised Technical Pilot — Checklist (not yet executed)
 
-_Prepared 2026-10-21. This is a checklist, not an authorisation: no participant has used
+_Prepared 2026-10-21, updated the same day. This is a checklist, not an authorisation: no participant has used
 MEMORA. A pilot may start only when the owner has approved it in writing and every
 "Before" item is ticked. Scope: the **text product** (`python app.py --chat` or the Docker
 image) only. No camera, microphone, face recognition, cloud features or hardware._
@@ -31,7 +31,7 @@ image) only. No camera, microphone, face recognition, cloud features or hardware
       carer double-checks them independently.
 
 **Installation (per machine)**
-- [ ] Core install only (`requirements.txt`) or the Docker image; **not** `requirements-hardware.txt` or `requirements-cloud.txt`.
+- [ ] Core install only (`requirements.txt`) or the Docker image (headless OpenCV; licence notices in `/app/licenses`); **not** `requirements-hardware.txt` or `requirements-cloud.txt`; no face-recognition models provisioned.
 - [ ] `MEMORA_*` network variables unset; `python app.py --check` shows "Network Use: PASS Nothing".
 - [ ] Separate data folder created with `python deployment/create_dev_database.py <folder>`.
 - [ ] Emergency number set with `/set-emergency-number`; trusted contact if the participant wants.
