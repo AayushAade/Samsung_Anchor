@@ -212,3 +212,16 @@ def test_revoking_face_consent_says_what_happens_to_stored_face_data(tmp_path):
     reply = s.handle("/consent faces off")
     assert "Face data already stored for 1 person is kept" in reply and "/delete-all" in reply
     s.close()
+
+
+def test_delete_all_tells_the_person_that_their_export_file_still_exists(tmp_path):
+    """Found in the Docker run: after /export then /delete-all, the export (all personal data)
+    remained, and the reply only mentioned --backup copies."""
+    s = _session(tmp_path, "yes")
+    s.handle("My daughter is Riya")
+    out = tmp_path / "my_export.json"
+    s.handle(f"/export {out}")
+    reply = s.handle("/delete-all")
+    s.close()
+    assert out.exists()                                  # MEMORA does not delete files the person saved
+    assert "1 export file(s)" in reply and str(out) in reply

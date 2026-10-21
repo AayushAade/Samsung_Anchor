@@ -54,6 +54,7 @@ class ChatSession:
         self._touch_log()
         self.confirm = confirm or input
         self._numbered_facts: list[dict] = []
+        self._exports: list[str] = []  # files written by /export in this session
         self._awaiting_consent = False
 
     MAX_INPUT_CHARS = 2000
@@ -202,6 +203,7 @@ class ChatSession:
                 written = user_data.write_export(self.db, path)
             except OSError as e:
                 return f"Export failed: {e}"
+            self._exports.append(written)
             return f"Saved a copy of your data to {written}"
         if cmd == "/delete-all":
             answer = self.confirm("This permanently deletes everything I store about you. "
@@ -214,11 +216,20 @@ class ChatSession:
             self._rebuild_session()
             if not report["ok"]:
                 return f"Deletion was incomplete. Remaining records: {report['remaining']}"
+            default_exports = DATA_DIR / "exports"
+            exports = {p for p in self._exports if os.path.exists(p)}
+            if default_exports.is_dir():
+                exports |= {str(p) for p in default_exports.glob("memora_export_*.json")}
+            exports = sorted(exports)
+            export_note = (f" {len(exports)} export file(s) you saved with /export still exist and contain your "
+                           f"data: {', '.join(exports)}. Delete them yourself if you no longer want them."
+                           if exports else "")
             return ("All your data has been deleted, including "
-                    f"{len(removed_logs)} log file(s) that contained what you said. "
-                    "Backup copies you made with --backup are not touched; delete those folders yourself "
-                    "if you no longer want them. Deleted files may remain recoverable on the disk until "
-                    "overwritten.")
+                    f"{len(removed_logs)} log file(s) that contained what you said."
+                    + export_note +
+                    " Backup copies you made with --backup and files you exported are not touched; delete "
+                    "those yourself if you no longer want them. Deleted files may remain recoverable on the "
+                    "disk until overwritten.")
         return f"I don't know the command {cmd}. Type /help to see the commands."
 
     def _touch_log(self) -> None:
