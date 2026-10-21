@@ -133,6 +133,15 @@ class AnchorRuntime:
         statuses["Perception"] = statuses["Camera"] if pipeline is not None and hasattr(pipeline, "perception_manager") else "FAILED"
         if "Simulated" in statuses["Audio"]:
             statuses["Speech Recognition"] = "WARNING (Simulated - typed or scripted input only)"
+        # Face recognition: report the backend actually in use; never imply real recognition.
+        recognizer = getattr(self.coordinator, "recognizer", None)
+        backend = getattr(recognizer, "backend", None)
+        if backend == "mock":
+            statuses["Face Recognition"] = "WARNING (Simulated)"
+        elif backend == "unavailable":
+            statuses["Face Recognition"] = f"FAILED ({getattr(recognizer, 'unavailable_reason', 'no backend')})"
+        elif backend:
+            statuses["Face Recognition"] = f"WARNING (backend '{backend}', not verified on real faces)"
         # Deterministic rule modules: available when constructed.
         statuses["Care Policy"] = "READY" if pipeline is not None and hasattr(pipeline, "care_policy_framework") else "FAILED"
         statuses["Decision Trace"] = "READY" if pipeline is not None and hasattr(pipeline, "clinical_trace_logger") else "FAILED"

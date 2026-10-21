@@ -77,3 +77,32 @@ def test_vision_standalone_refuses_without_live_hardware(monkeypatch, live_hardw
     with pytest.raises(SystemExit) as exit_info:
         memora_app.main(vision_standalone=True, live_hardware=live_hardware)
     assert exit_info.value.code == 2 and opened == []
+
+
+@pytest.mark.parametrize("insightface_installed", [True, False])
+def test_live_recognizer_without_a_working_backend_detects_nothing(monkeypatch, insightface_installed):
+    """Found in review: with no usable library the live recogniser fell back to the mock
+    backend, which turns the centre of every real frame into a 'face' (and, with consent,
+    an anonymous person). The pinned hardware install had no working backend at all
+    (InsightFace was selected but never implemented; MediaPipe 0.10.35 lacks FaceMesh)."""
+    import numpy as np
+    from src.vision import face_recognizer as fr
+    monkeypatch.setattr(fr, "FACE_RECOGNITION_AVAILABLE", False)
+    monkeypatch.setattr(fr, "MEDIAPIPE_AVAILABLE", False)
+    monkeypatch.setattr(fr, "INSIGHTFACE_AVAILABLE", insightface_installed)
+    rec = fr.MemoraFaceRecognizer(mock_mode=False)
+    assert rec.backend == "unavailable" and rec.mock_mode is False and rec.unavailable_reason
+    db = MemoraDatabase(":memory:")
+    frame = np.full((480, 640, 3), 128, dtype=np.uint8)
+    for _ in range(5):
+        assert not rec.process_frame(frame, db)
+    assert db.get_all_identities() == {}
+
+
+def test_runtime_status_reports_face_recognition_backend(monkeypatch):
+    from src.runtime.runtime import AnchorRuntime
+    coord = build_application(live_hardware=False, database=MemoraDatabase(":memory:"))
+    statuses = AnchorRuntime(coord).get_subsystem_statuses()
+    assert statuses["Face Recognition"] == "WARNING (Simulated)"
+    coord.recognizer.backend, coord.recognizer.unavailable_reason = "unavailable", "no backend installed"
+    assert AnchorRuntime(coord).get_subsystem_statuses()["Face Recognition"].startswith("FAILED (no backend")

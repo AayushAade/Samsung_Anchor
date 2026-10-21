@@ -105,6 +105,11 @@ class MemoraFaceRecognizer:
         # }
         self.active_tracks = {}
 
+        # Only backends that are implemented below and importable are selected. The
+        # "mock" backend fabricates a face from the centre of every frame, so it is used
+        # only when simulation was requested: on real camera frames, with no working
+        # backend, recognition is reported unavailable and detects nothing.
+        self.unavailable_reason = None
         if self.mock_mode:
             self.backend = "mock"
             if settings.DEBUG:
@@ -114,10 +119,6 @@ class MemoraFaceRecognizer:
             self.face_recognition_active = True
             if settings.DEBUG:
                 logger.debug("[Face Recognizer] Initialized dlib-based 'face_recognition' backend.")
-        elif INSIGHTFACE_AVAILABLE:
-            self.backend = "insightface"
-            if settings.DEBUG:
-                logger.debug("[Face Recognizer] Initialized InsightFace backend.")
         elif MEDIAPIPE_AVAILABLE:
             self.backend = "mediapipe"
             try:
@@ -131,15 +132,16 @@ class MemoraFaceRecognizer:
                 if settings.DEBUG:
                     logger.debug("[Face Recognizer] Initialized MediaPipe FaceMesh fallback backend.")
             except Exception as e:
-                if settings.DEBUG:
-                    logger.warning(f"[Face Recognizer Warning] Failed to initialize MediaPipe: {e}. Enabling mock fallback.")
-                self.mock_mode = True
-                self.backend = "mock"
+                self.backend = "unavailable"
+                self.unavailable_reason = f"MediaPipe FaceMesh could not start: {e}"
         else:
-            if settings.DEBUG:
-                logger.warning("[Face Recognizer Warning] No computer vision backends available. Forcing mock fallback mode.")
-            self.mock_mode = True
-            self.backend = "mock"
+            self.backend = "unavailable"
+            self.unavailable_reason = (
+                "no working face-recognition backend: dlib 'face_recognition' is not installed, "
+                "MediaPipe's legacy FaceMesh API is not available, and InsightFace is used only "
+                "for detection with dlib")
+        if self.backend == "unavailable":
+            logger.warning("[Face Recognizer] Face recognition unavailable: %s", self.unavailable_reason)
 
         # Try loading SCRFD face detector for fast/accurate bounding box extraction
         self.scrfd_detector = None
@@ -157,6 +159,7 @@ class MemoraFaceRecognizer:
     def get_diagnostics(self) -> dict:
         return {
             "backend": self.backend,
+            "unavailable_reason": self.unavailable_reason,
             "mock_mode": self.mock_mode,
             "scrfd_active": self.scrfd_detector is not None,
             "tolerance": self.tolerance,
