@@ -3,48 +3,53 @@
 _Last updated: 2026-10-21. This file records verified facts only. Where something
 was not run or not checked, it says so._
 
-## 0. Current state — remediation mission, validated code commit `09cf8ac` (2026-10-21)
+## 0. Current state — final completion mission (2026-10-21)
 
-**Git:** branch `fix/p0-data-isolation-and-safety`, pushed, no force-pushes, no history
-rewritten. Commits after `09cf8ac` change only documentation and add test cases (no product code). Draft PR #1 open, not merged.
-16 untracked owner files (`validation/artifacts/session_*`) untouched.
+**Git:** branch `fix/p0-data-isolation-and-safety`, pushed; no force-pushes or history
+rewrites; draft PR #1 open, not merged. Product code validated at `2990621`; later commits are
+documentation and test hygiene only. 16 untracked owner files (`validation/artifacts/session_*`)
+untouched.
 
-**Fixed in this mission** (details, evidence and tests: `docs/EXECUTION_LEDGER.md`):
+**Fixed in this mission** (`docs/EXECUTION_LEDGER.md` F-01…F-09):
 | Commit | Fix |
 | :--- | :--- |
-| `fa5213f` | One consent policy for every persistent write: conversation, slash commands, reported doses, logs; storage layer raises `ConsentRequiredError` (C2-19, C2-20) |
-| `0ecfd68` | Real devices only via `--live-hardware`; `MEMORA_PROFILE` can no longer enable them (C2-23) |
-| `977d8ff` | Explicit network policy: nothing leaves the computer unless opted in; socket-level tests (C2-22) |
-| `03c7c29` | `--simulate` runs in its own temporary workspace; test sessions clean up (C2-21) |
-| `5583a4c` | `--vision-standalone` requires `--live-hardware`; backup-manifest path validation; owner-only export temp file; misleading Gemini warning removed |
-| `93c5563` | Statements and corrections that start with "Actually", "No,", "Well," are understood; `--check` names the real file |
-| `9e7dd3a` | Licensing inventory updated; licence options for the owner (none chosen) |
-| `09cf8ac` | End-to-end CLI journey test; CI on Python 3.11, 3.12, 3.13 |
+| `8296de8` | Identity evidence needs memory + faces consent at the storage layer; a conflicting name is never attributed to a confirmed person |
+| `64085cb` | `/export` contains every stored personal record |
+| `5f753f6` | `--check` is read-only (checks a temporary copy; never migrates or creates the database) |
+| `8d4ba7d` | Text mode never loads PyAV; macOS duplicate-`libavdevice` risk characterised; hardware checklist |
+| `b978dfd` | Dashboard loads nothing from the internet |
+| `b00922f` | Live face recogniser never fabricates faces from real frames; reports when no backend works |
+| `99ddcff` | Clean development database tool |
+| `2990621` | Where the person says they put things; places never stored as names; honest action boundaries |
+| `e1dabd3` | Licensing register with primary sources and decisions D1–D7 |
 
-**Verified on `09cf8ac`** (full table: `docs/RELEASE_GATES.md`): dev suite 812 passed; fresh
-clone + clean 3.11 venv 808 passed / 4 skipped; clean 3.12 and 3.13 containers 806 passed / 6
-skipped (each skip reviewed); journeys 20/20 everywhere; ruff clean; Docker build, `--check`,
-persistence, non-root, 0600; full-history secret scan clean; GitHub Actions green (3 Python
-versions + Docker); owner DB (SHA-1 `26f38093…`) and owner backup (SHA-1 `d8d8ccd7…`) unchanged.
+**Verified** (full table and readiness by use: `docs/RELEASE_GATES.md`): dev suite 840 passed;
+fresh clone 3.11 836 passed / 4 skipped; clean 3.12 and 3.13 containers 834 passed / 6 skipped;
+journeys 20/20; ruff clean; Docker build, diagnostics and persistence; secret scan clean; CI
+green on `e5c582b`; CI on the final commit recorded in PR #1.
 
-**Open defects:** R-09 (P2, hardware install on macOS only): PyAV and OpenCV both bundle
-`libavdevice`, and the Objective-C runtime warns of possible crashes. No crash has been
-reproduced; it needs a hardware test session.
+**Owner-data incident (F-04).** An engineering run of `python app.py --check` without
+`MEMORA_DB_PATH` migrated `memora_db_v2.sqlite` on 2026-10-21 06:01 (SHA-1 `26f38093…` →
+`972ed943…`; 0644 → 0600). A row-by-row comparison shows every existing row unchanged, with
+only additive changes (two empty tables, empty `source` columns, `schema_version=1`). A
+byte-identical pre-incident copy is at `~/memora_backups/20261021_pre-check-incident/`, and
+the owner backup `~/memora_backups/20261020/` is unchanged. The cause is fixed (`5f753f6`).
+**Nothing was restored.** To return the live file to its exact earlier state, run (only with
+your approval):
+`cp -p ~/memora_backups/20261021_pre-check-incident/memora_db_v2.sqlite memora_db_v2.sqlite`
 
-**Not verified:** camera, microphone, speech recognition, text-to-speech, face recognition,
-object detection (no real devices used, by instruction); Windows; Gemini against the live API;
-runs longer than 20 minutes.
+**Open defects:** real face recognition does not work with the pinned hardware packages
+(F-07; decision D3). R-09 (macOS PyAV/OpenCV) is a known risk, not reproduced.
 
-**Owner decisions:** repository licence (options in `docs/LICENSING_REVIEW.md` §6); the
-InsightFace model tracked in the public repository; YOLO/AGPL; `banner.png` provenance; local
-DB handling (§5); authorising a hardware test session; merging PR #1; any release.
+**Not verified:** every real device path; Windows; live Gemini; runs longer than 20 minutes.
 
-**External review required:** legal (licences, contributor ownership, competition terms, Gemini
-terms, patent timing); clinical (urgent-phrase set, wording); usability with people with memory
-difficulties and carers; privacy/regulatory (medical-device, health-data, biometric rules).
+**Owner decisions** (details in `docs/LICENSING_REVIEW.md` §4 and `docs/RELEASE_GATES.md`): D1
+InsightFace model in the public repo; D2 YOLO/AGPL; D3 face-recognition backend; D4 banner
+provenance (Google generative-AI image); D5 Gemini; D6 repository licence (contributors and
+competition programme); D7 notices/SBOM; local DB (restore the pre-incident copy or keep);
+pilot and hardware-test authorisation; merging PR #1.
 
-Software completion is not release authorisation: the text product meets the engineering gates
-it can meet alone; release, pilots and distribution are the owner's decisions.
+Software completion is not release authorisation.
 
 ### Earlier: final handoff audit at `fafcb78` (2026-10-20)
 CI and local suite green (756 passed); found C2-19…C2-24, all except C2-24 (owner decision)
@@ -142,7 +147,8 @@ Correction: the message of `823a85e` states "640 passed"; that run printed 636.
 | `8ccf2bd` | fresh clone, clean venv (core+dev) | 664 passed, 2 skipped (cloud SDK not installed), 21 s |
 | `466be66` | `.venv` (macOS arm64) | 749 passed in ~73 s; ruff clean; `app.py --simulate` 20/20 |
 | `ac87a0f` | clean `python:3.12-slim` and `python:3.13-slim` containers | 747 passed, 6 skipped (reasons stated); journeys 20/20 |
-| **Latest (`09cf8ac`)** | `.venv`; fresh clone + clean 3.11 venv; clean 3.12/3.13 containers; GitHub Actions | **812 passed**; 808 passed / 4 skipped; 806 passed / 6 skipped each; CI green — see `docs/RELEASE_GATES.md` |
+| **Latest (`2990621`, product code)** | `.venv`; fresh clone + clean 3.11 venv; clean 3.12/3.13 containers | **840 passed**; 836 passed / 4 skipped; 834 passed / 6 skipped each — see `docs/RELEASE_GATES.md` |
+| `09cf8ac` | same environments + GitHub Actions | 812 passed; 808 / 4 skipped; 806 / 6 skipped; CI green |
 | `6bd49a9` | fresh clone, clean Python 3.11 venv, core+dev deps | **752 passed, 4 skipped** (reasons stated), 23 s; ruff clean; journeys 20/20; `--check` pass; chat verified |
 | `6bd49a9` | GitHub Actions (ubuntu, Python 3.11) | core and Docker jobs passing on push and PR |
 | `466be66` | GitHub Actions, ubuntu-latest, Python 3.11 | core job (ruff, pytest, journeys, --check) and Docker job passing |
@@ -156,12 +162,13 @@ ruff, the suite, journeys and `--check` on Python 3.11/3.12/3.13, plus a Docker 
 
 ## 5. Known blockers and open issues
 
+- **Local database (2026-10-21):** migrated by the F-04 incident (rows unchanged; pre-incident copy secured; see §0).
 - **Local database: what it contains (read-only inspection, 2026-10-20).** Episodes 3 Aug (81),
   4 Aug (30), 29 Sep (10), 20 Oct (10), all for "Eleanor" (fictional demo patient) or "Sid";
   27 identities (1 named, "Sid"; none have face data); 7 memory rows (one overwritten by the old
   fixed-"temp"-id bug); 2 object sightings that are simulation seeds. No evidence of genuine
   personal use. The pre-work backup (`~/memora_backups/20261020/`, 29 Sep state) differs only by
-  the 20 Oct test-run additions. The file has never been opened by the new code.
+  the 20 Oct test-run additions. Until 2026-10-21 06:01 the file had never been opened by the new code (see F-04).
 - **Safe procedure for a clean development database** (tool `deployment/create_dev_database.py`,
   tested by `tests/test_create_dev_database.py`; demonstrated 2026-10-21 in a temporary folder:
   created, `--check` "0 people, consistent", chat, verified backup):
@@ -193,6 +200,8 @@ ruff, the suite, journeys and `--check` on Python 3.11/3.12/3.13, plus a Docker 
 | :--- | :--- |
 | `PROJECT_STATE.md`, `SYSTEM_ARCHITECTURE.md`, `CAPABILITY_VERIFICATION_MATRIX.md`, `MASTER_ROADMAP.md`, `docs/LICENSING_REVIEW.md` | **Current** (this work) |
 | `README.md` | Current (rewritten in this work) |
+| `docs/RELEASE_GATES.md`, `docs/EXECUTION_LEDGER.md`, `docs/PRIVACY_AND_CONSENT.md`, `docs/SAFETY_AND_LIMITATIONS.md` | **Current** |
+| `docs/HARDWARE_TEST_CHECKLIST.md`, `docs/PILOT_CHECKLIST.md` | **Current, prepared but not executed** |
 | `docs/certification/*` (RC1 certification, safety certification, production readiness, final engineering review) | **Historical / unsupported.** Written before this audit; claims (e.g. "479 passing", "ARCHITECTURE CERTIFIED", safety certification) were not reproducible: the suite could not run from a clean clone, the scenario validator never compared results, and safety behaviour was defective. Do not cite. |
 | `docs/clinical/clinical_evaluation_report.md` | Synthetic demo output (now labelled). Not clinical evidence. |
 | `deployment/deployment_guide.md`, `docs/DEPLOYMENT_GUIDE.md`, `docs/OPERATIONS_MANUAL.md` | Historical; not re-verified. Use README quick start. |

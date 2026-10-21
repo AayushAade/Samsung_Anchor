@@ -1,63 +1,70 @@
-# Release Gates — Assessment
+# Release Gates and Readiness — Assessment
 
-_2026-10-21, branch `fix/p0-data-isolation-and-safety`. Validated **code commit `09cf8ac`**;
-later commits change only documentation and add test cases. They change no product code, as
-`git diff --stat 09cf8ac..HEAD` shows (only `.md` files and `tests/`), and the suite and CI were
-re-run on the final commit. PASS means the evidence below was produced on that commit and can be
-reproduced with the commands at the end. It does **not** mean clinical, regulatory or
-commercial readiness, and it does not authorise a release._
+_2026-10-21, branch `fix/p0-data-isolation-and-safety`. Product code validated at commit
+**`2990621`**. Later commits change only documentation and test hygiene (closing unclosed
+files in tests), with no product code (`git diff --stat 2990621..HEAD -- . ':!*.md' ':!tests/'`
+is empty). The suite and GitHub Actions were re-run on the final commit; the PR description
+records that CI run. A PASS is engineering evidence only: it is not clinical, regulatory or
+commercial clearance, and it does not authorise a release._
 
-Verdicts: **PASS** (evidence produced) · **FAIL** (a check ran and did not meet the bar) ·
-**BLOCKED** (needs a decision or resource outside engineering) · **NOT VERIFIED** (not run).
+Statuses: **PASS** (current reproducible evidence) · **FAIL** (a known defect remains) ·
+**BLOCKED** (needs an owner decision or outside party) · **NOT VERIFIED** (no evidence).
 
-## Engineering checks on `09cf8ac`
-| Check | Verdict | Evidence |
+## 1. Engineering checks
+| Check | Status | Evidence |
 | :--- | :--- | :--- |
-| Test suite (dev environment, macOS, Python 3.11) | **PASS** | 812 passed, 0 skipped; 815 passed on the final commit, which adds three cases checking that urgent statements with a leading "Actually"/"No,"/"Well," still get urgent guidance |
-| Fresh clone + clean venv, core + dev deps only (macOS, 3.11) | **PASS** | 808 passed, 4 skipped; none of insightface, ultralytics, faster-whisper, google-genai, mediapipe, SpeechRecognition installed |
-| Clean `python:3.12-slim` container (`git archive`, core + dev) | **PASS** | 806 passed, 6 skipped |
-| Clean `python:3.13-slim` container (`git archive`, core + dev) | **PASS** | 806 passed, 6 skipped |
-| Skips reviewed individually | **PASS** | SpeechRecognition / google-genai absent (optional extras, 3 tests); root ignores directory permissions in containers (2 tests); no local database to copy in clean checkouts (1 test). No skip hides a core behaviour |
-| Simulated journeys (`app.py --simulate`) | **PASS** | 20/20 in all four environments |
-| End-to-end text product via the real CLI | **PASS** | `tests/test_cli_end_to_end.py`: consent → conversation → spoken correction → restart → backup → damaged DB (`--check` exit 1, chat exit 2 with guidance) → restore → delete-all → restart; logs free of names |
-| Lint (ruff correctness rules) | **PASS** | "All checks passed" in every environment |
-| Consent policy across writes, commands, doses, logs | **PASS** | `test_consent_policy.py`, `test_consent_enforcement.py`, `consent_declined` journey |
-| Network policy (socket interception) | **PASS** | `test_network_policy.py`; `--check` "Network Use: Nothing" locally and in Docker |
-| Hardware only via `--live-hardware` | **PASS** | `test_hardware_activation_is_explicit.py` (23 cases incl. `--vision-standalone`); suite-wide device guard `test_no_physical_devices.py` |
-| Simulation isolation | **PASS** | `test_simulation_isolation.py`; real environment: 65 entries unchanged after `--simulate` |
-| Backup / restore | **PASS** | `test_backup_restore.py` (round trip, tamper, corrupt live DB, manifest path traversal) + CLI journey |
-| Docker build, diagnostics, persistence | **PASS** | image built; `--check` passes (only warning: optional packages absent); chat persists across container runs on a volume; runs as uid 10001; DB file 0600 |
-| Secret scan, full history (116 commits) | **PASS** | no key/token/private-key patterns; only placeholders `your-gemini-api-key`; no database, embedding or backup files ever committed |
-| GitHub Actions on `09cf8ac` | **PASS** | push and pull_request runs green: core on 3.11, 3.12, 3.13 + docker job |
-| Owner data unchanged | **PASS** | `memora_db_v2.sqlite` SHA-1 `26f38093…` and `~/memora_backups/20261020/` SHA-1 `d8d8ccd7…` unchanged; 16 untracked owner files untouched |
+| Full suite, dev environment (macOS arm64, Python 3.11, all optional extras) | **PASS** | 840 passed, 0 skipped. With `-W default`: 0 warnings apart from two third-party `DeprecationWarning`s from `speech_recognition` (imports `aifc`/`audioop`; optional hardware package) |
+| Fresh clone + clean 3.11 venv, core + dev only | **PASS** | 836 passed, 4 skipped; none of insightface, ultralytics, faster-whisper, google-genai, mediapipe, SpeechRecognition or av installed |
+| Clean `python:3.12-slim` / `python:3.13-slim` containers (`git archive`) | **PASS** | 834 passed, 6 skipped each |
+| Skips, reviewed one by one | **PASS** | SpeechRecognition absent (1) and google-genai absent (2): optional extras, covered in the dev environment; root ignores directory permissions in containers (2): covered in the venv runs; no local database to copy in a clean checkout (1): covered in the dev environment. No skip hides core behaviour |
+| Lint (`ruff check .`, correctness rules) | **PASS** | clean in every environment |
+| Simulated journeys (`app.py --simulate`) | **PASS** | 20/20 in all environments |
+| End-to-end text product through the CLI | **PASS** | `tests/test_cli_end_to_end.py` (consent → correction → restart → backup → damaged DB → `--check` → restore → delete-all → restart) |
+| Consent at application and storage layers | **PASS** | `test_consent_policy.py` (persisted state, marker absent from every file, identity evidence, export completeness), `test_consent_enforcement.py`, journey `consent_declined` |
+| Network policy | **PASS** | `test_network_policy.py` (socket interception); `test_dashboard_loads_nothing_from_the_internet`; `--check` "Network Use: Nothing" |
+| Hardware only via `--live-hardware`; no fabricated faces | **PASS** | `test_hardware_activation_is_explicit.py` (26 cases), `test_no_physical_devices.py` |
+| Simulation and test isolation | **PASS** | `test_simulation_isolation.py`; `memora-tests-*` count unchanged across full runs |
+| Diagnostics read-only | **PASS** | `test_check_never_modifies_or_creates_the_user_database` |
+| Backup / restore / corruption recovery / manifest validation | **PASS** | `test_backup_restore.py`, CLI journey |
+| Identity conflicts and false-memory prevention | **PASS** | `test_identity_learning_pipeline.py`, `test_conversational_memory.py` (corrections, place-not-name, locations) |
+| Docker build, diagnostics, persistence | **PASS** | built from `2990621`; `--check` passes (warning only for absent optional packages); memory and locations persist across runs on a volume; uid 10001; DB and export 0600; no `assets/`, no restricted packages, PyAV not loaded |
+| Secret scan, full history (126 commits) | **PASS** | no key/token/private-key patterns; no database, embedding, log or backup file ever committed |
+| GitHub Actions | **PASS** on `e5c582b` (8/8 jobs); final commit: see PR #1 description | core on 3.11/3.12/3.13 + docker |
+| Clean development database procedure | **PASS** | `deployment/create_dev_database.py`, `test_create_dev_database.py`, demonstrated in a temporary folder |
+| Owner data preserved | **FAIL (incident, contained)** | Owner backup (`d8d8ccd7…`) and untracked files unchanged. The owner database was **migrated by an engineering `--check` run** (ledger F-04): all existing rows unchanged (row-by-row comparison), changes additive only, byte-identical pre-incident copy secured. The cause is fixed and tested. Restoring the live file is the owner's decision |
 | Windows | **NOT VERIFIED** | no Windows environment used |
-| Voice mode, camera, real speaker | **NOT VERIFIED** | real devices were not used during this mission, by instruction |
-| Hardware install on macOS (PyAV + OpenCV duplicate `libavdevice`, ledger R-09) | **NOT VERIFIED** | warning observed; no crash reproduced |
+| macOS hardware install: PyAV/OpenCV duplicate `libavdevice` (R-09) | **NOT VERIFIED** | known upstream risk, not reproduced; text mode never loads PyAV; manual procedure in `docs/HARDWARE_TEST_CHECKLIST.md` |
+| Camera, microphone, ASR, TTS on real devices | **NOT VERIFIED** | not run, by instruction |
+| Real face recognition | **FAIL** | no working backend with the pinned hardware packages (ledger F-07); fabrication prevented; needs decision D3 |
 
-## Gates
-| Gate | Verdict | Basis | What remains |
+## 2. Gates
+| Gate | Status | Basis | What remains |
 | :--- | :--- | :--- | :--- |
-| **A. Clean installation** | **PASS** (macOS, Linux containers; 3.11–3.13) | rows above | Windows NOT VERIFIED |
-| **B. Core user journey** | **PASS (text mode)** | journeys + CLI end-to-end + Docker persistence | Voice mode NOT VERIFIED |
-| **C. Data integrity** | **PASS** | isolation, backup/restore, migrations, owner data unchanged | Local DB contamination: owner decision (C2-24) |
-| **D. Safety behaviour** | **PASS (software)** | urgent detection, delivery-path guard, boundaries, journeys | Clinical review of wording — BLOCKED (needs clinicians) |
-| **E. Simulation honesty & isolation** | **PASS** | labelled sources; isolated workspace; explicit hardware activation | — |
-| **F. Security & privacy** | **PASS (software scope)** | consent policy, network policy, 0600 files, delete-all, dashboard hardening, path validation, secret scan | Not implemented: encryption at rest, secure erase, per-person consent. Gemini API terms review — BLOCKED (legal) |
-| **G. Stability** | **PASS (simulated, ≤ 20 min)** | soaks in `docs/evidence/`; repeated start/stop leaves no threads or file descriptors | Multi-hour and real-hardware runs NOT VERIFIED |
-| **H. Deployment** | **PASS (core)** | Docker image, healthcheck, `/data` volume, CI | Hardware extras not packaged; no image published (requires authorisation) |
-| **I. Documentation** | **PASS** | README checked against the CLI; PROJECT_STATE, architecture, capability matrix, roadmap, safety, privacy, licensing, ledger updated | — |
-| **J. External readiness** | **BLOCKED** | — | Repository licence; InsightFace model (tracked in public repo) and AGPL decisions; banner provenance; clinical/usability evaluation; privacy/regulatory review; hardware validation |
+| A. Clean installation | **PASS** (macOS, Linux; 3.11–3.13) | §1 | Windows NOT VERIFIED |
+| B. Core user journey (text) | **PASS** | journeys, CLI end-to-end, Docker | — |
+| C. Data integrity | **PASS** for the software; owner-DB incident recorded | §1 | Owner decision on the migrated local DB (C2-24, F-04) |
+| D. Safety behaviour (software) | **PASS** | urgent detection incl. lead words, delivery-path guard, honest action boundaries | Clinical review of wording: **BLOCKED** (clinicians) |
+| E. Simulation honesty and isolation | **PASS** | §1 | — |
+| F. Security and privacy (software scope) | **PASS** | consent at both layers, network policy, read-only diagnostics, 0600 files, delete-all, complete export, dashboard hardening, manifest validation, secret scan | Not implemented: encryption at rest, secure erase, per-person consent. Gemini terms: **BLOCKED** (D5) |
+| G. Stability | **PASS (simulated, ≤ 20 min)** | soaks in `docs/evidence/`; repeated start/stop | Multi-hour and hardware runs NOT VERIFIED |
+| H. Deployment | **PASS (core)** | Docker image, healthcheck, `/data` volume, CI | Image not published (needs authorisation; build with `opencv-python-headless` first, `docs/LICENSING_REVIEW.md`) |
+| I. Documentation | **PASS** | README, PROJECT_STATE, architecture, capability matrix, roadmap, safety, privacy, licensing, ledger, checklists checked against the code | — |
+| J. External readiness | **BLOCKED** | — | Licence and asset decisions D1–D7; clinical, usability, privacy and regulatory review; hardware validation |
 
-## Conclusion
-Software engineering for the **text product** has met every gate it can meet without outside
-parties. It is suitable for a **supervised technical pilot** using the core install or Docker
-image, with consenting participants, a named person responsible for safety, and non-critical
-data. It is **not** authorised or ready for unsupervised use by people with memory difficulties,
-real-hardware deployment, or commercial distribution. Gate J needs the owner, contributors,
-counsel and clinicians. **Release authorisation is the owner's decision, not an engineering
-result.**
+## 3. Readiness by use
+| Use | Verdict | Verified | Not verified | Blocks progression |
+| :--- | :--- | :--- | :--- | :--- |
+| A. Local text-only development | **Ready** | Everything in §1 for the text product; clean dev database tool | Windows | — |
+| B. Reproducible text-only install and Docker | **Ready (engineering)**; not published | clean installs 3.11–3.13; Docker build, persistence, non-root | Windows; image signing/SBOM | Authorisation to publish; LGPL notices for bundled OpenCV libraries; repository licence |
+| C. Controlled, supervised technical pilot (text only) | **Engineering-ready; not authorised** | as A/B, plus honest boundaries and data controls | Real users' phrasing; usability | Owner approval, licence or pilot agreement (D6), privacy notice, ethics decision, named safety person (`docs/PILOT_CHECKLIST.md`) |
+| D. Real-hardware operation | **Not ready** | Devices off unless `--live-hardware`; no fabricated faces | Every device path; R-09 | No working face-recognition backend (D3); licence decisions D1/D2; authorised hardware session (`docs/HARDWARE_TEST_CHECKLIST.md`) |
+| E. Use by people with memory difficulties | **Not ready** | Software safeguards only | Clinical safety, usability with the intended population and carers | Clinical and ethics review; supervised studies; regulatory assessment (medical-device status) |
+| F. Commercial distribution | **Not ready; BLOCKED** | Core build has no non-commercial/AGPL component | Legal review | Repository licence and contributor/competition rights; InsightFace model; AGPL; Gemini terms; notices; regulatory and privacy compliance |
 
-## Reproduction (from a clean checkout of the validated commit)
+Passing software tests does not establish clinical safety, regulatory compliance, suitability
+for unsupervised use, or commercial rights.
+
+## 4. Reproduction (from a clean checkout)
 ```bash
 python3.11 -m venv .venv-check && .venv-check/bin/pip install -r requirements-dev.txt
 export MEMORA_DB_PATH=$(mktemp -d)/memora.sqlite MEMORA_LOG_DIR=$(mktemp -d)
@@ -65,6 +72,8 @@ export MEMORA_DB_PATH=$(mktemp -d)/memora.sqlite MEMORA_LOG_DIR=$(mktemp -d)
 .venv-check/bin/python -m pytest tests/ -q -p no:cacheprovider -rs
 .venv-check/bin/python app.py --simulate
 .venv-check/bin/python app.py --check
-git archive 09cf8ac | docker run --rm -i python:3.13-slim sh -c "apt-get update -qq && apt-get install -y -qq libgl1 libglib2.0-0 >/dev/null; mkdir /s && cd /s && tar xf - && pip install -q -r requirements-dev.txt && python -m pytest tests/ -q -p no:cacheprovider -rs"
+git archive HEAD | docker run --rm -i python:3.13-slim sh -c "apt-get update -qq && apt-get install -y -qq libgl1 libglib2.0-0 >/dev/null; mkdir /s && cd /s && tar xf - && pip install -q -r requirements-dev.txt && python -m pytest tests/ -q -p no:cacheprovider -rs"
 docker build -t memora -f deployment/docker/Dockerfile . && docker run --rm memora python app.py --check
 ```
+Always set `MEMORA_DB_PATH` and `MEMORA_LOG_DIR` first; without them commands use the
+project-folder database.

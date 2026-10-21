@@ -54,6 +54,18 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-21._
 | P1 | Corrections and statements starting with "Actually", "No,", "Well," | `93c5563` |
 | P2 | End-to-end CLI journey test; CI on Python 3.11/3.12/3.13 | `09cf8ac` |
 
+## Done in the final completion mission (2026-10-21)
+| Pri | Item | Commit |
+| :--- | :--- | :--- |
+| P1 | Identity evidence needs consent at the storage layer; conflicting names never attributed to a confirmed person | `8296de8` |
+| P2 | `/export` contains every stored personal record | `64085cb` |
+| P1 | `--check` read-only (it had migrated a pre-existing database) | `5f753f6` |
+| P2 | Text mode never loads PyAV; macOS duplicate `libavdevice` risk characterised (R-09) | `8d4ba7d` |
+| P2 | Dashboard loads nothing from the internet | `b978dfd` |
+| P0 | Live recogniser no longer fabricates faces from real frames; reports when no backend works | `b00922f` |
+| P2 | Clean development database tool | `99ddcff` |
+| P1 | "Where I put things", no place-as-name facts, honest action boundaries, "remind me who…" | `2990621` |
+
 ## Next
 
 ### Owner decisions (blocking)
@@ -67,6 +79,9 @@ CAPABILITY_VERIFICATION_MATRIX.md). Updated 2026-10-21._
 5. Merge PR #1 into `main` after review.
 
 ### P1 — product
+5a. A working, licence-cleared face-recognition backend (D3), then hardware testing
+    (`docs/HARDWARE_TEST_CHECKLIST.md`).
+5b. Supervised technical pilot of the text product (`docs/PILOT_CHECKLIST.md`) once authorised.
 6. Voice mode end to end (local ASR, e.g. faster-whisper, instead of cloud) with consent,
    verified first with recorded audio fixtures, then on hardware.
 7. Caregiver-mediated setup (schedules, contacts, consent on behalf of the person) — needs

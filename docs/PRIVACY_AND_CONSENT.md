@@ -31,7 +31,8 @@ include the computer's user name.
 - "I took my pills" is acknowledged but **not** recorded.
 - Urgent guidance still works (with the generic "local emergency number").
 - Diagnostic output that could echo what was said is discarded instead of logged.
-- The storage layer (`CareStore`, `ConversationalMemory._save_fact`) raises
+- The storage layer (`CareStore`, `ConversationalMemory._save_fact`, and
+  `MemoraDatabase.add_evidence`, which also needs `faces` consent) raises
   `ConsentRequiredError` if any code path bypasses these checks.
 
 ## Revoking consent
@@ -64,6 +65,10 @@ from local files and only when needed. Internet features are off unless their op
 | `MEMORA_ALLOW_MODEL_DOWNLOAD` | downloading the faster-whisper model (and YOLO weights if that optional component is used) | a model request; no personal data |
 | `MEMORA_ALLOW_CLOUD_ASR` | Google speech recognition during identity learning (also needs `voice` consent and `--live-hardware`) | recorded audio |
 | `MEMORA_ALLOW_CLOUD_LLM` + `GEMINI_API_KEY` | Gemini name extraction during identity learning (also needs `faces` and `memory` consent) | the introduction transcript |
+
+The optional dashboard (`--dashboard`) is served only on localhost and its page loads nothing
+from the internet (`tests/test_dashboard_security.py`). `--check` reads the database only through
+a temporary copy.
 
 A Gemini key on its own does not enable cloud use. `--check` ("Network Use") and `/status` state
 what is enabled. Verified by `tests/test_network_policy.py` (socket-level interception).

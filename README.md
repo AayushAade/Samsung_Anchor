@@ -10,9 +10,12 @@ Stage:     Development (not yet internal alpha)
 Verified:  text conversation with consent, memory with provenance and
            corrections, reminders/appointments, restart persistence, data
            view/export/delete, backup/restore, urgent-statement guidance,
-           20 simulated journeys, clean install, Docker, CI (Linux)
-Not yet verified: real camera, microphone, voice output, face recognition,
-           object detection, live Gemini API, long-duration stability
+           where you said you put things, 20 simulated journeys, clean
+           install (Python 3.11-3.13), Docker, CI (Linux)
+Not yet verified: real camera, microphone, voice output, object
+           detection, live Gemini API, long-duration stability
+Not working:  real face recognition (no working backend with the pinned
+           hardware packages; see docs/LICENSING_REVIEW.md D3)
 ```
 
 MEMORA is **not a medical device**. It does not diagnose, give medication advice,
@@ -82,14 +85,14 @@ temporary storage.
 
 | Command | Purpose |
 | :--- | :--- |
-| `python app.py --check` | Diagnostics: dependencies, database integrity, optional capabilities (does not open the camera) |
+| `python app.py --check` | Read-only diagnostics: dependencies, database integrity (checked on a temporary copy), optional capabilities, network use (does not open the camera) |
 | `python app.py --simulation --validate-runtime --max-cycles 25` | Run the continuous runtime with simulated sensors and print measured statistics |
 | `python app.py --scenario` | Run the synthetic clinical-behaviour scenarios against their specifications |
 | `python app.py --simulate [NAME ...]` | Run 20 deterministic simulated user journeys in isolated temporary storage (simulated clock, battery, sensors) |
 | `python app.py --backup [DIR]` / `--restore DIR` | Verified backup / restore of the memory database |
 | `python app.py --repair` | Remove people records that have no face data (asks first, backs up first) |
 | `python inspect_database.py [db]` | Inspect stored data and SQLite/face-data consistency |
-| `python app.py --live-hardware` | Continuous runtime with camera/microphone (**unverified**; requires `requirements-hardware.txt`) |
+| `python app.py --live-hardware` | Continuous runtime with camera/microphone (**unverified**; requires `requirements-hardware.txt`; see [docs/HARDWARE_TEST_CHECKLIST.md](docs/HARDWARE_TEST_CHECKLIST.md)). Real devices are used **only** with this flag |
 
 Optional extras: `requirements-hardware.txt` (sensors and on-device models — check
 [licensing](docs/LICENSING_REVIEW.md) first), `requirements-cloud.txt` (Gemini, used
@@ -124,6 +127,8 @@ touches your real data. Latest result: see [PROJECT_STATE.md](PROJECT_STATE.md).
 - [docs/SAFETY_AND_LIMITATIONS.md](docs/SAFETY_AND_LIMITATIONS.md) — safety design, policy decisions, what is not verified
 - [docs/LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md), [docs/product/PRODUCT_SPEC.md](docs/product/PRODUCT_SPEC.md)
 - [docs/EXECUTION_LEDGER.md](docs/EXECUTION_LEDGER.md) — engineering findings log
+- [docs/RELEASE_GATES.md](docs/RELEASE_GATES.md) — release gates and readiness by use
+- [docs/HARDWARE_TEST_CHECKLIST.md](docs/HARDWARE_TEST_CHECKLIST.md), [docs/PILOT_CHECKLIST.md](docs/PILOT_CHECKLIST.md) — prepared, not executed
 
 Documents under `docs/certification/` and earlier "RC1 certified" claims are
 historical and are **not supported by current evidence**; see the documentation

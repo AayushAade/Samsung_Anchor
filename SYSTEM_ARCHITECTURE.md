@@ -18,11 +18,17 @@ localhost:8765, origin allow-list).
 microphone and speaker adapters are constructed only when `--live-hardware` is given;
 otherwise every construction path (factory, coordinator, pipeline defaults) uses
 `RuntimeMode.SIMULATION`, whatever `MEMORA_PROFILE` says. `--vision-standalone` also requires
-`--live-hardware`.
+`--live-hardware`. The face recogniser selects only implemented, importable backends; on
+real frames with none available it reports `unavailable` and detects nothing (the `mock`
+backend, which fabricates a face per frame, is used only in simulation).
+
+**Diagnostics** (`--check`) are read-only: the user database is checked on a temporary copy.
+Speech recognition imports faster-whisper/PyAV only on the first transcription.
 
 **Consent policy** (`docs/PRIVACY_AND_CONSENT.md`): every persistent personal write requires
 `memory` consent. User-facing paths refuse with an explanation, and the storage layer
-(`CareStore`, `ConversationalMemory._save_fact`) raises `ConsentRequiredError` as a backstop.
+(`CareStore`, `ConversationalMemory._save_fact`, `MemoraDatabase.add_evidence`) raises
+`ConsentRequiredError` as a backstop.
 
 ```
  keyboard (--chat) ─┐

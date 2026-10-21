@@ -4,6 +4,32 @@ Persistent record of findings and work in progress, so an interrupted session
 does not repeat work. Newest cycle first. Severity: P0 safety/data/privacy,
 P1 core product, P2 reliability, P3 usability/commercial.
 
+## Final completion mission — 2026-10-21 (same branch, PR #1 draft)
+
+Start: HEAD `e5c582b` synced; CI on `e5c582b` green (8/8 jobs: core 3.11/3.12/3.13 and docker,
+push and PR runs). Owner DB SHA-1 `26f38093…`, owner backup `d8d8ccd7…`, 16 untracked owner files.
+
+| ID | Sev | Finding | Evidence | Status | Test |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| F-01 | P1 | `MemoraDatabase.add_evidence` stored transcripts and names without consent for any caller (`coordinator.process_transcript`, services) | code trace | fixed `8296de8` | test_identity_evidence_needs_consent_at_the_storage_layer |
+| F-02 | P1 | Confirmed "Bob" + heard "I'm Tom" returned success as Bob; the async worker stored an episode attributing Tom's words to Bob | probe | fixed `8296de8` (name conflict reported, no episode) | 2 tests in test_identity_learning_pipeline |
+| F-03 | P2 | `/export` omitted identity evidence (transcripts), semantic nodes, interaction/feedback records, consent decisions | code review | fixed `64085cb` | test_export_contains_every_stored_personal_row |
+| F-04 | **P1 incident** | During this review an engineering run of `python app.py --check` **without `MEMORA_DB_PATH`** migrated the owner's `memora_db_v2.sqlite` (SHA-1 `26f38093…` → `972ed943…`, 110,592 → 122,880 bytes, 0644 → 0600, 2026-10-21 06:01) and appended 6 metadata lines to `data/logs/memora.log`. Row-by-row comparison with a byte-identical pre-incident copy: every existing row unchanged; added only two empty tables, empty `source` columns, `schema_version=1`. Root cause: `--check` opened the live file with migrations | reproduced by test (hash and mode changed) | root cause fixed `5f753f6` (check runs on a temporary copy, never creates a DB). Pre-incident copy secured at `~/memora_backups/20261021_pre-check-incident/` (SHA-1 `26f38093…`). **Live file not restored: owner decision** | test_check_never_modifies_or_creates_the_user_database |
+| F-05 | P2 | R-09 investigated: text chat loaded PyAV via a module-level faster-whisper import | importtime trace | fixed `8d4ba7d` (lazy import); risk characterised as known upstream issue, not reproduced; headless OpenCV does not avoid it (wheel inspected) | test_media_library_isolation |
+| F-06 | P2 | Dashboard fetched Google Fonts (undisclosed third-party request) | file + browser network log | fixed `b978dfd` | test_dashboard_loads_nothing_from_the_internet |
+| F-07 | P0 | Live recogniser with no usable library fell back to the mock backend, fabricating a face from every real frame; with the pinned hardware packages no backend works at all | code + pinned-environment imports | fixed `b00922f` (reports `unavailable`); **real face recognition remains not working (D3)** | 2 cases + status test |
+| F-08 | P1 | "I put my keys in the drawer" ignored (and MEMORA kept asking where they are kept); "My son is in the garden" stored as the son's name; "Turn off the stove", "Book a doctor's appointment" (answered as a lost book), "Remind me to…" got no honest answer | probes | fixed `2990621` | 15 cases |
+| F-09 | P3 | Clean development database procedure relied on `--check` creating the DB | doc review | tool `99ddcff` | test_create_dev_database |
+| R-09 | P2 | (see F-05) | — | **known risk, not reproduced**; manual procedure in `docs/HARDWARE_TEST_CHECKLIST.md` | — |
+| C2-24 | info | Local owner DB contents (test contamination); now also migrated by F-04 | — | **owner decision** | — |
+
+Reviewed with no defect found this mission: consent revocation/backup behaviour; medication
+reporting truthfulness; network opt-ins; thread cleanup; delete-all coverage of every personal
+table. The `memora-tests-*` count stayed at 131 across full runs (the 131st was created by an
+ad-hoc script that imported `tests/conftest.py` outside pytest). Ten `/tmp/memora-*` scratch
+folders with synthetic data from earlier engineering sessions are left in place (no cleanup
+commands, by instruction).
+
 ## Remediation and release-readiness mission — 2026-10-21 (same branch, PR #1 draft)
 
 Baseline: HEAD `8e725f7` synced with origin, CI green; 16 untracked owner files; real DB
