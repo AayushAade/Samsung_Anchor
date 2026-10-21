@@ -162,15 +162,17 @@ ruff, the suite, journeys and `--check` on Python 3.11/3.12/3.13, plus a Docker 
   fixed-"temp"-id bug); 2 object sightings that are simulation seeds. No evidence of genuine
   personal use. The pre-work backup (`~/memora_backups/20261020/`, 29 Sep state) differs only by
   the 20 Oct test-run additions. The file has never been opened by the new code.
-- **Safe procedure for a clean development database (verified in a temp dir):**
-  1. Do not run `--check`, `--chat` or the runtime against `memora_db_v2.sqlite` (they would
-     migrate it and change its permissions). Leave it and the backup untouched.
-  2. Choose a location outside the repository, e.g. `~/memora-data/dev/`, and set
-     `MEMORA_DB_PATH=~/memora-data/dev/memora.sqlite` and `MEMORA_LOG_DIR=~/memora-data/dev/logs`.
-  3. `python app.py --check` — expect "User Memory Database … 0 people, consistent".
-  4. Verify read-only: `sqlite3 -readonly <dir>/memora_v2.sqlite "select count(*) from episodes"` (and
-     other tables) = 0; `schema_version` = 1; file mode `-rw-------`.
-  5. `python app.py --chat`, then `python app.py --backup <dir>/backups` for a verified first backup.
+- **Safe procedure for a clean development database** (tool `deployment/create_dev_database.py`,
+  tested by `tests/test_create_dev_database.py`; demonstrated 2026-10-21 in a temporary folder:
+  created, `--check` "0 people, consistent", chat, verified backup):
+  1. `python deployment/create_dev_database.py ~/memora-data/dev`. The tool refuses an existing
+     database and the project-folder default, then verifies schema version 1, zero personal rows
+     and mode 0600.
+  2. Export the two variables it prints (`MEMORA_DB_PATH`, `MEMORA_LOG_DIR`) in every shell
+     used for MEMORA work. Without them, commands use `memora_db_v2.sqlite` in the project folder.
+  3. `python app.py --check`, `python app.py --chat`, then `python app.py --backup ~/memora-data/dev/backups`.
+  `--check` is read-only since `5f753f6` (it inspects a temporary copy); `--chat`, the runtime
+  and `--restore` still write to whichever database is configured.
 - **Local database contamination (owner action).** `memora_db_v2.sqlite` was written to by
   earlier test runs before tests were isolated: the "Reading Glasses"/"Water Bottle" sightings
   are simulation seeds (present in the 20 Oct pre-work backup from 29 Sept), and 10 episodes plus

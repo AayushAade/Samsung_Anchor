@@ -55,6 +55,15 @@ Chat commands (`/help` lists them all): `/memories`, `/forget N`, `/medications`
 `/set-trusted-contact`, `/people`, `/objects`, `/export [file]`, `/delete-all`,
 `/consent`, `/status`, `/quit`.
 
+### A separate development database
+
+```bash
+python deployment/create_dev_database.py ~/memora-data/dev
+export MEMORA_DB_PATH=~/memora-data/dev/memora.sqlite MEMORA_LOG_DIR=~/memora-data/dev/logs
+```
+The tool refuses to touch an existing database. Tests and `--simulate` always use their own
+temporary storage.
+
 ### Where data is stored
 
 - Default database: `memora_db_v2.sqlite` in the project folder (face data alongside as
