@@ -5,12 +5,13 @@ import time
 import numpy as np
 from typing import Optional, Any
 
-try:
-    from faster_whisper import WhisperModel
-    HAS_FASTER_WHISPER = True
-except ImportError:
-    WhisperModel = None
-    HAS_FASTER_WHISPER = False
+import importlib.util
+
+# faster-whisper is imported only when a transcription is actually requested. Importing it
+# pulls in PyAV, whose bundled FFmpeg libavdevice duplicates OpenCV's on macOS (Objective-C
+# duplicate-class warning; docs/HARDWARE_TEST_CHECKLIST.md). Text chat, simulation and
+# diagnostics therefore never load PyAV.
+HAS_FASTER_WHISPER = importlib.util.find_spec("faster_whisper") is not None
 
 
 @dataclass
@@ -47,6 +48,7 @@ class SpeechRecognitionEngine:
             return
         from src.network_policy import model_download_allowed
         try:
+            from faster_whisper import WhisperModel
             # Offline by default: only a model already on disk is used unless downloads are allowed.
             self.model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type,
                                       local_files_only=not model_download_allowed())
