@@ -57,3 +57,16 @@ def test_static_files_cannot_escape_dashboard_dir(server):
     conn = http.client.HTTPConnection("127.0.0.1", server, timeout=3)
     conn.request("GET", "/../server.py")
     assert conn.getresponse().status in (403, 404)
+
+
+def test_dashboard_loads_nothing_from_the_internet():
+    """Found in review: the page fetched Google Fonts, an undisclosed third-party request."""
+    import os
+    import re
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "experience", "dashboard")
+    for name in os.listdir(root):
+        text = open(os.path.join(root, name), encoding="utf-8").read()
+        external = [u for u in re.findall(r"(?:https?|wss?)://[^\s'\"`)<>]+", text)
+                    if not re.match(r"(?:https?|wss?)://(?:localhost|127\.0\.0\.1|www\.w3\.org)\b", u)
+                    and "${" not in u]
+        assert external == [], f"{name}: {external}"
