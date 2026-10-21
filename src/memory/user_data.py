@@ -73,6 +73,13 @@ def export_user_data(db: Any) -> dict[str, Any]:
                       for c in s.query(CareItemModel).all()]
         care_events = [{"item_id": e.item_id, "event": e.event_type, "timestamp": e.timestamp, "source": e.source}
                        for e in s.query(CareEventModel).all()]
+        # Every stored row of every personal table, so the export is complete even for
+        # records that have no friendly section above (identity evidence, derived
+        # knowledge, interaction/feedback records). No table holds face embeddings.
+        all_records = {m.__tablename__: [{c.name: _iso(getattr(row, c.name)) for c in m.__table__.columns}
+                                         for row in s.query(m).all()] for m in PERSONAL_TABLES}
+        consents = {r.key.split(":", 1)[1]: r.value
+                    for r in s.query(SystemState).filter(SystemState.key.like("consent:%")).all()}
     return {
         "format": "memora-user-export",
         "version": EXPORT_FORMAT_VERSION,
@@ -86,6 +93,8 @@ def export_user_data(db: Any) -> dict[str, Any]:
         "episodes": episodes,
         "care_items": care_items,
         "care_events": care_events,
+        "consent_decisions": consents,
+        "all_records": all_records,
         "note": "Face embeddings are not exported; they are biometric data used only for recognition.",
     }
 

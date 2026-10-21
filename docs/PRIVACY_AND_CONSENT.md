@@ -40,6 +40,13 @@ person removes them (`/forget N`, `/remove-medication N`, `/remove-appointment N
 `/delete-all`; MEMORA says this when consent is revoked. Deletion and `/export` are always
 available.
 
+## Export (`/export`, always available)
+A JSON file (0600) with readable sections (facts, people, objects, episodes, schedules, safety
+settings) plus `all_records`, every stored row of every personal table (including identity
+evidence with what was heard, derived knowledge, and interaction/feedback records), and the
+consent decisions. Face embeddings are not exported. `tests/test_consent_policy.py` checks that
+the row counts in the export match the database.
+
 ## Deletion (`/delete-all`, typed confirmation)
 Removes: facts, episodes, people and their face data, object sightings, care items and events,
 interaction/feedback records, preferred name, safety contacts, consent decisions, MEMORA's log

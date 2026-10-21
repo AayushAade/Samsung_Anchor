@@ -150,3 +150,26 @@ def test_identity_evidence_needs_consent_at_the_storage_layer(tmp_path):
     face = db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))
     assert coord.process_transcript(face, "Hi, I'm Bob, your son.")["success"] is True
     assert _counts(db.db_path)["identity_evidence"] == 1
+
+
+def test_export_contains_every_stored_personal_row(tmp_path):
+    """Found in review: identity evidence (transcripts), derived knowledge and consent decisions were not exported."""
+    import json
+    import numpy as np
+    from src.clinical.clinical_models import ConsentFeature
+    from src.memory import user_data
+    s = _session(tmp_path, "yes")
+    for a in ATTEMPTS[:8]:
+        s.handle(a)
+    coord = s.coordinator
+    coord.pipeline.consent_mgr.update_consent(ConsentFeature.FACE_RECOGNITION, True)
+    face = s.db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))
+    coord.process_transcript(face, f"Hi, I'm Bob, your son. {TOKEN}-intro")
+    out = tmp_path / "export.json"
+    user_data.write_export(s.db, str(out))
+    data = json.loads(out.read_text())
+    counts = _counts(s.db.db_path)
+    s.close()
+    assert {t: len(data["all_records"][t]) for t in PERSONAL_TABLES} == counts
+    assert counts["identity_evidence"] == 1 and f"{TOKEN}-intro" in out.read_text()
+    assert data["consent_decisions"]["CONVERSATION_STORAGE"].startswith("granted")
