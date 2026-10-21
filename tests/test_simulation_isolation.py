@@ -6,6 +6,8 @@ outside its own temporary workspace (which it removes afterwards).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import hashlib
 import os
 import subprocess
@@ -20,7 +22,7 @@ def _snapshot(root):
     for d, _, files in os.walk(root):
         for f in files:
             p = os.path.join(d, f)
-            out[p] = (os.stat(p).st_mtime_ns, hashlib.sha256(open(p, "rb").read()).hexdigest())
+            out[p] = (os.stat(p).st_mtime_ns, hashlib.sha256(Path(p).read_bytes()).hexdigest())
     return out
 
 

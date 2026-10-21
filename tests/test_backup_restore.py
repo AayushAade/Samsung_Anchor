@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import json
 import os
 
@@ -46,16 +48,16 @@ def test_tampered_backup_is_rejected_and_live_data_untouched(tmp_path):
     backup = create_backup(db.db_path, str(tmp_path / "b"))
     with open(os.path.join(backup, os.path.basename(db.db_path)), "ab") as f:
         f.write(b"garbage")
-    before = open(db.db_path, "rb").read()
+    before = Path(db.db_path).read_bytes()
     with pytest.raises(BackupError):
         restore_backup(backup, db.db_path)
-    assert open(db.db_path, "rb").read() == before
+    assert Path(db.db_path).read_bytes() == before
 
 
 def test_manifest_records_row_counts(tmp_path):
     db = _db_with_data(str(tmp_path / "live.sqlite"))
     backup = create_backup(db.db_path, str(tmp_path / "b"))
-    manifest = json.load(open(os.path.join(backup, "manifest.json")))
+    manifest = json.loads(Path(backup, "manifest.json").read_text())
     assert manifest["row_counts"]["identities"] == 1
     assert manifest["row_counts"]["relevant_memories"] == 1
 
@@ -69,7 +71,7 @@ def test_restore_works_when_live_database_is_corrupt(tmp_path):
         f.write(b"not a database")
     result = restore_backup(backup, path)
     pre = result["pre_restore_backup"]
-    assert open(os.path.join(pre, os.path.basename(path)), "rb").read() == b"not a database"
+    assert Path(pre, os.path.basename(path)).read_bytes() == b"not a database"
     assert "Riya" in ConversationalMemory(MemoraDatabase(path)).respond("Who is my daughter?")
 
 
@@ -82,13 +84,13 @@ def test_manifest_cannot_name_files_outside_the_backup(tmp_path, bad_name):
     outside = tmp_path / "b" / "outside.txt"
     outside.write_text("not part of the backup")
     manifest_path = os.path.join(backup, "manifest.json")
-    manifest = json.load(open(manifest_path))
+    manifest = json.loads(Path(manifest_path).read_text())
     manifest["files"][bad_name] = "0" * 64
-    json.dump(manifest, open(manifest_path, "w"))
-    before = open(db.db_path, "rb").read()
+    Path(manifest_path).write_text(json.dumps(manifest))
+    before = Path(db.db_path).read_bytes()
     with pytest.raises(BackupError, match="invalid file"):
         restore_backup(backup, db.db_path)
-    assert open(db.db_path, "rb").read() == before
+    assert Path(db.db_path).read_bytes() == before
     assert outside.read_text() == "not part of the backup"
 
 

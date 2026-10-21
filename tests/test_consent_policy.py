@@ -9,6 +9,8 @@ system defaults may exist.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import os
 import sqlite3
 
@@ -77,7 +79,7 @@ def test_declined_storage_writes_nothing_personal_anywhere(tmp_path):
     assert _state_keys(db_path) <= NON_PERSONAL_STATE, _state_keys(db_path)
     for root, _, files in os.walk(tmp_path):
         for name in files:
-            data = open(os.path.join(root, name), "rb").read()
+            data = Path(root, name).read_bytes()
             assert TOKEN.encode() not in data, f"{TOKEN} written to {name}"
     # Commands are refused with an explanation rather than claiming success.
     for reply in replies[3:7]:
@@ -145,7 +147,7 @@ def test_identity_evidence_needs_consent_at_the_storage_layer(tmp_path):
     with pytest.raises(ConsentRequiredError):            # faces consent still missing
         db.add_evidence("face_1", "Bob", "Son", "I'm Bob")
     assert _counts(db.db_path)["identity_evidence"] == 0
-    assert TOKEN.encode() not in open(db.db_path, "rb").read()
+    assert TOKEN.encode() not in Path(db.db_path).read_bytes()
     coord.pipeline.consent_mgr.update_consent(ConsentFeature.FACE_RECOGNITION, True)
     import numpy as np
     face = db.register_anonymous(np.ones(128, dtype=np.float32) / np.sqrt(128))

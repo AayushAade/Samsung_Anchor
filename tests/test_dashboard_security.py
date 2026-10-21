@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import asyncio
 import socket
 import time
@@ -65,7 +67,7 @@ def test_dashboard_loads_nothing_from_the_internet():
     import re
     root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "experience", "dashboard")
     for name in os.listdir(root):
-        text = open(os.path.join(root, name), encoding="utf-8").read()
+        text = Path(root, name).read_text(encoding="utf-8")
         external = [u for u in re.findall(r"(?:https?|wss?)://[^\s'\"`)<>]+", text)
                     if not re.match(r"(?:https?|wss?)://(?:localhost|127\.0\.0\.1|www\.w3\.org)\b", u)
                     and "${" not in u]

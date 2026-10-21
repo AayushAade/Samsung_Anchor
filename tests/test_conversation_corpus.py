@@ -5,6 +5,8 @@ tests/data/conversation_corpus.json. Add new phrasings there as they are found.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import json
 import os
 
@@ -16,7 +18,7 @@ CORPUS = os.path.join(os.path.dirname(__file__), "data", "conversation_corpus.js
 
 
 def test_corpus_coverage():
-    data = json.load(open(CORPUS))
+    data = json.loads(Path(CORPUS).read_text())
     p = allow_memory(CognitivePipeline(MemoraDatabase(":memory:")))
 
     def say(u):
