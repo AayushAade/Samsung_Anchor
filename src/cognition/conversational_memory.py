@@ -127,6 +127,16 @@ def _strip_lead(text: str) -> tuple[str, bool]:
         text = text[m.end():]
 
 
+_PREPOSITIONS = r"in|on|under|inside|next to|beside|behind|by|near|on top of|in front of"
+_PLACE_WORDS = (r"(?:in|at|on|under|inside|next to|beside|behind|by|near|here|there|home|out|away|coming|going|"
+                r"visiting|asleep|sleeping|working|busy|ill|sick|fine|well|ok|okay|late|back)")
+
+
+def _singular(word: str) -> str:
+    """'keys' -> 'key', 'glasses' stays 'glasses' (used only to match questions to statements)."""
+    return word[:-1] if word.endswith("s") and not word.endswith(("ss", "glasses")) else word
+
+
 def _norm(text: str) -> str:
     t = text.lower().replace("’", "'").strip()
     t = re.sub(r"\bfavourite\b", "favorite", t)
@@ -189,6 +199,11 @@ class ConversationalMemory:
         if detect_urgent_concern(speech) is not None:
             return None  # the safety layer owns this turn
         speech, correcting = _strip_lead(speech)
+        # "Remind me who my daughter is" asks the same as "Who is my daughter?"
+        m = re.match(r"^\s*(?:(?:can|could) you |please )?remind me (who|what|where) (.+?) (is|are)\s*[?.!]*$",
+                     speech, re.IGNORECASE)
+        if m:
+            speech = f"{m.group(1)} {m.group(3)} {m.group(2)}?"
         t = _norm(speech)
         for handler in (self._capability_boundaries, self._name_correction_or_question, self._name_introduction,
                         self._orientation, self._forget, self._relation_correction, self._relations_have,
@@ -255,6 +270,17 @@ class ConversationalMemory:
                      r"what illness do i have)\b", t):
             return ("I'm sorry you're worried. I can't tell whether you're unwell or give a diagnosis. "
                     "If you feel unwell, please contact your doctor, or call your emergency number if it feels serious.")
+        lead = r"^(please |can you |could you |would you |will you )?"
+        if re.match(lead + r"(turn|switch) (off|on) (the )?\w+|" + lead + r"(lock|unlock|open|close) (the )?\w+ ?(door|window|gate)\b", t):
+            return ("I can't control anything in your home, so nothing has been changed. "
+                    "Please check it yourself or ask someone nearby.")
+        if re.match(lead + r"(book|schedule|make|arrange|cancel) (me )?(an? |my )?(doctor'?s? |dentist'?s? |hospital )?"
+                    r"(appointment|visit|check-?up)\b", t):
+            return ("I can't book or cancel appointments. When one is arranged, you or a carer can add it "
+                    "with /add-appointment and I'll remind you of it.")
+        if re.match(lead + r"(remind me(?! (what|who|where|when|which|how|of|about)\b)|set (an? )?(alarm|reminder|timer))\b", t):
+            return ("I can't set reminders from conversation yet, so nothing has been set. "
+                    "You or a carer can add medicines with /add-medication and appointments with /add-appointment.")
         return None
 
     STORAGE_OFF = ("I'm not saving what you tell me right now, because memory is turned off. "
@@ -346,10 +372,16 @@ class ConversationalMemory:
             return None
         t = t.rstrip(".! ")
         rel = "|".join(RELATIONS)
-        m = re.match(rf"^(?:and )?my ({rel})(?:'s name)? is (?:called |named )?(?!not\b)([a-z][a-z .'\-]{{0,40}})$", t)
+        m = re.match(rf"^(?:and )?my ({rel})(?:'s name)? is (?:called |named )?(?!not\b)(?!{_PLACE_WORDS}\b)"
+                     rf"([a-z][a-z .'\-]{{0,40}})$", t)
         if m:
             relation = m.group(1)
             return f"relation:{relation}", m.group(2).strip(), "positive", relation in SINGLE_VALUED_RELATIONS
+        m = re.match(rf"^i (?:just |have |'ve )?(?:put|left|placed|keep|hid|stored|dropped) (?:my |the )([a-z ]{{2,30}}?) "
+                     rf"({_PREPOSITIONS}) (?:the |my |a )?([a-z][a-z '\-]{{1,40}})$", t) \
+            or re.match(rf"^(?:and )?my ([a-z ]{{2,30}}?) (?:is|are) ({_PREPOSITIONS}) (?:the |my |a )?([a-z][a-z '\-]{{1,40}})$", t)
+        if m and m.group(1).strip() not in RELATIONS and m.group(1).strip() not in ("name", "favorite"):
+            return f"location:{_singular(m.group(1).strip())}", f"{m.group(2)} {m.group(3).strip()}", "positive", True
         m = re.match(r"^(?:and )?my favorite ([a-z ]{2,30}?) is ([a-z0-9][a-z0-9 '\-]{0,40})$", t)
         if m:
             return f"favorite:{m.group(1).strip()}", m.group(2).strip(), "positive", True
@@ -756,6 +788,27 @@ class ConversationalMemory:
 
         self.search_history.append({"object": target, "timestamp": self.clock().timestamp()})
         now = self.clock()
+        told = next((f for f in self.active_facts() if f.key == f"location:{_singular(target)}"), None)
+        told_reply = None
+        if told is not None:
+            told_reply = f"You told me {_when(told.timestamp, now)} that {_to_second_person(told.statement)}."
+            if told.timestamp and now - told.timestamp > timedelta(hours=6):
+                told_reply += " It may have been moved since then."
+        sighting = self._sighting_reply(target, now)
+        if told_reply and sighting:
+            seen_at = sighting[1]
+            first, second = (told_reply, sighting[0]) if (told.timestamp or now) >= seen_at else (sighting[0], told_reply)
+            return f"{first} {second}"
+        if told_reply:
+            return told_reply
+        if sighting:
+            return sighting[0]
+        plural = target.endswith("s") and not target.endswith("ss")
+        it, they = ("them", "they are") if plural else ("it", "it is")
+        return f"I haven't seen your {target}, so I can't say where {they}. Where do you usually keep {it}?"
+
+    def _sighting_reply(self, target: str, now: datetime):
+        """(reply, seen_at) for the latest camera or noted sighting, or None."""
         visual = self._visual_observation(target)
         obs = self._latest_observation(target)
         if visual is not None and (obs is None or visual[2] >= obs[2]) and visual[1] is not None:
@@ -763,9 +816,9 @@ class ConversationalMemory:
             where = f"{spatial} in the {room}" if spatial else f"in the {room}"
             label = " (demo data, not a real observation)" if re.search(r"SYNTHETIC|SIMULATED", vsource or "") else ""
             if confidence < 0.5:
-                return f"I'm not certain where your {name} is right now."
+                return f"I'm not certain where your {name} is right now.", seen_at
             if confidence < 0.8:
-                return f"I think your {name} may still be {where}, but I'm not certain{label}."
+                return f"I think your {name} may still be {where}, but I'm not certain{label}.", seen_at
             reply = f"I last saw your {name} {where} {_age_phrase(seen_at, now)}{label}."
         elif obs is not None:
             name, room, seen_at, source = obs
@@ -777,12 +830,10 @@ class ConversationalMemory:
             elif source.startswith("SIMULATED"):
                 reply = reply[:-1] + " (in a simulation, not a real camera)."
         else:
-            plural = target.endswith("s") and not target.endswith("ss")
-            it, they = ("them", "they are") if plural else ("it", "it is")
-            return f"I haven't seen your {target}, so I can't say where {they}. Where do you usually keep {it}?"
+            return None
         if now - seen_at > timedelta(hours=6):
             reply += " It may have been moved since then."
-        return reply
+        return reply, seen_at
 
     def _visual_observation(self, target: str):
         if self.visual_memory is None:

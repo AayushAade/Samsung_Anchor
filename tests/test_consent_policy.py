@@ -63,6 +63,7 @@ ATTEMPTS = [
     f"I took my {TOKEN}pill",
     "I took my pills",
     f"Where are my {TOKEN} keys?",
+    f"I put my {TOKEN} keys in the drawer",
 ]
 
 

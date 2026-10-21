@@ -263,3 +263,46 @@ def test_bare_lead_words_are_not_treated_as_statements(mem, said):
     mem.respond("My daughter is Riya")
     mem.respond(said)
     assert "Riya" in mem.respond("Who is my daughter?")
+
+
+def test_person_reported_location_is_remembered_and_updated(mem, clock):
+    """Found in review: 'I put my keys in the drawer' was ignored, and MEMORA kept asking
+    'Where do you usually keep them?' while ignoring the answer."""
+    assert "you put your keys in the drawer" in mem.respond("I put my keys in the drawer")
+    assert mem.respond("Where are my keys?") == "You told me today that you put your keys in the drawer."
+    assert "updated" in mem.respond("Actually my keys are on the kitchen table")
+    assert mem.respond("Where did I leave my key?") == "You told me today that your keys are on the kitchen table."
+    clock.now += timedelta(hours=8)
+    assert mem.respond("Have you seen my keys?").endswith("It may have been moved since then.")
+
+
+def test_reported_location_and_camera_sighting_are_both_stated_newest_first(mem, clock):
+    mem.db.object_repo.log_object("keys", 0.5, 0.5, "Kitchen", source="SIMULATED_CAMERA", when=clock.now)
+    clock.now += timedelta(minutes=30)
+    mem.respond("I put my keys in the drawer")
+    reply = mem.respond("Where are my keys?")
+    assert reply.startswith("You told me today that you put your keys in the drawer.")
+    assert "I last saw your keys in the Kitchen" in reply and "simulation" in reply
+
+
+@pytest.mark.parametrize("said", ["My son is in the garden", "My daughter is at work", "My son is coming later"])
+def test_where_a_relative_is_is_not_stored_as_their_name(mem, said):
+    mem.respond(said)
+    assert "don't know who" in mem.respond(f"Who is my {said.split()[1]}?")
+
+
+@pytest.mark.parametrize("said, expected", [
+    ("Turn off the stove", "can't control anything in your home"),
+    ("Lock the front door", "can't control anything in your home"),
+    ("Book a doctor's appointment", "can't book or cancel appointments"),
+    ("Remind me to call Riya at 5pm", "nothing has been set"),
+    ("Set an alarm for 7am", "nothing has been set")])
+def test_requests_for_actions_memora_cannot_take_say_nothing_was_done(mem, said, expected):
+    """Found in review: these got 'I'm not sure I understood' or, for 'book', an object lookup."""
+    assert expected in mem.respond(said)
+
+
+def test_remind_me_who_is_a_recall_question(mem):
+    mem.respond("My daughter is Riya")
+    assert "Riya" in mem.respond("Remind me who my daughter is")
+    assert "Riya" in mem.respond("Can you remind me what my daughter's name is?")
