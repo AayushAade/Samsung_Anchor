@@ -133,6 +133,13 @@ class AnchorRuntime:
         statuses["Perception"] = statuses["Camera"] if pipeline is not None and hasattr(pipeline, "perception_manager") else "FAILED"
         if "Simulated" in statuses["Audio"]:
             statuses["Speech Recognition"] = "WARNING (Simulated - typed or scripted input only)"
+        elif pipeline is not None:
+            engine = getattr(getattr(getattr(pipeline, "perception_manager", None), "audio_pipeline", None),
+                             "speech_engine", None)
+            if engine is not None and hasattr(engine, "availability"):
+                usable, reason = engine.availability()
+                statuses["Speech Recognition"] = (f"WARNING ({reason}; not verified on real speech)" if usable
+                                                  else f"FAILED ({reason})")
         # Face recognition: report the backend actually in use; never imply real recognition.
         recognizer = getattr(self.coordinator, "recognizer", None)
         backend = getattr(recognizer, "backend", None)

@@ -214,7 +214,8 @@ class PyAudioMicrophoneAdapter(MicrophoneAdapter):
                 raw_audio = self.stream.read(self.chunk_size, exception_on_overflow=False)
                 # Compute RMS energy for diagnostic monitoring
                 import struct, math
-                shorts = struct.unpack(f"{len(raw_audio)//2}h", raw_audio) if len(raw_audio) >= 2 else []
+                n = len(raw_audio) // 2
+                shorts = struct.unpack(f"{n}h", raw_audio[:n * 2]) if n else []
                 sum_sq = sum(s * s for s in shorts)
                 self.audio_energy_rms = math.sqrt(sum_sq / len(shorts)) if shorts else 0.0
 

@@ -41,6 +41,18 @@ class SpeechRecognitionEngine:
         # The model is loaded lazily, on the first real transcription request, so that
         # constructing a pipeline (chat, simulation) never touches the model cache or network.
 
+    def availability(self) -> tuple[bool, str]:
+        """(usable, plain-language reason), without loading the model or touching the network."""
+        if not HAS_FASTER_WHISPER:
+            return False, "speech-to-text is not installed (faster-whisper, requirements-hardware.txt)"
+        if self.load_error:
+            return False, self.load_error
+        if self.model is not None:
+            return True, f"local speech model '{self.model_size}' loaded"
+        from src.network_policy import model_download_allowed
+        where = "may be downloaded on first use" if model_download_allowed() else "must already be on this computer"
+        return True, f"local speech model '{self.model_size}' loads on first use ({where})"
+
     def _initialize_engine(self) -> None:
         self._load_attempted = True
         if not HAS_FASTER_WHISPER:
@@ -87,7 +99,9 @@ class SpeechRecognitionEngine:
             )
 
         # Convert 16-bit PCM bytes to float32 NumPy array normalized to [-1.0, 1.0]
-        audio_np = np.frombuffer(raw_pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        # 16-bit samples: a trailing odd byte (truncated chunk) cannot form a sample.
+        usable = len(raw_pcm_bytes) - (len(raw_pcm_bytes) % 2)
+        audio_np = np.frombuffer(raw_pcm_bytes[:usable], dtype=np.int16).astype(np.float32) / 32768.0
 
         transcript_text = ""
         avg_confidence = 0.95
